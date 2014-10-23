@@ -1,17 +1,6 @@
-#![feature(macro_rules)]
-#![feature(phase)]
-
-#[phase(plugin)]
-
-extern crate regex_macros;
-extern crate regex;
 extern crate serialize;
 extern crate "rust-bt" as rust_bt;
 extern crate "rust-crypto" as crypto;
-
-macro_rules! check(
-    ($e:expr) => (match $e { Some(e) => e, None => { println!("Found None"); return }})
-)
 
 fn main() {
     use std::io::{IoResult};
@@ -28,7 +17,7 @@ fn main() {
     use rust_bt::tracker_udp::UdpTracker;
     use rust_bt::tracker::Tracker;
     use rust_bt::torrent::{Torrent};
-    use rust_bt::upnp::UPnP;
+    use rust_bt::upnp::SearchReply;
     
     let mut torr_file = File::open(&Path::new("tests/data/udp_tracker/sample.torrent"));
     let torr_bytes = match torr_file.read_to_end() {
@@ -48,13 +37,13 @@ fn main() {
     }
     let torrent = torrent.unwrap();
     
-    let dict = check!(ben_val.dict());
+    let dict = ben_val.dict().expect("1");
     
-    let announce_url = check!(check!(dict.find_equiv(&"announce")).str());
+    let announce_url = dict.find_equiv(&"announce").expect("2").str().expect("3");
     
     let mut sha = Sha1::new();
     let mut result = [0u8,..20];
-    let encoded = check!(dict.find_equiv(&"info")).encoded();
+    let encoded = dict.find_equiv(&"info").expect("4").encoded();
     
     sha.input(encoded.as_slice());
     sha.result(result);
@@ -68,7 +57,11 @@ fn main() {
     
     //println!("{}", result.to_hex());
     
-    let mut conn = UdpTracker::new(announce_url, result).unwrap();
+    let mut conn = SearchReply::search(SocketAddr{ ip: Ipv4Addr(10, 122, 57, 37), port: 1901 }).unwrap();
+    
+    for i in conn.iter() {
+        println!("{}", i.get_location());
+    }
     //let bytes = conn.announce(5).unwrap();
     
     //println!("{}", bytes.seeders);

@@ -125,7 +125,7 @@ impl UdpTracker {
 
 impl Tracker for UdpTracker {
 	fn socket_name(&mut self) -> IoResult<SocketAddr> {
-		self.conn.as_socket(|&udp| {
+		self.conn.as_socket(|udp| {
 			udp.socket_name()
 		})
 	}
