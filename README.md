@@ -1,4 +1,4 @@
-Rust_BT - [![Build Status](https://travis-ci.org/GGist/RustBT.svg)](https://travis-ci.org/GGist/RustBT)
+RustBT - [![Build Status](https://travis-ci.org/GGist/RustBT.svg)](https://travis-ci.org/GGist/RustBT)
 =======
 A BitTorrent library and client written in pure Rust.
 
