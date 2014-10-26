@@ -9,7 +9,7 @@ pub struct AnnounceInfo {
 }
 
 pub trait Tracker {
-	fn socket_name(&mut self) -> IoResult<SocketAddr>;
+    fn socket_name(&mut self) -> IoResult<SocketAddr>;
 
     fn announce(&mut self, total_bytes: uint) -> IoResult<AnnounceInfo>;
     

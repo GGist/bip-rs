@@ -1,8 +1,6 @@
-#![feature(macro_rules)]
 #![feature(phase)]
 #![feature(slicing_syntax)]
 
-#[unsafe_destructor]
 #[phase(plugin)]
 
 extern crate regex_macros;

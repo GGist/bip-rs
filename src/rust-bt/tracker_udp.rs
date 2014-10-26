@@ -44,7 +44,7 @@ impl UdpTracker {
                         Ok(n) => n.connect(dest_sock),
                         Err(_) => return ()
                     };
-					
+                    
                     match UdpTracker::connect_request(&mut udp_stream) {
                         Ok(n) => tx.send(udp_stream),
                         Err(n) => ()
@@ -56,6 +56,7 @@ impl UdpTracker {
         let udp_stream = try!(rx.recv_opt().or_else( |_|
             Err(util::get_error(ConnectionFailed, "Could Not Communicate On Any IPv4 Interfaces"))
         ));
+        
         Ok(UdpTracker{ conn: udp_stream, 
             peer_id: util::gen_peer_id(), 
             info_hash: fixed_hash }
@@ -124,11 +125,11 @@ impl UdpTracker {
 }
 
 impl Tracker for UdpTracker {
-	fn socket_name(&mut self) -> IoResult<SocketAddr> {
-		self.conn.as_socket(|udp| {
-			udp.socket_name()
-		})
-	}
+    fn socket_name(&mut self) -> IoResult<SocketAddr> {
+        self.conn.as_socket(|udp| {
+            udp.socket_name()
+        })
+    }
 
     fn announce(&mut self, total_size: uint) -> IoResult<AnnounceInfo> {
         let connect_id = try!(UdpTracker::connect_request(&mut self.conn));
@@ -138,19 +139,19 @@ impl Tracker for UdpTracker {
         {
             let mut send_buf = BufWriter::new(send_bytes);
             
-            send_buf.write_be_i64(connect_id);
-            send_buf.write_be_i32(1); // Announce Request
+            send_buf.write_be_i64(connect_id); // Our Connection Id
+            send_buf.write_be_i32(1); // This Is An Announce Request
             send_buf.write_be_i32(send_trans_id); // Random For Each Request
             send_buf.write(self.info_hash); // Identifies The Torrent File
             send_buf.write(self.peer_id); // Self Designated Peer Id
             send_buf.write_be_i64(0); // Bytes Downloaded So Far
-            send_buf.write_be_i64(total_size as i64);
+            send_buf.write_be_i64(total_size as i64); // Bytes Needed
             send_buf.write_be_i64(0); // Bytes Uploaded So Far
             send_buf.write_be_i32(0); // Specific Event
             send_buf.write_be_i32(0); // IPv4 Address (0 For Source Address)
-            send_buf.write_be_i32(12); // Key (Not Sure Yet)
+            send_buf.write_be_i32(12); // Key (Helps With Endianness For Tracker?)
             send_buf.write_be_i32(-1); // Number Of Clients To Return (-1 Default)
-            send_buf.write_be_i16(6882); // Port For Other Clients To Connect
+            send_buf.write_be_i16(6882); // Port For Other Clients To Connect (Needs To Be Port Forwarded Behind NAT)
         }
         
         let mut recv_bytes = [0u8,..10000];

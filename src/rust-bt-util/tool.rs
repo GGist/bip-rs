@@ -17,7 +17,7 @@ fn main() {
     use rust_bt::tracker_udp::UdpTracker;
     use rust_bt::tracker::Tracker;
     use rust_bt::torrent::{Torrent};
-    use rust_bt::upnp::SearchReply;
+    use rust_bt::upnp::UPnPInterface;
     
     let mut torr_file = File::open(&Path::new("tests/data/udp_tracker/sample.torrent"));
     let torr_bytes = match torr_file.read_to_end() {
@@ -50,24 +50,20 @@ fn main() {
 
     println!("{}", torrent.announce);
     
-    //let data = UPnP::search();
-    //for i in data.iter() {
-    //    println!("{}", i.data);
-    //}
-    
     //println!("{}", result.to_hex());
     
-    let mut conn = SearchReply::search(SocketAddr{ ip: Ipv4Addr(10, 122, 57, 37), port: 1901 }).unwrap();
-    
-    for i in conn.iter() {
-        println!("{}", i.get_location());
-    }
-    //let bytes = conn.announce(5).unwrap();
-    
-    //println!("{}", bytes.seeders);
-    //println!("{}", bytes.leechers);
-    
-    //for &i in bytes.peers.iter() {
-    //    println!("{}", i);
-    //}
+    match UPnPInterface::find_services(SocketAddr{ ip: Ipv4Addr(192, 168, 1, 102), port: 3244 }, "WANIPConnection", "1") {
+        Ok(n) => {
+            println!("{}", n.len());
+            for i in n.iter() {
+                println!("{}", i.st());
+                
+                match i.service_desc() {
+                    Err(n) => println!("{}", n),
+                    _ => ()
+                };
+            }
+        },
+        Err(n) => println!("{} saqS", n)
+    };
 }

@@ -13,14 +13,14 @@ pub enum Transport { TCP, UDP, HTTP }
 /// Returns a list of all local IPv4 Addresses.
 pub fn get_net_addrs() -> IoResult<Vec<IpAddr>> {
     let mut addr_list = try!(addrinfo::get_host_addresses(""));
-	
-	let addr_list = addr_list.into_iter().filter(|&addr|
+    
+    let addr_list = addr_list.into_iter().filter(|&addr|
         match addr {
             Ipv4Addr(..) => true,
             Ipv6Addr(..) => false
         }
     ).collect();
-	
+    
     Ok(addr_list)
 }
 
