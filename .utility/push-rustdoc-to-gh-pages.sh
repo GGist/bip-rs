@@ -1,10 +1,15 @@
-if [ "$TRAVIS_REPO_SLUG" == "GGist/RustBT" ] && [ "TRAVIS_PULL_REQUEST" == "false" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
+#!/bin/bash
+
+echo -e $TRAVIS_REPO_SLUG
+echo -e $TRAVIS_PULL_REQUEST
+echo -e $TRAVIS_BRANCH
+
 
     echo -e "Publishing rustdoc...\n"
     
+    mkdir $HOME/rustdoc-latest
     cargo doc --no-deps
-    
-    cp target/doc $HOME/rustdoc-latest
+    cp -r target/doc/* $HOME/rustdoc-latest/.
     
     cd $HOME
     git config --global user.email "travis@travis-ci.org"
@@ -12,11 +17,9 @@ if [ "$TRAVIS_REPO_SLUG" == "GGist/RustBT" ] && [ "TRAVIS_PULL_REQUEST" == "fals
     git clone --quiet --branch=gh-pages https://${GH_TOKEN}@github.com/GGist/RustBT gh-pages > /dev/null
     
     cd gh-pages
-    cp -Rf &HOME/rustdoc-latest/* .
-    git add -f .
+    cp -rf $HOME/rustdoc-latest/* .
+    git add -A
     git commit -m "Latest rustdoc on successful travis build $TRAVIS_BUILD_NUMBER auto-pushed to gh-pages"
     git push -fq origin gh-pages > /dev/null
     
     echo -e "Published rustdoc to gh-pages.\n"
-
-fi
