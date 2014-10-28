@@ -1,1 +1,8 @@
 language: rust
+
+env:
+    global:
+    - secure: ilLZ5blj2PXwBbWphAgLpqDtg7jKF3PbucLF9ZWw0hnZw/883dreYAJL70iyxPtU14ARPjAbRZG3ix52+VUVxss3tuMluAKbJmaD8c5rLpnYmL6omnZyNjD0vqib/zC+zSZFnoVz8UuNR/gVuqeDYtRInxcfQEfVBZg3beY6P/A=
+
+after_success:
+- .utility/push-rustdoc-to-gh-pages.sh
