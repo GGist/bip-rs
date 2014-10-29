@@ -12,7 +12,7 @@ pub enum Transport { TCP, UDP, HTTP }
 
 /// Returns a list of all local IPv4 Addresses.
 pub fn get_net_addrs() -> IoResult<Vec<IpAddr>> {
-    let mut addr_list = try!(addrinfo::get_host_addresses(""));
+    let addr_list = try!(addrinfo::get_host_addresses(""));
     
     let addr_list = addr_list.into_iter().filter(|&addr|
         match addr {
@@ -90,7 +90,7 @@ pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
     ));
     
     let (host_str, port_str) = (captures.at(2), captures.at(3));
-    if (host_str.len() == 0 || port_str.len() == 0) {
+    if host_str.len() == 0 || port_str.len() == 0 {
         return Err(get_error(InvalidInput, "Hostname And/Or Port Number Not Found In url"))
     }
     

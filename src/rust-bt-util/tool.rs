@@ -3,7 +3,6 @@ extern crate "rust-bt" as rust_bt;
 extern crate "rust-crypto" as crypto;
 
 fn main() {
-    use std::io::{IoResult};
     use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr, IpAddr};
     use std::io::net::udp::{UdpSocket};
     use std::io::fs::File;
@@ -13,7 +12,7 @@ fn main() {
     use serialize::hex::ToHex;
     use crypto::sha1::Sha1;
     use crypto::digest::Digest;
-    use rust_bt::bencode::BenVal;
+    use rust_bt::bencode::BenValue;
     use rust_bt::tracker_udp::UdpTracker;
     use rust_bt::tracker::Tracker;
     use rust_bt::torrent::{Torrent};
@@ -25,7 +24,7 @@ fn main() {
         Err(n) => { println!("{}", n); return }
     };
     
-    let ben_val: BenVal = match BenVal::new(torr_bytes.as_slice()) {
+    let ben_val: BenValue = match BenValue::new(torr_bytes.as_slice()) {
         Ok(n) => n,
         Err(n) => { println!("{}", n); return }
     };

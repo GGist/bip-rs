@@ -1,6 +1,5 @@
-use std::{rand, i64};
-use std::io::net::udp::{UdpSocket, UdpStream};
-use std::io::net::tcp::{TcpStream};
+use std::{rand};
+use std::io::net::udp::{UdpStream};
 use std::io::net::ip::{SocketAddr, Ipv4Addr};
 use std::io::{IoResult, BufWriter, BufReader, ConnectionFailed, EndOfFile, OtherIoError, InvalidInput};
 
@@ -23,7 +22,7 @@ impl UdpTracker {
     pub fn new(url: &str, info_hash: &[u8]) -> IoResult<UdpTracker> {
         let dest_sock = try!(util::get_sockaddr(url));
         
-        if (info_hash.len() != 20) {
+        if info_hash.len() != 20 {
             return Err(util::get_error(InvalidInput, "Invalid Size For info_hash"));
         }
         
@@ -46,8 +45,8 @@ impl UdpTracker {
                     };
                     
                     match UdpTracker::connect_request(&mut udp_stream) {
-                        Ok(n) => tx.send(udp_stream),
-                        Err(n) => ()
+                        Ok(_) => tx.send(udp_stream),
+                        Err(_) => ()
                     }
                 });
             }
@@ -83,7 +82,7 @@ impl UdpTracker {
                 Err(_) => { attempt += 1; }
             };
         }
-        if (attempt == MAX_ATTEMPTS) {
+        if attempt == MAX_ATTEMPTS {
             return Err(util::get_error(ConnectionFailed, "No Connection Response From Server"));
         }
         
@@ -97,22 +96,22 @@ impl UdpTracker {
         { // Limit Lifetime Of Writer Object
             let mut send_writer = BufWriter::new(send_bytes);
             
-            send_writer.write_be_i64(0x41727101980); // Part Of The Standard
-            send_writer.write_be_i32(0); // Connect Request
-            send_writer.write_be_i32(send_trans_id); // Verify This In The Response
+            try!(send_writer.write_be_i64(0x41727101980)); // Part Of The Standard
+            try!(send_writer.write_be_i32(0)); // Connect Request
+            try!(send_writer.write_be_i32(send_trans_id)); // Verify This In The Response
         }
         
         let mut recv_bytes = [0u8,..16];
         let bytes_read = try!(UdpTracker::send_request(udp, send_bytes, recv_bytes));
-        if (bytes_read != recv_bytes.len()) {
+        if bytes_read != recv_bytes.len() {
             return Err(util::get_error(EndOfFile, "Didn't Receive All 16 Bytes From Tracker"));
         }
         
         let mut recv_reader = BufReader::new(recv_bytes);
-        if (try!(recv_reader.read_be_i32()) != 0) {
+        if try!(recv_reader.read_be_i32()) != 0 {
             return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Connect)"));
         }
-        if (try!(recv_reader.read_be_i32()) != send_trans_id) {
+        if try!(recv_reader.read_be_i32()) != send_trans_id {
             return Err(util::get_error(OtherIoError, "Tracker Did Not Send Us A Matching Transaction Id"));
         }
         
@@ -139,19 +138,19 @@ impl Tracker for UdpTracker {
         {
             let mut send_buf = BufWriter::new(send_bytes);
             
-            send_buf.write_be_i64(connect_id); // Our Connection Id
-            send_buf.write_be_i32(1); // This Is An Announce Request
-            send_buf.write_be_i32(send_trans_id); // Random For Each Request
-            send_buf.write(self.info_hash); // Identifies The Torrent File
-            send_buf.write(self.peer_id); // Self Designated Peer Id
-            send_buf.write_be_i64(0); // Bytes Downloaded So Far
-            send_buf.write_be_i64(total_size as i64); // Bytes Needed
-            send_buf.write_be_i64(0); // Bytes Uploaded So Far
-            send_buf.write_be_i32(0); // Specific Event
-            send_buf.write_be_i32(0); // IPv4 Address (0 For Source Address)
-            send_buf.write_be_i32(12); // Key (Helps With Endianness For Tracker?)
-            send_buf.write_be_i32(-1); // Number Of Clients To Return (-1 Default)
-            send_buf.write_be_i16(6882); // Port For Other Clients To Connect (Needs To Be Port Forwarded Behind NAT)
+            try!(send_buf.write_be_i64(connect_id)); // Our Connection Id
+            try!(send_buf.write_be_i32(1)); // This Is An Announce Request
+            try!(send_buf.write_be_i32(send_trans_id)); // Random For Each Request
+            try!(send_buf.write(self.info_hash)); // Identifies The Torrent File
+            try!(send_buf.write(self.peer_id)); // Self Designated Peer Id
+            try!(send_buf.write_be_i64(0)); // Bytes Downloaded So Far
+            try!(send_buf.write_be_i64(total_size as i64)); // Bytes Needed
+            try!(send_buf.write_be_i64(0)); // Bytes Uploaded So Far
+            try!(send_buf.write_be_i32(0)); // Specific Event
+            try!(send_buf.write_be_i32(0)); // IPv4 Address (0 For Source Address)
+            try!(send_buf.write_be_i32(12)); // Key (Helps With Endianness For Tracker?)
+            try!(send_buf.write_be_i32(-1)); // Number Of Clients To Return (-1 Default)
+            try!(send_buf.write_be_i16(6882)); // Port For Other Clients To Connect (Needs To Be Port Forwarded Behind NAT)
         }
         
         let mut recv_bytes = [0u8,..10000];
@@ -159,10 +158,10 @@ impl Tracker for UdpTracker {
         
         let mut recv_reader = BufReader::new(recv_bytes);
         
-        if (try!(recv_reader.read_be_i32()) != 1) {
+        if try!(recv_reader.read_be_i32()) != 1 {
             return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Announce)"));
         }
-        if (try!(recv_reader.read_be_i32()) != send_trans_id) {
+        if try!(recv_reader.read_be_i32()) != send_trans_id {
             return Err(util::get_error(OtherIoError, "Tracker Responded With A Different Transaction Id"));
         }
         

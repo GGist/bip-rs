@@ -15,15 +15,15 @@ const BYTE_LEN_LOW: char = '1';
 const BYTE_LEN_HIGH: char = '9';
 const BYTE_LEN_END: char = ':';
     
-pub enum BenVal {
+pub enum BenValue {
     Int(i64),
     Bytes(Vec<u8>),
-    List(Vec<BenVal>),
-    Dict(HashMap<String, BenVal>)
+    List(Vec<BenValue>),
+    Dict(HashMap<String, BenValue>)
 }
 
-impl BenVal {
-    pub fn new(bytes: &[u8]) -> BenResult<BenVal> {
+impl BenValue {
+    pub fn new(bytes: &[u8]) -> BenResult<BenValue> {
         let buf = &mut BufReader::new(bytes);
         
         decode(buf)
@@ -54,14 +54,14 @@ impl BenVal {
         }
     }
 
-    pub fn list<'a>(&'a self) -> Option<&'a Vec<BenVal>> {
+    pub fn list<'a>(&'a self) -> Option<&'a Vec<BenValue>> {
         match self {
             &List(ref n) => Some(n),
             _            => None
         }
     }
 
-    pub fn dict<'a>(&'a self) -> Option<&'a HashMap<String, BenVal>> {
+    pub fn dict<'a>(&'a self) -> Option<&'a HashMap<String, BenValue>> {
         match self {
             &Dict(ref n) => Some(n),
             _            => None
@@ -69,7 +69,7 @@ impl BenVal {
     }
 }
     
-fn encode(val: &BenVal) -> Vec<u8> {
+fn encode(val: &BenValue) -> Vec<u8> {
     match val {
         &Int(ref n) => encode_int(n),
         &Bytes(ref n) => encode_bytes(n.as_slice()),
@@ -98,7 +98,7 @@ fn encode_bytes(list: &[u8]) -> Vec<u8> {
     bytes
 }
     
-fn encode_list(list: &Vec<BenVal>) -> Vec<u8> {
+fn encode_list(list: &Vec<BenValue>) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     
     bytes.push(LIST_START as u8);
@@ -110,9 +110,9 @@ fn encode_list(list: &Vec<BenVal>) -> Vec<u8> {
     bytes
 }
     
-fn encode_dict(dict: &HashMap<String, BenVal>) -> Vec<u8> {
+fn encode_dict(dict: &HashMap<String, BenValue>) -> Vec<u8> {
     // Need To Sort The Keys In The Map Before Encoding
-    let mut sort_dict: Vec<(&String, &BenVal)> = Vec::new();
+    let mut sort_dict: Vec<(&String, &BenValue)> = Vec::new();
     let mut bytes: Vec<u8> = Vec::new();
     
     // Keep Iterator Alive For Current Scope
@@ -125,7 +125,7 @@ fn encode_dict(dict: &HashMap<String, BenVal>) -> Vec<u8> {
     sort_dict.sort_by(|&(a, _), &(b, _)| a.cmp(b));
         
     bytes.push(DICT_START as u8);
-    // Iterate And Dictionary Encode The String/BenVal Pairs
+    // Iterate And Dictionary Encode The String/BenValue Pairs
     for &(ref key, ref value) in sort_dict.iter() {
         bytes.push_all(encode_bytes(key.as_bytes()).as_slice());
         bytes.push_all(encode(*value).as_slice());
@@ -135,7 +135,7 @@ fn encode_dict(dict: &HashMap<String, BenVal>) -> Vec<u8> {
     bytes
 }
     
-fn decode(buf: &mut BufReader) -> BenResult<BenVal> {
+fn decode(buf: &mut BufReader) -> BenResult<BenValue> {
     let curr_char = try!(buf.read_char().or_else({ |e|
         Err(Slice(e.desc))
     }));
@@ -151,7 +151,7 @@ fn decode(buf: &mut BufReader) -> BenResult<BenVal> {
             }))
             Bytes(try!(decode_bytes(buf)))
         },
-        _ => return Err(Slice("Unknown BenVal Identifier Encountered"))
+        _ => return Err(Slice("Unknown BenValue Identifier Encountered"))
     };
     
     Ok(ben_val)
@@ -183,8 +183,8 @@ fn decode_bytes(buf: &mut BufReader) -> BenResult<Vec<u8>> {
     }
 }
 
-fn decode_list(buf: &mut BufReader) -> BenResult<Vec<BenVal>> {
-    let mut ben_list: Vec<BenVal> = Vec::new();
+fn decode_list(buf: &mut BufReader) -> BenResult<Vec<BenValue>> {
+    let mut ben_list: Vec<BenValue> = Vec::new();
     
     while try!(peek_char(buf)) != BEN_END {
         ben_list.push(try!(decode(buf)));
@@ -194,8 +194,8 @@ fn decode_list(buf: &mut BufReader) -> BenResult<Vec<BenVal>> {
     Ok(ben_list)
 }
     
-fn decode_dict(buf: &mut BufReader) -> BenResult<HashMap<String, BenVal>> {
-    let mut ben_dict: HashMap<String, BenVal> = HashMap::new();
+fn decode_dict(buf: &mut BufReader) -> BenResult<HashMap<String, BenValue>> {
+    let mut ben_dict: HashMap<String, BenValue> = HashMap::new();
     
     while try!(peek_char(buf)) != BEN_END {
         let key = match try!(decode_bytes(buf)).into_ascii_opt() {
