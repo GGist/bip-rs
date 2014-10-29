@@ -37,8 +37,9 @@ s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">
         <u:{5} xmlns:u=\"{4}\">{6}</u:{5}>
     </s:Body>
 </s:Envelope>";
-// Does Not Include Replacement Identifiers Or Quote Escapes
-static BASE_CONTENT_LENGTH: uint = 222;
+// Ignores Replace Identifiers And Escape Characters 
+// (Including Implicit Newline Escape)
+static BASE_CONTENT_LENGTH: uint = 216;
 
 // UPnPInterface Classifiers
 static ROOT_REGEX: Regex = regex!(r"upnp:(rootdevice)");
@@ -67,10 +68,10 @@ pub struct ServiceDesc {
 
 impl ServiceDesc {
     /// Takes a location corresponding to the root device description page of a UPnPInterface
-    /// as well as the st field of the interface which will always be unique to a service/device.
+    /// as well as the st field of the interface which will always be unique to a service.
     ///
     /// This is a blocking operation.
-    pub fn parse(location: &str, st: &str) -> IoResult<ServiceDesc> {
+    fn parse(location: &str, st: &str) -> IoResult<ServiceDesc> {
         // Setup Regex For Parsing Device Description Page
         let service_find = String::from_str("<service>\\s*?<serviceType>{1}</serviceType>(?:.|\n)+?</service>").replace("{1}", st);
         let service_regex = try!(Regex::new(service_find.as_slice()).or_else( |_|
@@ -125,6 +126,15 @@ impl ServiceDesc {
             actions: actions, var_table: var_table })
     }
     
+    /// Takes an action string representing the procedure to call as well as an
+    /// array slice of tuples corresponding to (arg_name, arg_value). An empty
+    /// array slice indicates that no parameters (in values) are expected for the
+    /// specified action.
+    ///
+    /// This operation will not check to make sure that valid actions or parameters
+    /// have been passed in so any error handling will happen on the service end.
+    ///
+    /// This is a blocking operation.
     pub fn soap_request(&self, action: &str, params: &[(&str, &str)]) -> IoResult<()> {
         // Build Parameter Section Of Payload
         let mut arguments = String::from_str("");
@@ -150,16 +160,14 @@ impl ServiceDesc {
             .replace("{4}", self.search_target.as_slice())
             .replace("{5}", action)
             .replace("{6}", arguments.as_slice());
-            println!("{}", request);
-            let request = File::open(&Path::new("spike/data.txt")).read_to_string();
-        // Send Request
-        println!("{}", request);
-        let mut tcp_sock = try!(TcpStream::connect("192.168.1.1", 1780));
         
-        try!(tcp_sock.write_str(request.unwrap().as_slice()));
+        // Send Request
+        let mut tcp_sock = try!(TcpStream::connect(self.location.ip.to_string().as_slice(), self.location.port));
+        
+        try!(tcp_sock.write_str(request.as_slice()));
         let response = try!(tcp_sock.read_to_string());
         
-        println!("{}", response.len());
+        // TODO: Finish This Up
         
         Ok(())
     }
@@ -169,9 +177,13 @@ impl ServiceDesc {
 /// by the UPnP specification. This type can be used to get very general information
 /// about an interface but also to get access to the services exposed by the interface.
 pub enum UPnPInterface {
+    #[doc(hidden)]
     Root(String, StrPos, StrPos, StrPos, StrPos, StrPos),
+    #[doc(hidden)]
     Device(String, StrPos, StrPos, StrPos, StrPos, StrPos),
+    #[doc(hidden)]
     Service(String, StrPos, StrPos, StrPos, StrPos, StrPos),
+    #[doc(hidden)]
     Identifier(String, StrPos, StrPos, StrPos, StrPos, StrPos)
 }
 
@@ -197,9 +209,9 @@ impl UPnPInterface {
     /// This is a blocking operation.
     pub fn find_services(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPInterface>> {
         let service_st = String::from_str("urn:schemas-upnp-org:service:{1}:{2}").replace("{1}", name).replace("{2}", version);
-        let request = String::from_str(GENERIC_SEARCH_REQUEST).replace("{1}", "5").replace("{2}", service_st.as_slice());
+        let request = String::from_str(GENERIC_SEARCH_REQUEST).replace("{1}", "2").replace("{2}", service_st.as_slice());
         
-        let replies = try!(send_search(from_addr, 5500, request.as_slice()));
+        let replies = try!(send_search(from_addr, 2200, request.as_slice()));
         
         parse_interfaces(replies)
     }
@@ -215,9 +227,9 @@ impl UPnPInterface {
     /// This is a blocking operation.
     pub fn find_devices(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPInterface>> {
         let device_st = String::from_str("urn:schemas-upnp-org:device:{1}:{2}").replace("{1}", name).replace("{2}", version);
-        let request = GENERIC_SEARCH_REQUEST.replace("{1}", "5").replace("{2}", device_st.as_slice());
+        let request = GENERIC_SEARCH_REQUEST.replace("{1}", "2").replace("{2}", device_st.as_slice());
         
-        let replies = try!(send_search(from_addr, 5500, request.as_slice()));
+        let replies = try!(send_search(from_addr, 2200, request.as_slice()));
         
         parse_interfaces(replies)
     }

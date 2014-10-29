@@ -3,6 +3,7 @@ extern crate "rust-bt" as rust_bt;
 extern crate "rust-crypto" as crypto;
 
 fn main() {
+    use std::io::{IoResult};
     use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr, IpAddr};
     use std::io::net::udp::{UdpSocket};
     use std::io::fs::File;
@@ -17,6 +18,7 @@ fn main() {
     use rust_bt::tracker::Tracker;
     use rust_bt::torrent::{Torrent};
     use rust_bt::upnp::UPnPInterface;
+    use rust_bt::upnp::ServiceDesc;
     
     let mut torr_file = File::open(&Path::new("tests/data/udp_tracker/sample.torrent"));
     let torr_bytes = match torr_file.read_to_end() {
@@ -51,16 +53,11 @@ fn main() {
     
     //println!("{}", result.to_hex());
     
-    match UPnPInterface::find_services(SocketAddr{ ip: Ipv4Addr(192, 168, 1, 102), port: 3244 }, "WANIPConnection", "1") {
+    match UPnPInterface::find_services(SocketAddr{ ip: Ipv4Addr(192, 168, 1, 102), port: 1901 }, "WANIPConnection", "1") {
         Ok(n) => {
-            println!("{}", n.len());
             for i in n.iter() {
-                println!("{}", i.st());
-                
-                match i.service_desc() {
-                    Err(n) => println!("{}", n),
-                    _ => ()
-                };
+                let service_desc = i.service_desc().unwrap();
+                service_desc.soap_request("GetExternalIPAddress", []).unwrap();
             }
         },
         Err(n) => println!("{} saqS", n)
