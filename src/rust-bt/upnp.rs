@@ -47,7 +47,7 @@ static DEVICE_REGEX: Regex = regex!(r":device:(.+?):(\d+)");
 static SERVICE_REGEX: Regex = regex!(r":service:(.+?):(\d+)");
 static IDENTIFIER_REGEX: Regex = regex!(r"uuid:([\w\d-]+)");
 
-// Case Insensitive Matches For Header Fields
+// Case Insensitive Matches For Search Response Header Fields
 static ST_REGEX: Regex = regex!(r"(?i)ST: *([^\r\n]+)");
 static USN_REGEX: Regex = regex!(r"(?i)USN: *([^\r\n]+)");
 static LOCATION_REGEX: Regex = regex!(r"(?i)Location: *([^\r\n]+)");
@@ -115,10 +115,11 @@ impl ServiceDesc {
         let request = request.replace(path.as_slice(), scpd_path);
 
         try!(tcp_sock.write_str(request.as_slice()));
-        let response = try!(tcp_sock.read_to_string());
+        // We Will Be Returning response Slices To Users, So We Format The Response
+        let response = try!(tcp_sock.read_to_string()).replace("\t", " ");
         
         // Pull Out Actions And State Variable Table Locations
-        let actions = action_regex.find_iter(response.as_slice()).collect::<Vec<(uint, uint)>>();
+        let actions = action_regex.find_iter(response.as_slice()).collect::<Vec<StrPos>>();
         let var_table = state_vars_regex.find(response.as_slice());
         
         Ok(ServiceDesc{ location: sock_addr, search_target: st.to_string(), 
@@ -126,16 +127,59 @@ impl ServiceDesc {
             actions: actions, var_table: var_table })
     }
     
+    /// Returns a list of string slices corresponding to each action that can be
+    /// sent to this service. The slice includes the action name, and any in or out
+    /// parameters expected/provided as well as their related state variables. The 
+    /// "relatedStateVariable" corresponds to an entry in the "serviceStateTable".
+    ///
+    /// The response is left in the XML format that it was sent from the UPnPInterface
+    /// in. We leave it in this format so that we don't spend time allocating memory and
+    /// parsing responses.
+    pub fn actions<'a>(&'a self) -> Vec<&'a str> {
+        let actions_regex: Regex = regex!(r" *<action>(?:.|\n)+?</action>");
+        let desc_slice = self.service_desc.as_slice();
+        
+        let mut match_indices = actions_regex.find_iter(desc_slice);
+        
+        let mut actions_list: Vec<&'a str> = Vec::new();
+        for (a, b) in match_indices {
+            actions_list.push(desc_slice.slice(a, b))
+        }
+        
+        actions_list
+    }
+    
+    /// Optionally returns a string slice corresponding to the "serviceStateTable"
+    /// of the service description. This table explains the data types referenced
+    /// in the "relatedStateVariable" field for each in or out parameters for each
+    /// action.
+    ///
+    /// The response is left in the XML format that it was sent from the UPnPInterface
+    /// in. We leave it in this format so that we don't spend time allocating memory and
+    /// parsing responses.
+    pub fn state_variables<'a>(&'a self) -> Option<&'a str> {
+        let state_var_regex: Regex = regex!(r" *<serviceStateTable>(?:.|\n)+?</serviceStateTable>");
+        
+        match state_var_regex.find(self.service_desc.as_slice()) {
+            Some((a, b)) => Some(self.service_desc.as_slice().slice(a, b)),
+            None => None
+        }
+    }
+    
     /// Takes an action string representing the procedure to call as well as an
-    /// array slice of tuples corresponding to (arg_name, arg_value). An empty
-    /// array slice indicates that no parameters (in values) are expected for the
-    /// specified action.
+    /// array slice of tuples in the form (arg_name, arg_value). An empty array 
+    /// slice indicates that no parameters are expected for the specified action.
     ///
     /// This operation will not check to make sure that valid actions or parameters
-    /// have been passed in so any error handling will happen on the service end.
+    /// have been passed in, so any error handling may happen on the service end.
     ///
     /// This is a blocking operation.
-    pub fn soap_request(&self, action: &str, params: &[(&str, &str)]) -> IoResult<()> {
+    pub fn send_action(&self, action: &str, params: &[(&str, &str)]) -> IoResult<String> {
+        let response_find = String::from_str("<\\w*:?{1}Response(?:.|\n)+?</\\w*:?{1}Response>").replace("{1}", action);
+        let response_regex = try!(Regex::new(response_find.as_slice()).or_else( |_|
+            Err(util::get_error(InvalidInput, "Failed To Create Response Regex"))
+        ));
+    
         // Build Parameter Section Of Payload
         let mut arguments = String::from_str("");
         
@@ -167,9 +211,15 @@ impl ServiceDesc {
         try!(tcp_sock.write_str(request.as_slice()));
         let response = try!(tcp_sock.read_to_string());
         
-        // TODO: Finish This Up
+        // Service Should Be Using HTTP Codes To Signify Errors
+        if !response.as_slice().contains("200 OK") {
+            return Err(util::get_error(InvalidInput, "Service Returned An Error"));
+        }
         
-        Ok(())
+        let (a, b) = try!(response_regex.find(response.as_slice()).ok_or(
+            util::get_error(InvalidInput, "Unexpected Procedure Return Value")
+        ));
+        Ok(response.as_slice().slice(a, b).to_string())
     }
 }
 
@@ -198,13 +248,14 @@ impl UPnPInterface {
         parse_interfaces(replies)
     }
     
-    /// Sends out a search request for all UPnP services on the specified from_addr. 
+    /// Sends out a search request for particular UPnP services on the specified from_addr. 
     ///
-    /// This function does not check to make sure that only services responded
-    /// to our request, so it is assumed that devices on the network correctly
-    /// follow the UPnP specification. As of now, any services that are not defined
-    /// at http://upnp.org/sdcps-and-certification/standards/sdcps/ will not be found
-    /// by this method (use find_all and filter with is_service).
+    /// This method sends out a search request asking that only services with the
+    /// specified name and version respond. This method does not check to make
+    /// sure that only services with the specified name and version responded.
+    /// Additonally, any service interfaces that are not standard UPnP services
+    /// http://upnp.org/sdcps-and-certification/standards/sdcps/ will not be found
+    /// and should be discovered by using find_all and filtering the results.
     ///
     /// This is a blocking operation.
     pub fn find_services(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPInterface>> {
@@ -216,13 +267,14 @@ impl UPnPInterface {
         parse_interfaces(replies)
     }
             
-    /// Sends out a search request for all UPnP devices on the specified from_addr. 
+    /// Sends out a search request for particular UPnP devices on the specified from_addr. 
     ///
-    /// This function does not check to make sure that only devices responded
-    /// to our request, so it is assumed that devices on the network correctly
-    /// follow the UPnP specification. As of now, any devices that are not defined
-    /// at http://upnp.org/sdcps-and-certification/standards/sdcps/ will not be found
-    /// by this method (use find_all and filter with is_device).
+    /// This method sends out a search request asking that only devices with the
+    /// specified name and version respond. This method does not check to make
+    /// sure that only devices with the specified name and version responded.
+    /// Additionally, any device interface that are not standard UPnP devices
+    /// (http://upnp.org/sdcps-and-certification/standards/sdcps/) will not be found
+    /// and should be discovered by using find_all and filtering the results.
     ///
     /// This is a blocking operation.
     pub fn find_devices(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPInterface>> {
@@ -234,11 +286,12 @@ impl UPnPInterface {
         parse_interfaces(replies)
     }
         
-    /// Sends out a search request for a specific UPnP interface on the specified from_addr. 
+    /// Sends out a search request for a unique UPnP interface on the specified from_addr. 
     ///
-    /// This function returns one interface but does not check to see if more than 
-    /// one device responded. If more then one device responded (which should not happen) 
-    /// then the first response is what will be returned. 
+    /// This method sends out a search request asking that only the device with the
+    /// specified uuid respond. This method does not check the the device that responded
+    /// has the right uuid. If more than one device responds (which should not happen
+    /// in any correct implementation) then the first device to respond will be returned.
     ///
     /// This is a blocking operation.
     pub fn find_uuid(from_addr: SocketAddr, uuid: &str) -> IoResult<Option<UPnPInterface>> {
@@ -263,7 +316,8 @@ impl UPnPInterface {
 
     /// Check if the current UPnPInterface represents a device on the network.
     ///
-    /// Note that this function will return false if the type is a root device.
+    /// Note: This function will return false in the case of a root (even though
+    /// it is also technically a device).
     pub fn is_device(&self) -> bool {
         match self {
             &Device(..) => true,
@@ -280,6 +334,9 @@ impl UPnPInterface {
     }
     
     /// Check if the current UPnPInterface represents an identifier (uuid) on the network.
+    ///
+    /// Note: This function will return false in the case of a root or device even 
+    /// though all uuid's refer to a specific device (or root in some cases).
     pub fn is_identifier(&self) -> bool {
         match self {
             &Identifier(..) => true,
@@ -288,7 +345,7 @@ impl UPnPInterface {
     }
     
     /// Get the device name, service specification, or uuid that this interface 
-    /// has identified with.
+    /// has identified itself with.
     pub fn name<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
             &Root(ref n, seg, _, _, _, _)       => (n, seg),
@@ -300,8 +357,8 @@ impl UPnPInterface {
         payload.as_slice().slice(start, end)
     }
 
-    /// Get the device version, service version, or no version (identifiers/root devices) 
-    /// that this interface has identified with.
+    /// Get the device version, service version, or no version (in the case of an 
+    /// identifier or root) that this interface has identified itself with.
     pub fn version<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
             &Root(ref n, _, seg, _, _, _)       => (n, seg),
@@ -313,8 +370,8 @@ impl UPnPInterface {
         payload.as_slice().slice(start, end)
     }
     
-    /// Get the location of the root device description page corresponding to 
-    /// this UPnPInterface.
+    /// Get the location (url) of the root device description web page corresponding
+    /// to this particular UPnPInterface.
     pub fn location<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
             &Root(ref n, _, _, seg, _, _)       => (n, seg),
@@ -326,7 +383,7 @@ impl UPnPInterface {
         payload.as_slice().slice(start, end)
     }
     
-    /// Get the search target.
+    /// Get the search target of this UPnPInterface.
     pub fn st<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
             &Root(ref n, _, _, _, seg, _)       => (n, seg),
@@ -338,7 +395,7 @@ impl UPnPInterface {
         payload.as_slice().slice(start, end)
     }
     
-    /// Get the full Unique Service Name.
+    /// Get the full Unique Service Name of this UPnPInterface.
     pub fn usn<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
             &Root(ref n, _, _, _, _, seg)       => (n, seg),
@@ -350,10 +407,9 @@ impl UPnPInterface {
         payload.as_slice().slice(start, end)
     }
 
-    /// Get the service description for this service.
+    /// Get a service description object for this service.
     ///
-    /// Note that if this is called on an object that is not service, an error
-    /// will always be returned.
+    /// Note: This will always fail if called on a non-service UPnPInterface.
     ///
     /// This is a blocking operation.
     pub fn service_desc(&self) -> IoResult<ServiceDesc> {

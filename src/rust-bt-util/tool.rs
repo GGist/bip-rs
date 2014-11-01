@@ -57,7 +57,7 @@ fn main() {
         Ok(n) => {
             for i in n.iter() {
                 let service_desc = i.service_desc().unwrap();
-                service_desc.soap_request("GetExternalIPAddress", []).unwrap();
+                println!("{}", service_desc.send_action("GetExternalIPAddress", []).unwrap());
             }
         },
         Err(n) => println!("{} saqS", n)
