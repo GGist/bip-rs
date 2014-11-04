@@ -40,26 +40,27 @@ fn main() {
     
     let dict = ben_val.dict().expect("1");
     
-    let announce_url = dict.find_equiv(&"announce").expect("2").str().expect("3");
+    let announce_url = dict.find_equiv("announce").expect("2").str().expect("3");
     
     let mut sha = Sha1::new();
     let mut result = [0u8,..20];
-    let encoded = dict.find_equiv(&"info").expect("4").encoded();
+    let encoded = dict.find_equiv("info").expect("4").encoded();
     
     sha.input(encoded.as_slice());
     sha.result(result);
-
-    println!("{}", torrent.announce);
     
-    //println!("{}", result.to_hex());
-    
-    match UPnPInterface::find_services(SocketAddr{ ip: Ipv4Addr(192, 168, 1, 102), port: 1901 }, "WANIPConnection", "1") {
+    let mut a = UdpTracker::new(announce_url, result).unwrap();
+    println!("{}", a.local_ip());
+    match UPnPInterface::find_all(SocketAddr{ ip: a.local_ip().unwrap(), port: 1901 }) {
         Ok(n) => {
             for i in n.iter() {
-                let service_desc = i.service_desc().unwrap();
-                println!("{}", service_desc.send_action("GetExternalIPAddress", []).unwrap());
+                println!("{}", i.name());
+                if i.is_service() {
+                    let s = i.service_desc().unwrap();
+                    println!("{}", s.actions());
+                }
             }
         },
-        Err(n) => println!("{} saqS", n)
+        Err(n) => println!("{}", n)
     };
 }

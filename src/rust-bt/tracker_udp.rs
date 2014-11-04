@@ -1,17 +1,22 @@
 use std::{rand};
-use std::io::net::udp::{UdpStream};
-use std::io::net::ip::{SocketAddr, Ipv4Addr};
+use std::time::duration::{Duration};
+use std::io::timer::{Timer};
+use std::io::net::udp::{UdpSocket};
+use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr};
 use std::io::{IoResult, BufWriter, BufReader, ConnectionFailed, EndOfFile, OtherIoError, InvalidInput};
 
 use util;
-use tracker::{AnnounceInfo, Tracker};
+use tracker::{SwarmInfo, Tracker};
 
 static MAX_ATTEMPTS: uint = 8;
 
 pub struct UdpTracker {
-    conn: UdpStream,
+    conn: UdpSocket,
+    tracker: SocketAddr,
     peer_id: [u8,..20],
-    info_hash: [u8,..20]
+    info_hash: [u8,..20],
+    conn_id: i64,
+    conn_id_expire: Receiver<()>
 }
 
 impl UdpTracker {
@@ -39,99 +44,116 @@ impl UdpTracker {
             for i in ip_addrs.into_iter() {
                 let tx = tx.clone();
                 spawn(proc() {
-                    let mut udp_stream = match util::get_udp_sock(SocketAddr{ ip: i, port: 6881 }, 9) {
-                        Ok(n) => n.connect(dest_sock),
+                    let mut udp_sock = match util::get_udp_sock(SocketAddr{ ip: i, port: 6881 }, 9) {
+                        Ok(n) => n,
                         Err(_) => return ()
                     };
                     
-                    match UdpTracker::connect_request(&mut udp_stream) {
-                        Ok(_) => tx.send(udp_stream),
+                    match connect_request(&mut udp_sock, &dest_sock) {
+                        Ok(_) => tx.send(udp_sock),
                         Err(_) => ()
                     }
                 });
             }
         }
         
-        let udp_stream = try!(rx.recv_opt().or_else( |_|
+        let udp_sock = try!(rx.recv_opt().or_else( |_|
             Err(util::get_error(ConnectionFailed, "Could Not Communicate On Any IPv4 Interfaces"))
         ));
         
-        Ok(UdpTracker{ conn: udp_stream, 
-            peer_id: util::gen_peer_id(), 
-            info_hash: fixed_hash }
+        Ok(UdpTracker{ conn: udp_sock,
+            tracker: dest_sock,
+            peer_id: util::gen_peer_id(),
+            info_hash: fixed_hash,
+            conn_id: 0i64,
+            conn_id_expire: try!(Timer::new()).oneshot(Duration::minutes(0)) }
         )
     }
-    
-    fn send_request(udp: &mut UdpStream, send: &[u8], recv: &mut [u8]) -> IoResult<uint> {
-        let mut attempt = 0;
+}
 
-        let mut bytes_read = 0;
-        while attempt < MAX_ATTEMPTS {
-            try!(udp.write(send));
-            
-            let wait_seconds = util::get_udp_wait(attempt) * 1000;
-            udp.as_socket(|udp| {
-                udp.set_read_timeout(Some(wait_seconds))
-            });
-            
-            match udp.read(recv) {
-                Ok(bytes)  => { 
-                    bytes_read = bytes; 
-                    break; 
-                },
-                Err(_) => { attempt += 1; }
-            };
-        }
-        if attempt == MAX_ATTEMPTS {
-            return Err(util::get_error(ConnectionFailed, "No Connection Response From Server"));
-        }
-        
-        Ok(bytes_read)
+/// Sends a request on udp using send as the buffer of bytes to send and dumping the
+/// response into recv. This method uses the standard UDP Tracker time out algorithm
+/// to wait for a response from the server before failing.
+///
+/// This is a blocking operation.
+fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [u8]) -> IoResult<uint> {
+    let mut attempt = 0;
+
+    let mut bytes_read = 0;
+    while attempt < MAX_ATTEMPTS {
+        try!(udp.send_to(send, *dst));
+
+        let wait_seconds = util::get_udp_wait(attempt) * 1000;
+        udp.set_read_timeout(Some(wait_seconds));
+
+        match udp.recv_from(recv) {
+            Ok((bytes, _))  => { 
+                bytes_read = bytes; 
+                break; 
+            },
+            Err(_) => { attempt += 1; }
+        };
     }
-    
-    fn connect_request(udp: &mut UdpStream) -> IoResult<i64> {
-        let mut send_bytes = [0u8,..16];
-        let send_trans_id = rand::random::<i32>();
-        
-        { // Limit Lifetime Of Writer Object
-            let mut send_writer = BufWriter::new(send_bytes);
-            
-            try!(send_writer.write_be_i64(0x41727101980)); // Part Of The Standard
-            try!(send_writer.write_be_i32(0)); // Connect Request
-            try!(send_writer.write_be_i32(send_trans_id)); // Verify This In The Response
-        }
-        
-        let mut recv_bytes = [0u8,..16];
-        let bytes_read = try!(UdpTracker::send_request(udp, send_bytes, recv_bytes));
-        if bytes_read != recv_bytes.len() {
-            return Err(util::get_error(EndOfFile, "Didn't Receive All 16 Bytes From Tracker"));
-        }
-        
-        let mut recv_reader = BufReader::new(recv_bytes);
-        if try!(recv_reader.read_be_i32()) != 0 {
-            return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Connect)"));
-        }
-        if try!(recv_reader.read_be_i32()) != send_trans_id {
-            return Err(util::get_error(OtherIoError, "Tracker Did Not Send Us A Matching Transaction Id"));
-        }
-        
-        recv_reader.read_be_i64()
+    if attempt == MAX_ATTEMPTS {
+        return Err(util::get_error(ConnectionFailed, "No Connection Response From Server"));
     }
-    
-    //fn scrape_request() -> {
-    
-    //}
+
+    Ok(bytes_read)
+}
+
+/// Sends a request on udp with a message that is asking for a connection id from
+/// the server. This connection id is required in order to send any sort of data
+/// to the server so that it can map our ip address to the connection id to prevent
+/// spoofing later on. This connection id is valid until the receiver is activated.
+///
+/// This is a blocking operation.
+fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr) -> IoResult<(i64, Receiver<()>)> {
+    let mut send_bytes = [0u8,..16];
+    let send_trans_id = rand::random::<i32>();
+
+    { // Limit Lifetime Of Writer Object
+        let mut send_writer = BufWriter::new(send_bytes);
+
+        try!(send_writer.write_be_i64(0x41727101980)); // Part Of The Standard
+        try!(send_writer.write_be_i32(0)); // Connect Request
+        try!(send_writer.write_be_i32(send_trans_id)); // Verify This In The Response
+    }
+
+    let mut recv_bytes = [0u8,..16];
+    let bytes_read = try!(send_request(udp, dst, send_bytes, recv_bytes));
+    if bytes_read != recv_bytes.len() {
+        return Err(util::get_error(EndOfFile, "Didn't Receive All 16 Bytes From Tracker"));
+    }
+
+    let mut recv_reader = BufReader::new(recv_bytes);
+    if try!(recv_reader.read_be_i32()) != 0 {
+        return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Connect)"));
+    }
+    if try!(recv_reader.read_be_i32()) != send_trans_id {
+        return Err(util::get_error(OtherIoError, "Tracker Did Not Send Us A Matching Transaction Id"));
+    }
+
+    let conn_id = try!(recv_reader.read_be_i64());
+    // Connection IDs Are Valid Up To 1 Minute After Being Created
+    let conn_id_expire = try!(Timer::new()).oneshot(Duration::minutes(1));
+    // TODO: Find a better way to keep Timer objects around (maybe make them static?)
+
+    Ok((conn_id, conn_id_expire))
 }
 
 impl Tracker for UdpTracker {
-    fn socket_name(&mut self) -> IoResult<SocketAddr> {
-        self.conn.as_socket(|udp| {
-            udp.socket_name()
-        })
+    fn local_ip(&mut self) -> IoResult<IpAddr> {
+        Ok((try!(self.conn.socket_name())).ip)
     }
 
-    fn announce(&mut self, total_size: uint) -> IoResult<AnnounceInfo> {
-        let connect_id = try!(UdpTracker::connect_request(&mut self.conn));
+    fn scrape(&mut self) -> IoResult<SwarmInfo> {
+        Ok(SwarmInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(0)), 
+            leechers: 0, seeders: 0, peers: Vec::new() }
+        )
+    }
+
+    fn start_announce(&mut self, total_size: uint) -> IoResult<SwarmInfo> {
+        let (connect_id, _) = try!(connect_request(&mut self.conn, &self.tracker));
         let send_trans_id = rand::random::<i32>();
         
         let mut send_bytes = [0u8,..98];
@@ -154,7 +176,7 @@ impl Tracker for UdpTracker {
         }
         
         let mut recv_bytes = [0u8,..10000];
-        try!(UdpTracker::send_request(&mut self.conn, send_bytes, recv_bytes));
+        try!(send_request(&mut self.conn, &self.tracker, send_bytes, recv_bytes));
         
         let mut recv_reader = BufReader::new(recv_bytes);
         
@@ -165,7 +187,7 @@ impl Tracker for UdpTracker {
             return Err(util::get_error(OtherIoError, "Tracker Responded With A Different Transaction Id"));
         }
         
-        let interval = try!(recv_reader.read_be_i32());
+        let interval = try!(recv_reader.read_be_i32()) as i64;
         let leechers = try!(recv_reader.read_be_i32());
         let seeders = try!(recv_reader.read_be_i32());
         let mut peers: Vec<SocketAddr> = Vec::with_capacity(leechers as uint + seeders as uint);
@@ -177,8 +199,22 @@ impl Tracker for UdpTracker {
             );
         }
         
-        Ok(AnnounceInfo{ interval: interval, leechers: leechers, 
-            seeders: seeders, peers: peers }
+        Ok(SwarmInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(interval)), 
+            leechers: leechers, seeders: seeders, peers: peers }
         )
+    }
+
+    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<SwarmInfo> {
+        Ok(SwarmInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(0)), 
+            leechers: 0, seeders: 0, peers: Vec::new() }
+        )
+    }
+
+    fn stop_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<()> {
+        Ok(())
+    }
+
+    fn complete_announce(&mut self, total_bytes: uint) -> IoResult<()> {
+        Ok(())
     }
 }

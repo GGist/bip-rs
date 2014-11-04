@@ -5,7 +5,6 @@ use std::io::net::tcp::TcpStream;
 use std::io::{IoResult, InvalidInput};
 use std::io::net::udp::UdpSocket;
 use std::io::net::ip::{SocketAddr, Ipv4Addr};
-use std::io::File;
 
 // http://upnp.org/sdcps-and-certification/standards/sdcps/
 // http://www.upnp.org/specs/arch/UPnP-arch-DeviceArchitecture-v1.0-20080424.pdf
@@ -20,12 +19,14 @@ ST: {2}\r\n\r\n";
 
 // {1} = Path, {2} = IP Address:Port
 static GENERIC_HTTP_REQUEST: &'static str = "GET {1} HTTP/1.1\r
-Host: {2}\r\n\r\n";
+Host: {2}\r
+Connection: close\r\n\r\n";
 
 // {1} = Control URL, {2} = IP Address:Port, {3} = Bytes In Payload,
 // {4} = Search Target Of Service, {5} = Action Name, {6} = Action Parameters
 static GENERIC_SOAP_REQUEST: &'static str = "POST {1} HTTP/1.1\r
 HOST: {2}\r
+CONNECTION: close\r
 CONTENT-LENGTH: {3}\r
 CONTENT-TYPE: text/xml; charset=\"utf-8\"\r
 SOAPACTION: \"{4}#{5}\"\r
@@ -81,7 +82,7 @@ impl ServiceDesc {
         let control_find: Regex = regex!(r"<controlURL>(.+?)</controlURL>");
         
         // Setup Regex For Parsing Service Description Page
-        let action_regex: Regex = regex!(r"<action>(?:.|\n)+?</action>");
+        let action_regex: Regex = regex!(r" *<action>(?:.|\n)+?</action>");
         let state_vars_regex: Regex = regex!(r"<serviceStateTable>(?:.|\n)+?</serviceStateTable>");
         
         // Setup Data To Query Device Description Page
@@ -92,7 +93,7 @@ impl ServiceDesc {
 
         // Query Device Description Page
         let mut tcp_sock = try!(TcpStream::connect(sock_addr.ip.to_string().as_slice(), sock_addr.port));
-        
+
         try!(tcp_sock.write_str(request.as_slice()));
         let response = try!(tcp_sock.read_to_string());
         
@@ -109,7 +110,7 @@ impl ServiceDesc {
         let control_path = try!(control_find.captures(service_tag).ok_or(
             util::get_error(InvalidInput, "Could Not Capture Control Path")
         )).at(1);
-        
+
         // Query Service Description
         tcp_sock = try!(TcpStream::connect(sock_addr.ip.to_string().as_slice(), sock_addr.port));
         let request = request.replace(path.as_slice(), scpd_path);
@@ -117,7 +118,7 @@ impl ServiceDesc {
         try!(tcp_sock.write_str(request.as_slice()));
         // We Will Be Returning response Slices To Users, So We Format The Response
         let response = try!(tcp_sock.read_to_string()).replace("\t", " ");
-        
+
         // Pull Out Actions And State Variable Table Locations
         let actions = action_regex.find_iter(response.as_slice()).collect::<Vec<StrPos>>();
         let var_table = state_vars_regex.find(response.as_slice());
@@ -136,14 +137,11 @@ impl ServiceDesc {
     /// in. We leave it in this format so that we don't spend time allocating memory and
     /// parsing responses.
     pub fn actions<'a>(&'a self) -> Vec<&'a str> {
-        let actions_regex: Regex = regex!(r" *<action>(?:.|\n)+?</action>");
-        let desc_slice = self.service_desc.as_slice();
-        
-        let mut match_indices = actions_regex.find_iter(desc_slice);
-        
         let mut actions_list: Vec<&'a str> = Vec::new();
-        for (a, b) in match_indices {
-            actions_list.push(desc_slice.slice(a, b))
+        let service_desc = self.service_desc.as_slice();
+        
+        for &(start, end) in self.actions.iter() {
+            actions_list.push(self.service_desc.slice(start, end));
         }
         
         actions_list
@@ -158,11 +156,9 @@ impl ServiceDesc {
     /// in. We leave it in this format so that we don't spend time allocating memory and
     /// parsing responses.
     pub fn state_variables<'a>(&'a self) -> Option<&'a str> {
-        let state_var_regex: Regex = regex!(r" *<serviceStateTable>(?:.|\n)+?</serviceStateTable>");
-        
-        match state_var_regex.find(self.service_desc.as_slice()) {
-            Some((a, b)) => Some(self.service_desc.as_slice().slice(a, b)),
-            None => None
+        match self.var_table {
+            Some((start, end)) => Some(self.service_desc.as_slice().slice(start, end)),
+            None               => None
         }
     }
     
@@ -204,7 +200,7 @@ impl ServiceDesc {
             .replace("{4}", self.search_target.as_slice())
             .replace("{5}", action)
             .replace("{6}", arguments.as_slice());
-        
+
         // Send Request
         let mut tcp_sock = try!(TcpStream::connect(self.location.ip.to_string().as_slice(), self.location.port));
         

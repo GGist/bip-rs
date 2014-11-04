@@ -9,9 +9,9 @@ Roadmap
 * ~~Unpacking Of Torrent File Fields From Bencode~~
 * UDP Tracker Protocol
 	* ~~Find Local IPv4 Interface~~
-	* Implement UPnP Support For Port Forwarding
+	* ~~Implement UPnP Support For Port Forwarding~~
 		* ~~Discovery Mechanism Over UDP~~
-		* WANIPConnection SOAP Protocol For Setting Up Forward
+		* ~~WANIPConnection SOAP Protocol For Setting Up Forward~~
 	* Finish Up Interface For Tracker Communication
 * Implement Algorithm For Peer Wire Protocol
 	* Decide On An Async Or Sync API

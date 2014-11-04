@@ -20,7 +20,7 @@ impl<'a> Torrent<'a> {
             util::get_error(InvalidInput, "ben_torr Is Not A Dict Value")
         ));
         
-        let announce = match torr_dict.find_equiv(&"announce") {
+        let announce = match torr_dict.find_equiv("announce") {
             Some(&Bytes(ref n)) => try!(n.container_as_str().ok_or(
                 util::get_error(InvalidInput, "announce Not Valid UTF-8 In torr_dict")
             )),
@@ -30,7 +30,7 @@ impl<'a> Torrent<'a> {
         // The Announce List Is Going To Be A 2D List, Each Inner List Is A 
         // "Tier" [[backup1, backup2], [backup3], [backup4, backup5]]
         let mut announce_list: Option<Vec<&'a str>> = Some(Vec::new());
-        match torr_dict.find_equiv(&"announce-list") {
+        match torr_dict.find_equiv("announce-list") {
             Some(&List(ref n)) => {
                 for i in n.iter() {
                     let list_tier = try!(i.list().ok_or(
@@ -56,14 +56,14 @@ impl<'a> Torrent<'a> {
         }
         // Spec Says We Should Randomize Backup Trackers Within Each Tier
         
-        let comment = match torr_dict.find_equiv(&"comment") {
+        let comment = match torr_dict.find_equiv("comment") {
             Some(&Bytes(ref n)) => Some(try!(n.container_as_str().ok_or(
                 util::get_error(InvalidInput, "comment Not Valid UTF-8 In torr_dict")
             ))),
             _ => None
         };
         
-        let created_by = match torr_dict.find_equiv(&"created by") {
+        let created_by = match torr_dict.find_equiv("created by") {
             Some(&Bytes(ref n)) => Some(try!(n.container_as_str().ok_or(
                 util::get_error(InvalidInput, "created by Not Valid UTF-8 In torr_dict")
             ))),
@@ -71,14 +71,14 @@ impl<'a> Torrent<'a> {
         };
         
         // Torrent Files May Incorrectly Expose This As A BenValue::Int
-        let creation_date = match torr_dict.find_equiv(&"creation date") {
+        let creation_date = match torr_dict.find_equiv("creation date") {
             Some(&Bytes(ref n)) => Some(try!(n.container_as_str().ok_or(
                 util::get_error(InvalidInput, "creation date Not Valid UTF-8 In torr_dict")
             ))),
             _ => None
         };
         
-        let info = match torr_dict.find_equiv(&"info") {
+        let info = match torr_dict.find_equiv("info") {
             Some(n) => try!(FileType::new(n)),
             _ => { return Err(util::get_error(InvalidInput, "info Key Not In torr_dict")) }
         };
@@ -140,7 +140,7 @@ impl<'a> FileType<'a> {
             util::get_error(InvalidInput, "ben_info Is Not BenValue::Dict")
         ));
     
-        if info_dict.contains_key_equiv(&"files") {
+        if info_dict.contains_key_equiv("files") {
             FileType::multi_file(info_dict)
         } else {
             FileType::single_file(info_dict)
@@ -148,12 +148,12 @@ impl<'a> FileType<'a> {
     }
     
     fn single_file(info_dict: &'a HashMap<String, BenValue>) -> IoResult<FileType<'a>> {
-        let length = match info_dict.find_equiv(&"length") {
+        let length = match info_dict.find_equiv("length") {
             Some(&Int(n)) => n as uint,
             _ => { return Err(util::get_error(InvalidInput, "length Key Not In info_dict")) }
         };
         
-        let md5sum = match info_dict.find_equiv(&"md5sum") {
+        let md5sum = match info_dict.find_equiv("md5sum") {
             Some(&Bytes(ref n)) => Some(try!(n.container_as_str().ok_or(
                     util::get_error(InvalidInput, "md5sum Not Valid UTF-8 In info_dict")
             ))),
@@ -169,7 +169,7 @@ impl<'a> FileType<'a> {
     }
     
     fn multi_file(info_dict: &'a HashMap<String, BenValue>) -> IoResult<FileType<'a>> {
-        let files = match info_dict.find_equiv(&"files") {
+        let files = match info_dict.find_equiv("files") {
             Some(&List(ref n)) => n,
             _ => { return Err(util::get_error(InvalidInput, "files Key Not In info_dict")) }
         };
@@ -180,12 +180,12 @@ impl<'a> FileType<'a> {
                 util::get_error(InvalidInput, "files Is Not A BenValue::Dict")
             ));
             
-            let length = match file.find_equiv(&"length") {
+            let length = match file.find_equiv("length") {
                 Some(&Int(n)) => n as uint,
                 _ => { return Err(util::get_error(InvalidInput, "length Key Not In file")) }
             };
             
-            let md5sum = match file.find_equiv(&"md5sum") {
+            let md5sum = match file.find_equiv("md5sum") {
                 Some(&Bytes(ref n)) => Some(try!(n.container_as_str().ok_or(
                         util::get_error(InvalidInput, "md5sum Not Valid UTF-8 In file")
                 ))),
@@ -193,7 +193,7 @@ impl<'a> FileType<'a> {
             };
             
             let mut path: Vec<&'a str> = Vec::new();
-            let path_list = match file.find_equiv(&"path") {
+            let path_list = match file.find_equiv("path") {
                 Some(&List(ref n)) => n,
                 _ => { return Err(util::get_error(InvalidInput, "path Key Not In file")) }
             };
@@ -220,7 +220,7 @@ impl<'a> FileType<'a> {
     }
     
     fn info_name<'a>(info_dict: &'a HashMap<String, BenValue>) -> IoResult<&'a str> {
-        match info_dict.find_equiv(&"name") {
+        match info_dict.find_equiv("name") {
             Some(&Bytes(ref n)) => Ok(try!(n.container_as_str().ok_or(
                     util::get_error(InvalidInput, "name Key In info_dict Not A String Value")
             ))),
@@ -229,14 +229,14 @@ impl<'a> FileType<'a> {
     }
     
     fn info_piece_length<'a>(info_dict: &'a HashMap<String, BenValue>) -> IoResult<uint> {
-        match info_dict.find_equiv(&"piece length") {
+        match info_dict.find_equiv("piece length") {
             Some(&Int(n)) => Ok(n as uint),
             _ => Err(util::get_error(InvalidInput, "piece length Key Not In info_dict"))
         }
     }
     
     fn info_pieces<'a>(info_dict: &'a HashMap<String, BenValue>) -> IoResult<&'a [u8]> {
-        match info_dict.find_equiv(&"pieces") {
+        match info_dict.find_equiv("pieces") {
             Some(&Bytes(ref n)) => Ok(n.as_slice()),
             _ => Err(util::get_error(InvalidInput, "pieces Key Not In info_dict"))
         }
