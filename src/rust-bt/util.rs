@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::{u16, rand, num};
+use std::{str, rand, num};
 use std::io::{IoError, IoResult, IoErrorKind, InvalidInput, ConnectionFailed};
 use std::io::net::addrinfo;
 use std::io::net::udp::{UdpSocket};
@@ -45,7 +45,8 @@ pub fn get_udp_sock(mut addr: SocketAddr, mut attempts: uint) -> IoResult<UdpSoc
     }
 }
 
-/// The standard wait algorithm defined in the UDP Tracker Protocol.
+/// The standard wait algorithm defined in the UDP Tracker Protocol. Returned value
+/// is in seconds.
 pub fn get_udp_wait(attempt: uint) -> u64 {
     15 * num::pow(2, attempt)
 }
@@ -76,9 +77,9 @@ pub fn get_transport(url: &str) -> IoResult<Transport> {
     }
         
     match trans_str {
-        "http" => Ok(HTTP), 
-        "tcp"  => Ok(TCP),
-        "udp"  => Ok(UDP),
+        "http" => Ok(Transport::HTTP), 
+        "tcp"  => Ok(Transport::TCP),
+        "udp"  => Ok(Transport::UDP),
         _ => Err(get_error(InvalidInput, "Transport Protocol Not Found In url"))
     }
 }
@@ -95,7 +96,7 @@ pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
     }
     
     let host_ip = try!(addrinfo::get_host_addresses(host_str))[0];
-    let port_num = try!(u16::parse_bytes(port_str.as_bytes(), 10).ok_or(
+    let port_num = try!(str::from_str(port_str).ok_or(
         get_error(InvalidInput, "Invalid Port Number Found In url")
     ));
     

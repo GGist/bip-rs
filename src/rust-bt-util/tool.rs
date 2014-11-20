@@ -1,6 +1,6 @@
 extern crate serialize;
 extern crate "rust-bt" as rust_bt;
-extern crate "rust-crypto" as crypto;
+extern crate "rust-crypto" as crypto;   
 
 fn main() {
     use std::io::{IoResult};
@@ -13,11 +13,11 @@ fn main() {
     use serialize::hex::ToHex;
     use crypto::sha1::Sha1;
     use crypto::digest::Digest;
-    use rust_bt::bencode::BenValue;
+    use rust_bt::bencode::BenVal;
     use rust_bt::tracker_udp::UdpTracker;
     use rust_bt::tracker::Tracker;
     use rust_bt::torrent::{Torrent};
-    use rust_bt::upnp::UPnPInterface;
+    use rust_bt::upnp::UPnPIntf;
     use rust_bt::upnp::ServiceDesc;
     
     let mut torr_file = File::open(&Path::new("tests/data/udp_tracker/sample.torrent"));
@@ -26,7 +26,7 @@ fn main() {
         Err(n) => { println!("{}", n); return }
     };
     
-    let ben_val: BenValue = match BenValue::new(torr_bytes.as_slice()) {
+    let ben_val: BenVal = match BenVal::new(torr_bytes.as_slice()) {
         Ok(n) => n,
         Err(n) => { println!("{}", n); return }
     };
@@ -49,18 +49,6 @@ fn main() {
     sha.input(encoded.as_slice());
     sha.result(result);
     
-    let mut a = UdpTracker::new(announce_url, result).unwrap();
-    println!("{}", a.local_ip());
-    match UPnPInterface::find_all(SocketAddr{ ip: a.local_ip().unwrap(), port: 1901 }) {
-        Ok(n) => {
-            for i in n.iter() {
-                println!("{}", i.name());
-                if i.is_service() {
-                    let s = i.service_desc().unwrap();
-                    println!("{}", s.actions());
-                }
-            }
-        },
-        Err(n) => println!("{}", n)
-    };
+    let mut tracker = UdpTracker::new(announce_url, result).unwrap();
+    println!("{}", tracker.local_ip().unwrap());
 }

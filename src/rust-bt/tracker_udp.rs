@@ -1,5 +1,7 @@
 use std::{rand};
 use std::time::duration::{Duration};
+use std::sync::{Arc};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::io::timer::{Timer};
 use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr};
@@ -36,37 +38,46 @@ impl UdpTracker {
             *dst = src;
         }
         
-        // If too many net interfaces are found, it could be bad spawning a kernel thread for each of them
+        // List of local ip addresses to test for a connection on
         let ip_addrs = try!(util::get_net_addrs());
+        
+        let recvd_response = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel();
+        // If too many net interfaces are found, it could be bad spawning a kernel thread for each of them
         { // Need to move tx in scope so that it gets destroyed before receiving
             let tx = tx;
             for i in ip_addrs.into_iter() {
                 let tx = tx.clone();
+                let recvd_response = recvd_response.clone();
+                
                 spawn(proc() {
+                    let mut curr_attempt = 0;
                     let mut udp_sock = match util::get_udp_sock(SocketAddr{ ip: i, port: 6881 }, 9) {
                         Ok(n) => n,
                         Err(_) => return ()
                     };
                     
-                    match connect_request(&mut udp_sock, &dest_sock) {
-                        Ok(_) => tx.send(udp_sock),
-                        Err(_) => ()
+                    while curr_attempt < MAX_ATTEMPTS && !recvd_response.load(Ordering::Relaxed) {
+                        match connect_request(&mut udp_sock, &dest_sock, 1) {
+                            Ok((id, expire)) => return tx.send((udp_sock, id, expire)),
+                            Err(_) => curr_attempt += 1
+                        };
                     }
                 });
             }
         }
         
-        let udp_sock = try!(rx.recv_opt().or_else( |_|
+        let (udp_sock, id, expire) = try!(rx.recv_opt().or_else( |_|
             Err(util::get_error(ConnectionFailed, "Could Not Communicate On Any IPv4 Interfaces"))
         ));
+        recvd_response.store(true, Ordering::Relaxed);
         
         Ok(UdpTracker{ conn: udp_sock,
             tracker: dest_sock,
             peer_id: util::gen_peer_id(),
             info_hash: fixed_hash,
-            conn_id: 0i64,
-            conn_id_expire: try!(Timer::new()).oneshot(Duration::minutes(0)) }
+            conn_id: id,
+            conn_id_expire: expire }
         )
     }
 }
@@ -76,15 +87,15 @@ impl UdpTracker {
 /// to wait for a response from the server before failing.
 ///
 /// This is a blocking operation.
-fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [u8]) -> IoResult<uint> {
+fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [u8], attempts: uint) -> IoResult<uint> {
     let mut attempt = 0;
 
     let mut bytes_read = 0;
-    while attempt < MAX_ATTEMPTS {
+    while attempt < attempts {
         try!(udp.send_to(send, *dst));
 
-        let wait_seconds = util::get_udp_wait(attempt) * 1000;
-        udp.set_read_timeout(Some(wait_seconds));
+        let wait_ms = util::get_udp_wait(attempt) * 1000;
+        udp.set_read_timeout(Some(wait_ms));
 
         match udp.recv_from(recv) {
             Ok((bytes, _))  => { 
@@ -94,7 +105,7 @@ fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [
             Err(_) => { attempt += 1; }
         };
     }
-    if attempt == MAX_ATTEMPTS {
+    if attempt == attempts {
         return Err(util::get_error(ConnectionFailed, "No Connection Response From Server"));
     }
 
@@ -107,7 +118,7 @@ fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [
 /// spoofing later on. This connection id is valid until the receiver is activated.
 ///
 /// This is a blocking operation.
-fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr) -> IoResult<(i64, Receiver<()>)> {
+fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: uint) -> IoResult<(i64, Receiver<()>)> {
     let mut send_bytes = [0u8,..16];
     let send_trans_id = rand::random::<i32>();
 
@@ -120,7 +131,7 @@ fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr) -> IoResult<(i64, Rece
     }
 
     let mut recv_bytes = [0u8,..16];
-    let bytes_read = try!(send_request(udp, dst, send_bytes, recv_bytes));
+    let bytes_read = try!(send_request(udp, dst, send_bytes, recv_bytes, attempts));
     if bytes_read != recv_bytes.len() {
         return Err(util::get_error(EndOfFile, "Didn't Receive All 16 Bytes From Tracker"));
     }
@@ -153,7 +164,7 @@ impl Tracker for UdpTracker {
     }
 
     fn start_announce(&mut self, total_size: uint) -> IoResult<SwarmInfo> {
-        let (connect_id, _) = try!(connect_request(&mut self.conn, &self.tracker));
+        let (connect_id, _) = try!(connect_request(&mut self.conn, &self.tracker, MAX_ATTEMPTS));
         let send_trans_id = rand::random::<i32>();
         
         let mut send_bytes = [0u8,..98];
@@ -176,7 +187,7 @@ impl Tracker for UdpTracker {
         }
         
         let mut recv_bytes = [0u8,..10000];
-        try!(send_request(&mut self.conn, &self.tracker, send_bytes, recv_bytes));
+        try!(send_request(&mut self.conn, &self.tracker, send_bytes, recv_bytes, MAX_ATTEMPTS));
         
         let mut recv_reader = BufReader::new(recv_bytes);
         

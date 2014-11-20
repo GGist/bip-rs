@@ -1,5 +1,5 @@
 use util;
-use bencode::{BenValue, Bytes, List, Int};
+use bencode::BenVal::{mod, Bytes, List, Int};
 use std::path::BytesContainer;
 use std::collections::{HashMap};
 use std::io::{InvalidInput, IoResult};
@@ -15,7 +15,7 @@ pub struct Torrent<'a> {
 }
 
 impl<'a> Torrent<'a> {
-    pub fn new<'a>(ben_torr: &'a BenValue) -> IoResult<Torrent<'a>> {
+    pub fn new<'a>(ben_torr: &'a BenVal) -> IoResult<Torrent<'a>> {
         let torr_dict = try!(ben_torr.dict().ok_or(
             util::get_error(InvalidInput, "ben_torr Is Not A Dict Value")
         ));
@@ -70,7 +70,7 @@ impl<'a> Torrent<'a> {
             _ => None
         };
         
-        // Torrent Files May Incorrectly Expose This As A BenValue::Int
+        // Torrent Files May Incorrectly Expose This As A BenVal::Int
         let creation_date = match torr_dict.find_equiv("creation date") {
             Some(&Bytes(ref n)) => Some(try!(n.container_as_str().ok_or(
                 util::get_error(InvalidInput, "creation date Not Valid UTF-8 In torr_dict")
@@ -91,22 +91,22 @@ impl<'a> Torrent<'a> {
     
     pub fn is_single_file(&self) -> bool {
         match self.info {
-            SingleFile(..) => true,
-            MultiFile(..) => false
+            FileType::SingleFile(..) => true,
+            FileType::MultiFile(..) => false
         }
     }
     
     pub fn is_multi_file(&self) -> bool {
         match self.info {
-            SingleFile(..) => false,
-            MultiFile(..) => true
+            FileType::SingleFile(..) => false,
+            FileType::MultiFile(..) => true
         }
     }
     
     pub fn num_files(&self) -> uint {
         match self.info {
-            SingleFile(..) => 1,
-            MultiFile(ref files, _, _, _) => files.len()
+            FileType::SingleFile(..) => 1,
+            FileType::MultiFile(ref files, _, _, _) => files.len()
         }
     }
     
@@ -116,8 +116,8 @@ impl<'a> Torrent<'a> {
         }
     
         match self.info {
-            SingleFile(ref file, _, _, _) => Ok(file),
-            MultiFile(ref files, _, _, _) => Ok(&files[index])
+            FileType::SingleFile(ref file, _, _, _) => Ok(file),
+            FileType::MultiFile(ref files, _, _, _) => Ok(&files[index])
         }
     }
 }
@@ -135,9 +135,9 @@ enum FileType<'a> {
 }
 
 impl<'a> FileType<'a> {
-    fn new<'a>(ben_info: &'a BenValue) -> IoResult<FileType<'a>> {
+    fn new<'a>(ben_info: &'a BenVal) -> IoResult<FileType<'a>> {
         let info_dict = try!(ben_info.dict().ok_or(
-            util::get_error(InvalidInput, "ben_info Is Not BenValue::Dict")
+            util::get_error(InvalidInput, "ben_info Is Not BenVal::Dict")
         ));
     
         if info_dict.contains_key_equiv("files") {
@@ -147,7 +147,7 @@ impl<'a> FileType<'a> {
         }
     }
     
-    fn single_file(info_dict: &'a HashMap<String, BenValue>) -> IoResult<FileType<'a>> {
+    fn single_file(info_dict: &'a HashMap<String, BenVal>) -> IoResult<FileType<'a>> {
         let length = match info_dict.find_equiv("length") {
             Some(&Int(n)) => n as uint,
             _ => { return Err(util::get_error(InvalidInput, "length Key Not In info_dict")) }
@@ -160,7 +160,7 @@ impl<'a> FileType<'a> {
             _ => None
         };
         
-        Ok(SingleFile(
+        Ok(FileType::SingleFile(
             File{ length: length, md5sum: md5sum, path: None },
             try!(FileType::info_name(info_dict)),
             try!(FileType::info_piece_length(info_dict)), 
@@ -168,7 +168,7 @@ impl<'a> FileType<'a> {
         )
     }
     
-    fn multi_file(info_dict: &'a HashMap<String, BenValue>) -> IoResult<FileType<'a>> {
+    fn multi_file(info_dict: &'a HashMap<String, BenVal>) -> IoResult<FileType<'a>> {
         let files = match info_dict.find_equiv("files") {
             Some(&List(ref n)) => n,
             _ => { return Err(util::get_error(InvalidInput, "files Key Not In info_dict")) }
@@ -177,7 +177,7 @@ impl<'a> FileType<'a> {
         let mut files_list: Vec<File> = Vec::with_capacity(files.len());
         for i in files.iter() {
             let file = try!(i.dict().ok_or(
-                util::get_error(InvalidInput, "files Is Not A BenValue::Dict")
+                util::get_error(InvalidInput, "files Is Not A BenVal::Dict")
             ));
             
             let length = match file.find_equiv("length") {
@@ -211,7 +211,7 @@ impl<'a> FileType<'a> {
             );
         }
         
-        Ok(MultiFile(
+        Ok(FileType::MultiFile(
             files_list,
             try!(FileType::info_name(info_dict)),
             try!(FileType::info_piece_length(info_dict)), 
@@ -219,7 +219,7 @@ impl<'a> FileType<'a> {
         )
     }
     
-    fn info_name<'a>(info_dict: &'a HashMap<String, BenValue>) -> IoResult<&'a str> {
+    fn info_name<'a>(info_dict: &'a HashMap<String, BenVal>) -> IoResult<&'a str> {
         match info_dict.find_equiv("name") {
             Some(&Bytes(ref n)) => Ok(try!(n.container_as_str().ok_or(
                     util::get_error(InvalidInput, "name Key In info_dict Not A String Value")
@@ -228,14 +228,14 @@ impl<'a> FileType<'a> {
         }
     }
     
-    fn info_piece_length<'a>(info_dict: &'a HashMap<String, BenValue>) -> IoResult<uint> {
+    fn info_piece_length<'a>(info_dict: &'a HashMap<String, BenVal>) -> IoResult<uint> {
         match info_dict.find_equiv("piece length") {
             Some(&Int(n)) => Ok(n as uint),
             _ => Err(util::get_error(InvalidInput, "piece length Key Not In info_dict"))
         }
     }
     
-    fn info_pieces<'a>(info_dict: &'a HashMap<String, BenValue>) -> IoResult<&'a [u8]> {
+    fn info_pieces<'a>(info_dict: &'a HashMap<String, BenVal>) -> IoResult<&'a [u8]> {
         match info_dict.find_equiv("pieces") {
             Some(&Bytes(ref n)) => Ok(n.as_slice()),
             _ => Err(util::get_error(InvalidInput, "pieces Key Not In info_dict"))

@@ -42,7 +42,7 @@ s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">
 // (Including Implicit Newline Escape)
 static BASE_CONTENT_LENGTH: uint = 216;
 
-// UPnPInterface Classifiers
+// UPnPIntf Classifiers
 static ROOT_REGEX: Regex = regex!(r"upnp:(rootdevice)");
 static DEVICE_REGEX: Regex = regex!(r":device:(.+?):(\d+)");
 static SERVICE_REGEX: Regex = regex!(r":service:(.+?):(\d+)");
@@ -68,7 +68,7 @@ pub struct ServiceDesc {
 }
 
 impl ServiceDesc {
-    /// Takes a location corresponding to the root device description page of a UPnPInterface
+    /// Takes a location corresponding to the root device description page of a UPnPIntf
     /// as well as the st field of the interface which will always be unique to a service.
     ///
     /// This is a blocking operation.
@@ -92,7 +92,7 @@ impl ServiceDesc {
             .replace("{2}", sock_addr.to_string().as_slice());
 
         // Query Device Description Page
-        let mut tcp_sock = try!(TcpStream::connect(sock_addr.ip.to_string().as_slice(), sock_addr.port));
+        let mut tcp_sock = try!(TcpStream::connect(sock_addr));
 
         try!(tcp_sock.write_str(request.as_slice()));
         let response = try!(tcp_sock.read_to_string());
@@ -112,7 +112,7 @@ impl ServiceDesc {
         )).at(1);
 
         // Query Service Description
-        tcp_sock = try!(TcpStream::connect(sock_addr.ip.to_string().as_slice(), sock_addr.port));
+        tcp_sock = try!(TcpStream::connect(sock_addr));
         let request = request.replace(path.as_slice(), scpd_path);
 
         try!(tcp_sock.write_str(request.as_slice()));
@@ -133,7 +133,7 @@ impl ServiceDesc {
     /// parameters expected/provided as well as their related state variables. The 
     /// "relatedStateVariable" corresponds to an entry in the "serviceStateTable".
     ///
-    /// The response is left in the XML format that it was sent from the UPnPInterface
+    /// The response is left in the XML format that it was sent from the UPnPIntf
     /// in. We leave it in this format so that we don't spend time allocating memory and
     /// parsing responses.
     pub fn actions<'a>(&'a self) -> Vec<&'a str> {
@@ -152,7 +152,7 @@ impl ServiceDesc {
     /// in the "relatedStateVariable" field for each in or out parameters for each
     /// action.
     ///
-    /// The response is left in the XML format that it was sent from the UPnPInterface
+    /// The response is left in the XML format that it was sent from the UPnPIntf
     /// in. We leave it in this format so that we don't spend time allocating memory and
     /// parsing responses.
     pub fn state_variables<'a>(&'a self) -> Option<&'a str> {
@@ -202,7 +202,7 @@ impl ServiceDesc {
             .replace("{6}", arguments.as_slice());
 
         // Send Request
-        let mut tcp_sock = try!(TcpStream::connect(self.location.ip.to_string().as_slice(), self.location.port));
+        let mut tcp_sock = try!(TcpStream::connect(self.location));
         
         try!(tcp_sock.write_str(request.as_slice()));
         let response = try!(tcp_sock.read_to_string());
@@ -222,7 +222,7 @@ impl ServiceDesc {
 /// Type used to represent different interfaces available on a network as defined 
 /// by the UPnP specification. This type can be used to get very general information
 /// about an interface but also to get access to the services exposed by the interface.
-pub enum UPnPInterface {
+pub enum UPnPIntf {
     #[doc(hidden)]
     Root(String, StrPos, StrPos, StrPos, StrPos, StrPos),
     #[doc(hidden)]
@@ -233,11 +233,11 @@ pub enum UPnPInterface {
     Identifier(String, StrPos, StrPos, StrPos, StrPos, StrPos)
 }
 
-impl UPnPInterface {
+impl UPnPIntf {
     /// Sends out a search request for all UPnP interfaces on the specified from_addr.
     ///
     /// This is a blocking operation.
-    pub fn find_all(from_addr: SocketAddr) -> IoResult<Vec<UPnPInterface>> {
+    pub fn find_all(from_addr: SocketAddr) -> IoResult<Vec<UPnPIntf>> {
         let request = String::from_str(GENERIC_SEARCH_REQUEST).replace("{1}", "5").replace("{2}", "ssdp:all");
         let replies = try!(send_search(from_addr, 5500, request.as_slice()));
         
@@ -254,7 +254,7 @@ impl UPnPInterface {
     /// and should be discovered by using find_all and filtering the results.
     ///
     /// This is a blocking operation.
-    pub fn find_services(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPInterface>> {
+    pub fn find_services(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPIntf>> {
         let service_st = String::from_str("urn:schemas-upnp-org:service:{1}:{2}").replace("{1}", name).replace("{2}", version);
         let request = String::from_str(GENERIC_SEARCH_REQUEST).replace("{1}", "2").replace("{2}", service_st.as_slice());
         
@@ -273,7 +273,7 @@ impl UPnPInterface {
     /// and should be discovered by using find_all and filtering the results.
     ///
     /// This is a blocking operation.
-    pub fn find_devices(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPInterface>> {
+    pub fn find_devices(from_addr: SocketAddr, name: &str, version: &str) -> IoResult<Vec<UPnPIntf>> {
         let device_st = String::from_str("urn:schemas-upnp-org:device:{1}:{2}").replace("{1}", name).replace("{2}", version);
         let request = GENERIC_SEARCH_REQUEST.replace("{1}", "2").replace("{2}", device_st.as_slice());
         
@@ -290,7 +290,7 @@ impl UPnPInterface {
     /// in any correct implementation) then the first device to respond will be returned.
     ///
     /// This is a blocking operation.
-    pub fn find_uuid(from_addr: SocketAddr, uuid: &str) -> IoResult<Option<UPnPInterface>> {
+    pub fn find_uuid(from_addr: SocketAddr, uuid: &str) -> IoResult<Option<UPnPIntf>> {
         let uuid_st = String::from_str("uuid:{1}").replace("{1}", uuid);
         let request = String::from_str(GENERIC_SEARCH_REQUEST).replace("{1}", "5").replace("{2}", uuid_st.as_slice());
             
@@ -302,40 +302,40 @@ impl UPnPInterface {
         }
     }
 
-    /// Check if the current UPnPInterface represents a root device on the network.
+    /// Check if the current UPnPIntf represents a root device on the network.
     pub fn is_root(&self) -> bool {
         match self {
-            &Root(..) => true,
+            &UPnPIntf::Root(..) => true,
             _         => false
         }
     }
 
-    /// Check if the current UPnPInterface represents a device on the network.
+    /// Check if the current UPnPIntf represents a device on the network.
     ///
     /// Note: This function will return false in the case of a root (even though
     /// it is also technically a device).
     pub fn is_device(&self) -> bool {
         match self {
-            &Device(..) => true,
+            &UPnPIntf::Device(..) => true,
             _           => false
         }
     }
     
-    /// Check if the current UPnPInterface represents a service on the network.
+    /// Check if the current UPnPIntf represents a service on the network.
     pub fn is_service(&self) -> bool {
         match self {
-            &Service(..) => true,
+            &UPnPIntf::Service(..) => true,
             _            => false
         }
     }
     
-    /// Check if the current UPnPInterface represents an identifier (uuid) on the network.
+    /// Check if the current UPnPIntf represents an identifier (uuid) on the network.
     ///
     /// Note: This function will return false in the case of a root or device even 
     /// though all uuid's refer to a specific device (or root in some cases).
     pub fn is_identifier(&self) -> bool {
         match self {
-            &Identifier(..) => true,
+            &UPnPIntf::Identifier(..) => true,
             _               => false
         }
     }
@@ -344,60 +344,60 @@ impl UPnPInterface {
     /// has identified itself with.
     pub fn name<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
-            &Root(ref n, seg, _, _, _, _)       => (n, seg),
-            &Device(ref n, seg, _, _, _, _)     => (n, seg),
-            &Service(ref n, seg, _, _, _, _)    => (n, seg),
-            &Identifier(ref n, seg, _, _, _, _) => (n, seg)
+            &UPnPIntf::Root(ref n, seg, _, _, _, _)       => (n, seg),
+            &UPnPIntf::Device(ref n, seg, _, _, _, _)     => (n, seg),
+            &UPnPIntf::Service(ref n, seg, _, _, _, _)    => (n, seg),
+            &UPnPIntf::Identifier(ref n, seg, _, _, _, _) => (n, seg)
         };
         
         payload.as_slice().slice(start, end)
     }
-
+    
     /// Get the device version, service version, or no version (in the case of an 
     /// identifier or root) that this interface has identified itself with.
     pub fn version<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
-            &Root(ref n, _, seg, _, _, _)       => (n, seg),
-            &Device(ref n, _, seg, _, _, _)     => (n, seg),
-            &Service(ref n, _, seg, _, _, _)    => (n, seg),
-            &Identifier(ref n, _, seg, _, _, _) => (n, seg)
+            &UPnPIntf::Root(ref n, _, seg, _, _, _)       => (n, seg),
+            &UPnPIntf::Device(ref n, _, seg, _, _, _)     => (n, seg),
+            &UPnPIntf::Service(ref n, _, seg, _, _, _)    => (n, seg),
+            &UPnPIntf::Identifier(ref n, _, seg, _, _, _) => (n, seg)
         };
         
         payload.as_slice().slice(start, end)
     }
     
     /// Get the location (url) of the root device description web page corresponding
-    /// to this particular UPnPInterface.
+    /// to this particular UPnPIntf.
     pub fn location<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
-            &Root(ref n, _, _, seg, _, _)       => (n, seg),
-            &Device(ref n, _, _, seg, _, _)     => (n, seg),
-            &Service(ref n, _, _, seg, _, _)    => (n, seg),
-            &Identifier(ref n, _, _, seg, _, _) => (n, seg)
+            &UPnPIntf::Root(ref n, _, _, seg, _, _)       => (n, seg),
+            &UPnPIntf::Device(ref n, _, _, seg, _, _)     => (n, seg),
+            &UPnPIntf::Service(ref n, _, _, seg, _, _)    => (n, seg),
+            &UPnPIntf::Identifier(ref n, _, _, seg, _, _) => (n, seg)
         };
         
         payload.as_slice().slice(start, end)
     }
     
-    /// Get the search target of this UPnPInterface.
+    /// Get the search target of this UPnPIntf.
     pub fn st<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
-            &Root(ref n, _, _, _, seg, _)       => (n, seg),
-            &Device(ref n, _, _, _, seg, _)     => (n, seg),
-            &Service(ref n, _, _, _, seg, _)    => (n, seg),
-            &Identifier(ref n, _, _, _, seg, _) => (n, seg)
+            &UPnPIntf::Root(ref n, _, _, _, seg, _)       => (n, seg),
+            &UPnPIntf::Device(ref n, _, _, _, seg, _)     => (n, seg),
+            &UPnPIntf::Service(ref n, _, _, _, seg, _)    => (n, seg),
+            &UPnPIntf::Identifier(ref n, _, _, _, seg, _) => (n, seg)
         };
         
         payload.as_slice().slice(start, end)
     }
     
-    /// Get the full Unique Service Name of this UPnPInterface.
+    /// Get the full Unique Service Name of this UPnPIntf.
     pub fn usn<'a>(&'a self) -> &'a str {
         let (payload, (start, end)) = match self {
-            &Root(ref n, _, _, _, _, seg)       => (n, seg),
-            &Device(ref n, _, _, _, _, seg)     => (n, seg),
-            &Service(ref n, _, _, _, _, seg)    => (n, seg),
-            &Identifier(ref n, _, _, _, _, seg) => (n, seg)
+            &UPnPIntf::Root(ref n, _, _, _, _, seg)       => (n, seg),
+            &UPnPIntf::Device(ref n, _, _, _, _, seg)     => (n, seg),
+            &UPnPIntf::Service(ref n, _, _, _, _, seg)    => (n, seg),
+            &UPnPIntf::Identifier(ref n, _, _, _, _, seg) => (n, seg)
         };
         
         payload.as_slice().slice(start, end)
@@ -405,13 +405,13 @@ impl UPnPInterface {
 
     /// Get a service description object for this service.
     ///
-    /// Note: This will always fail if called on a non-service UPnPInterface.
+    /// Note: This will always fail if called on a non-service UPnPIntf.
     ///
     /// This is a blocking operation.
     pub fn service_desc(&self) -> IoResult<ServiceDesc> {
         match self {
-            &Service(..) => ServiceDesc::parse(self.location(), self.st()),
-            _ => Err(util::get_error(InvalidInput, "UPnPInterface Is Not A Service"))
+            &UPnPIntf::Service(..) => ServiceDesc::parse(self.location(), self.st()),
+            _ => Err(util::get_error(InvalidInput, "UPnPIntf Is Not A Service"))
         }
     }
     
@@ -429,10 +429,10 @@ impl UPnPInterface {
 }
 
 /// Takes ownership of a vector of String objects that correspond to M-Search respones
-/// and generates a vector of UPnPInterface objects. Each String object corresponds
-/// to one UPnPInterface object.
-fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPInterface>> {
-    let mut interfaces: Vec<UPnPInterface> = Vec::new();
+/// and generates a vector of UPnPIntf objects. Each String object corresponds
+/// to one UPnPIntf object.
+fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPIntf>> {
+    let mut interfaces: Vec<UPnPIntf> = Vec::new();
     
     for i in payloads.into_iter() {
         let usn = try!(try!(USN_REGEX.captures(i.as_slice()).ok_or(
@@ -463,7 +463,7 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPInterface>> {
                 ));
             }
 
-            interfaces.push(Service(i, name, version, location, st, usn));
+            interfaces.push(UPnPIntf::Service(i, name, version, location, st, usn));
         } else if DEVICE_REGEX.is_match(i.as_slice()) {
             let (name, version): (StrPos, StrPos);
             
@@ -480,7 +480,7 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPInterface>> {
                 ));
             }
         
-            interfaces.push(Device(i, name, version, location, st, usn));
+            interfaces.push(UPnPIntf::Device(i, name, version, location, st, usn));
         } else if ROOT_REGEX.is_match(i.as_slice()) { // This HAS To Be Checked Before Identifier
             let name: StrPos;
             
@@ -494,7 +494,7 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPInterface>> {
                 ));
             }
         
-            interfaces.push(Root(i, name, (0, 0), location, st, usn));
+            interfaces.push(UPnPIntf::Root(i, name, (0, 0), location, st, usn));
         } else if IDENTIFIER_REGEX.is_match(i.as_slice()) {
             let name: StrPos;
             
@@ -508,7 +508,7 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPInterface>> {
                 ));
             }
         
-            interfaces.push(Identifier(i, name, (0, 0), location, st, usn));
+            interfaces.push(UPnPIntf::Identifier(i, name, (0, 0), location, st, usn));
         }  // Ignore Any Other (Invalid) ST Identifiers
     }
     
