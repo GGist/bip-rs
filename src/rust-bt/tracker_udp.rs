@@ -123,7 +123,7 @@ fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: uint) -> IoR
     let send_trans_id = rand::random::<i32>();
 
     { // Limit Lifetime Of Writer Object
-        let mut send_writer = BufWriter::new(send_bytes);
+        let mut send_writer = BufWriter::new(&mut send_bytes);
 
         try!(send_writer.write_be_i64(0x41727101980)); // Part Of The Standard
         try!(send_writer.write_be_i32(0)); // Connect Request
@@ -131,12 +131,12 @@ fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: uint) -> IoR
     }
 
     let mut recv_bytes = [0u8,..16];
-    let bytes_read = try!(send_request(udp, dst, send_bytes, recv_bytes, attempts));
+    let bytes_read = try!(send_request(udp, dst, &send_bytes, &mut recv_bytes, attempts));
     if bytes_read != recv_bytes.len() {
         return Err(util::get_error(EndOfFile, "Didn't Receive All 16 Bytes From Tracker"));
     }
 
-    let mut recv_reader = BufReader::new(recv_bytes);
+    let mut recv_reader = BufReader::new(&recv_bytes);
     if try!(recv_reader.read_be_i32()) != 0 {
         return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Connect)"));
     }
@@ -169,13 +169,13 @@ impl Tracker for UdpTracker {
         
         let mut send_bytes = [0u8,..98];
         {
-            let mut send_buf = BufWriter::new(send_bytes);
+            let mut send_buf = BufWriter::new(&mut send_bytes);
             
             try!(send_buf.write_be_i64(connect_id)); // Our Connection Id
             try!(send_buf.write_be_i32(1)); // This Is An Announce Request
             try!(send_buf.write_be_i32(send_trans_id)); // Random For Each Request
-            try!(send_buf.write(self.info_hash)); // Identifies The Torrent File
-            try!(send_buf.write(self.peer_id)); // Self Designated Peer Id
+            try!(send_buf.write(&self.info_hash)); // Identifies The Torrent File
+            try!(send_buf.write(&self.peer_id)); // Self Designated Peer Id
             try!(send_buf.write_be_i64(0)); // Bytes Downloaded So Far
             try!(send_buf.write_be_i64(total_size as i64)); // Bytes Needed
             try!(send_buf.write_be_i64(0)); // Bytes Uploaded So Far
@@ -187,9 +187,9 @@ impl Tracker for UdpTracker {
         }
         
         let mut recv_bytes = [0u8,..10000];
-        try!(send_request(&mut self.conn, &self.tracker, send_bytes, recv_bytes, MAX_ATTEMPTS));
+        try!(send_request(&mut self.conn, &self.tracker, &send_bytes, &mut recv_bytes, MAX_ATTEMPTS));
         
-        let mut recv_reader = BufReader::new(recv_bytes);
+        let mut recv_reader = BufReader::new(&recv_bytes);
         
         if try!(recv_reader.read_be_i32()) != 1 {
             return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Announce)"));
