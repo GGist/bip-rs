@@ -534,7 +534,7 @@ fn send_search(from_addr: SocketAddr, timeout: uint, request: &str) -> IoResult<
     loop {
         let mut reply_buf = [0u8,..1000];
         
-        match udp_sock.recv_from(reply_buf) {
+        match udp_sock.recv_from(&mut reply_buf) {
             Ok(_) => {
                 let end = try!(reply_buf.iter().position({ |&b|
                     b == 0u8
