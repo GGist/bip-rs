@@ -1,7 +1,13 @@
 use std::io::{IoResult};
 use std::io::net::ip::{SocketAddr, IpAddr};
 
-pub struct SwarmInfo {
+pub struct ScrapeInfo {
+    pub leechers: i32,
+    pub seeders: i32,
+    pub downloads: i32
+}
+
+pub struct AnnounceInfo {
     pub interval: Receiver<()>,
     pub leechers: i32,
     pub seeders: i32,
@@ -19,7 +25,7 @@ pub trait Tracker {
     /// joining the swarm.
     ///
     /// This is a blocking operation.
-    fn scrape(&mut self) -> IoResult<SwarmInfo>;
+    fn scrape(&mut self) -> IoResult<ScrapeInfo>;
     
     /// Sends an announce request to the tracker signalling a start event. This request 
     /// enters us into the swarm and we are required to send periodic updates as 
@@ -27,14 +33,14 @@ pub trait Tracker {
     /// should be sent with update_announce.
     ///
     /// This is a blocking operation.
-    fn start_announce(&mut self, total_bytes: uint) -> IoResult<SwarmInfo>;
+    fn start_announce(&mut self, total_bytes: uint) -> IoResult<AnnounceInfo>;
     
     /// Sends an announce request to the tracker signalling an update event. This request
     /// acts as a heartbeat so that the tracker knows we are still connected and wanting
     /// to be kept in the swarm.
     ///
     /// This is a blocking operation.
-    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<SwarmInfo>;
+    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<AnnounceInfo>;
     
     /// Sends an announce request to the tracker signalling a stop event. This request
     /// exists to let the tracker know that we are gracefully shutting down and that

@@ -8,7 +8,7 @@ use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr};
 use std::io::{IoResult, BufWriter, BufReader, ConnectionFailed, EndOfFile, OtherIoError, InvalidInput};
 
 use util;
-use tracker::{SwarmInfo, Tracker};
+use tracker::{AnnounceInfo, ScrapeInfo, Tracker};
 
 static MAX_ATTEMPTS: uint = 8;
 
@@ -78,6 +78,77 @@ impl UdpTracker {
             info_hash: fixed_hash,
             conn_id: id,
             conn_id_expire: expire }
+        )
+    }
+    
+    /// Checks if our connection id is valid and updates it is necessary.
+    ///
+    /// This is a blocking operation.
+    fn check_connection_id(&mut self) -> IoResult<()> {
+        match self.conn_id_expire.try_recv() {
+            Ok(_) => {
+                let (new_id, new_expire) = try!(connect_request(&mut self.conn, &self.tracker, MAX_ATTEMPTS));
+                self.conn_id = new_id;
+                self.conn_id_expire = new_expire;
+            },
+            Err(_) => ()
+        };
+        
+        Ok(())
+    }
+    
+    /// Parameterized announce request adhering to the UdpTracker Protocol.
+    ///
+    /// This is a blocking operation.
+    fn announce(&mut self, downloaded: i64, left: i64, uploaded: i64, event: i32, port: i16) -> IoResult<AnnounceInfo> {
+        try!(self.check_connection_id());
+        let send_trans_id = rand::random::<i32>();
+        
+        let mut send_bytes = [0u8,..98];
+        {
+            let mut send_buf = BufWriter::new(&mut send_bytes);
+            
+            try!(send_buf.write_be_i64(self.conn_id));  // Our Connection Id
+            try!(send_buf.write_be_i32(1));             // This Is An Announce Request
+            try!(send_buf.write_be_i32(send_trans_id)); // Random For Each Request
+            try!(send_buf.write(&self.info_hash));      // Identifies The Torrent File
+            try!(send_buf.write(&self.peer_id));        // Self Designated Peer Id
+            try!(send_buf.write_be_i64(downloaded));    // Bytes Downloaded So Far
+            try!(send_buf.write_be_i64(left));          // Bytes Needed
+            try!(send_buf.write_be_i64(uploaded));      // Bytes Uploaded So Far
+            try!(send_buf.write_be_i32(event));         // Specific Event
+            try!(send_buf.write_be_i32(0));             // IPv4 Address (0 For Source Address)
+            try!(send_buf.write_be_i32(12));            // Key (Helps With Endianness For Tracker?)
+            try!(send_buf.write_be_i32(-1));            // Number Of Clients To Return (-1 Default)
+            try!(send_buf.write_be_i16(port));          // Port For Other Clients To Connect (Needs To Be Port Forwarded Behind NAT)
+        }
+        
+        let mut recv_bytes = [0u8,..10000];
+        try!(send_request(&mut self.conn, &self.tracker, &send_bytes, &mut recv_bytes, MAX_ATTEMPTS));
+        
+        let mut recv_reader = BufReader::new(&recv_bytes);
+        
+        if try!(recv_reader.read_be_i32()) != 1 {
+            return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Announce)"));
+        }
+        if try!(recv_reader.read_be_i32()) != send_trans_id {
+            return Err(util::get_error(OtherIoError, "Tracker Responded With A Different Transaction Id"));
+        }
+        
+        let interval = try!(recv_reader.read_be_i32()) as i64;
+        let leechers = try!(recv_reader.read_be_i32());
+        let seeders = try!(recv_reader.read_be_i32());
+        let mut peers: Vec<SocketAddr> = Vec::with_capacity(leechers as uint + seeders as uint);
+        
+        for _ in range(0, seeders + leechers) {
+            peers.push(SocketAddr{ ip: Ipv4Addr(try!(recv_reader.read_u8()), 
+                try!(recv_reader.read_u8()), try!(recv_reader.read_u8()), 
+                try!(recv_reader.read_u8())), port: try!(recv_reader.read_be_u16()) }
+            );
+        }
+        
+        Ok(AnnounceInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(interval)), 
+                         leechers: leechers, seeders: seeders, peers: peers }
         )
     }
 }
@@ -157,33 +228,18 @@ impl Tracker for UdpTracker {
         Ok((try!(self.conn.socket_name())).ip)
     }
 
-    fn scrape(&mut self) -> IoResult<SwarmInfo> {
-        Ok(SwarmInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(0)), 
-            leechers: 0, seeders: 0, peers: Vec::new() }
-        )
-    }
-
-    fn start_announce(&mut self, total_size: uint) -> IoResult<SwarmInfo> {
-        let (connect_id, _) = try!(connect_request(&mut self.conn, &self.tracker, MAX_ATTEMPTS));
+    fn scrape(&mut self) -> IoResult<ScrapeInfo> {
+        try!(self.check_connection_id());
         let send_trans_id = rand::random::<i32>();
         
-        let mut send_bytes = [0u8,..98];
+        let mut send_bytes = [0u8,..36];
         {
             let mut send_buf = BufWriter::new(&mut send_bytes);
             
-            try!(send_buf.write_be_i64(connect_id)); // Our Connection Id
-            try!(send_buf.write_be_i32(1)); // This Is An Announce Request
+            try!(send_buf.write_be_i64(self.conn_id));  // Our Connection Id
+            try!(send_buf.write_be_i32(2));             // This Is A Scrape Request
             try!(send_buf.write_be_i32(send_trans_id)); // Random For Each Request
-            try!(send_buf.write(&self.info_hash)); // Identifies The Torrent File
-            try!(send_buf.write(&self.peer_id)); // Self Designated Peer Id
-            try!(send_buf.write_be_i64(0)); // Bytes Downloaded So Far
-            try!(send_buf.write_be_i64(total_size as i64)); // Bytes Needed
-            try!(send_buf.write_be_i64(0)); // Bytes Uploaded So Far
-            try!(send_buf.write_be_i32(0)); // Specific Event
-            try!(send_buf.write_be_i32(0)); // IPv4 Address (0 For Source Address)
-            try!(send_buf.write_be_i32(12)); // Key (Helps With Endianness For Tracker?)
-            try!(send_buf.write_be_i32(-1)); // Number Of Clients To Return (-1 Default)
-            try!(send_buf.write_be_i16(6882)); // Port For Other Clients To Connect (Needs To Be Port Forwarded Behind NAT)
+            try!(send_buf.write(&self.info_hash));      // Identifies The Torrent File
         }
         
         let mut recv_bytes = [0u8,..10000];
@@ -191,41 +247,42 @@ impl Tracker for UdpTracker {
         
         let mut recv_reader = BufReader::new(&recv_bytes);
         
-        if try!(recv_reader.read_be_i32()) != 1 {
-            return Err(util::get_error(OtherIoError, "Tracker Responded To A Different Action (Not Announce)"));
+        let action = try!(recv_reader.read_be_i32());
+        if action != 2 {
+            if action == 3 { // We Were Sent An Error Response, Read It
+                // TODO: When Redoing Error Handling, Use The Error String In The Response.
+                return Err(util::get_error(OtherIoError, "Tracker Responded With An Error Code"));
+            } else {         // They Sent Less Than 8 Bytes
+                return Err(util::get_error(OtherIoError, "Tracker Responded With An Incomplete Response"));
+            }
         }
+        
         if try!(recv_reader.read_be_i32()) != send_trans_id {
             return Err(util::get_error(OtherIoError, "Tracker Responded With A Different Transaction Id"));
         }
         
-        let interval = try!(recv_reader.read_be_i32()) as i64;
-        let leechers = try!(recv_reader.read_be_i32());
         let seeders = try!(recv_reader.read_be_i32());
-        let mut peers: Vec<SocketAddr> = Vec::with_capacity(leechers as uint + seeders as uint);
+        let downloads = try!(recv_reader.read_be_i32());
+        let leechers = try!(recv_reader.read_be_i32());
         
-        for _ in range(0, seeders + leechers) {
-            peers.push(SocketAddr{ ip: Ipv4Addr(try!(recv_reader.read_u8()), 
-                try!(recv_reader.read_u8()), try!(recv_reader.read_u8()), 
-                try!(recv_reader.read_u8())), port: try!(recv_reader.read_be_u16()) }
-            );
-        }
-        
-        Ok(SwarmInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(interval)), 
-            leechers: leechers, seeders: seeders, peers: peers }
-        )
+        Ok(ScrapeInfo{ leechers: leechers, seeders: seeders, downloads: downloads})
     }
 
-    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<SwarmInfo> {
-        Ok(SwarmInfo{ interval: try!(Timer::new()).oneshot(Duration::seconds(0)), 
-            leechers: 0, seeders: 0, peers: Vec::new() }
-        )
+    fn start_announce(&mut self, total_size: uint) -> IoResult<AnnounceInfo> {
+        self.announce(0, total_size as i64, 0, 0, 6882)
+    }
+
+    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<AnnounceInfo> {
+        self.announce(total_down as i64, total_left as i64, total_up as i64, 2, 6882)
     }
 
     fn stop_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<()> {
+        try!(self.announce(total_down as i64, total_left as i64, total_up as i64, 3, 6882));
         Ok(())
     }
 
     fn complete_announce(&mut self, total_bytes: uint) -> IoResult<()> {
+        try!(self.announce(total_bytes as i64, 0, total_bytes as i64, 1, 6882));
         Ok(())
     }
 }

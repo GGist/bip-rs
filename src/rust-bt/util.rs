@@ -1,5 +1,6 @@
 use regex::Regex;
-use std::{str, rand, num};
+use std::{str, rand};
+use std::num::Int;
 use std::io::{IoError, IoResult, IoErrorKind, InvalidInput, ConnectionFailed};
 use std::io::net::addrinfo;
 use std::io::net::udp::{UdpSocket};
@@ -48,7 +49,7 @@ pub fn get_udp_sock(mut addr: SocketAddr, mut attempts: uint) -> IoResult<UdpSoc
 /// The standard wait algorithm defined in the UDP Tracker Protocol. Returned value
 /// is in seconds.
 pub fn get_udp_wait(attempt: uint) -> u64 {
-    15 * num::pow(2, attempt)
+    (15 * 2i.pow(attempt)) as u64
 }
 
 /// Generates a peer id from a base identifier followed by random characters.

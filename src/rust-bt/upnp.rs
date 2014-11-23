@@ -141,7 +141,7 @@ impl ServiceDesc {
         let service_desc = self.service_desc.as_slice();
         
         for &(start, end) in self.actions.iter() {
-            actions_list.push(self.service_desc.slice(start, end));
+            actions_list.push(service_desc.slice(start, end));
         }
         
         actions_list

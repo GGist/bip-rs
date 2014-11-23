@@ -1,18 +1,12 @@
 extern crate serialize;
 extern crate "rust-bt" as rust_bt;
-//extern crate "rust-crypto" as crypto;   
+extern crate "rust-crypto" as crypto;   
 
 fn main() {
-    use std::io::{IoResult};
-    use std::io::net::ip::{SocketAddr, Ipv4Addr, Ipv6Addr, IpAddr};
-    use std::io::net::udp::{UdpSocket};
     use std::io::fs::File;
-    use std::io::net::addrinfo::get_host_addresses;
-    use std::u16;
 
-    use serialize::hex::ToHex;
-    //use crypto::sha1::Sha1;
-    //use crypto::digest::Digest;
+    use crypto::sha1::Sha1;
+    use crypto::digest::Digest;
     use rust_bt::bencode::BenVal;
     use rust_bt::tracker_udp::UdpTracker;
     use rust_bt::tracker::Tracker;
@@ -40,15 +34,17 @@ fn main() {
     
     let dict = ben_val.dict().expect("1");
     
-    let announce_url = dict.find_equiv("announce").expect("2").str().expect("3");
+    let announce_url = dict.get("announce").expect("2").str().expect("3");
     
-    //let mut sha = Sha1::new();
+    let mut sha = Sha1::new();
     let mut result = [0u8,..20];
-    let encoded = dict.find_equiv("info").expect("4").encoded();
+    let encoded = dict.get("info").expect("4").encoded();
     
-    //sha.input(encoded.as_slice());
-    //sha.result(result);
-    
+    sha.input(encoded.as_slice());
+    sha.result(result.as_mut_slice());
+    println!("{}", announce_url);
     let mut tracker = UdpTracker::new(announce_url, &result).unwrap();
+    let scrape = tracker.scrape().unwrap();
+    println!("{} {} {}", scrape.leechers, scrape.seeders, scrape.downloads);
     println!("{}", tracker.local_ip().unwrap());
 }
