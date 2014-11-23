@@ -1,8 +1,8 @@
 language: rust
 
 env:
-    global:
-    - secure: ilLZ5blj2PXwBbWphAgLpqDtg7jKF3PbucLF9ZWw0hnZw/883dreYAJL70iyxPtU14ARPjAbRZG3ix52+VUVxss3tuMluAKbJmaD8c5rLpnYmL6omnZyNjD0vqib/zC+zSZFnoVz8UuNR/gVuqeDYtRInxcfQEfVBZg3beY6P/A=
+  global:
+  - secure: bN/hFV4Gg0m8oQtx+MsuFZuNW34wf3PTPspKfOPaoE5gNXhbzw/hRXZ94JNHqOUwp9j56jwD1LisxeUhKHuB/m7puTvmI3QURPQ5W2a+8Xcg7qLgPmJ/h9UDgxzRcR2Y7ddHHtZy+/159rWExX3NZR9QhZdZwBzTrPPoEsaARe0=
 
 after_success:
 - chmod +x .travis/push-rustdoc-to-gh-pages.sh
