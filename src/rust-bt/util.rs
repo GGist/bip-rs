@@ -6,9 +6,10 @@ use std::io::net::addrinfo;
 use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr, Ipv6Addr};
 
-static URL_REGEX: Regex = regex!(r"\A(\w+)://([^ ]+?):(\d+)(/.*)");
+static URL_REGEX: Regex = regex!(r"\A(\w+)://([^ ]+?)(?::(\d+))?(/.*)");
 static PEER_ID_PREFIX: &'static str = "RBT-0-1-1--";
 
+#[deriving(Copy)]
 pub enum Transport { TCP, UDP, HTTP }
 
 /// Returns a list of all local IPv4 Addresses.
@@ -69,9 +70,11 @@ pub fn gen_peer_id() -> [u8,..20] {
 
 /// Takes a url and returns the transport type that it specifies.
 pub fn get_transport(url: &str) -> IoResult<Transport> {
-    let trans_str = try!(URL_REGEX.captures(url).ok_or(
+    let trans_str = try!(try!(URL_REGEX.captures(url).ok_or(
         get_error(InvalidInput, "Transport Protocol Not Found In url")
-    )).at(1);
+    )).at(1).ok_or(
+        get_error(InvalidInput, "Transport Protocol Not Found In url")
+    ));
     
     if trans_str.len() == 0 {
         return Err(get_error(InvalidInput, "Transport Protocol Not Found In url"));
@@ -91,7 +94,7 @@ pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
         get_error(InvalidInput, "Hostname And/Or Port Number Not Found In url")
     ));
     
-    let (host_str, port_str) = (captures.at(2), captures.at(3));
+    let (host_str, port_str) = (captures.at(2).unwrap_or(""), captures.at(3).unwrap_or(""));
     if host_str.len() == 0 || port_str.len() == 0 {
         return Err(get_error(InvalidInput, "Hostname And/Or Port Number Not Found In url"))
     }
@@ -107,7 +110,7 @@ pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
 /// Returns the path portion of a supplied url.
 pub fn get_path(url: &str) -> IoResult<&str> {
     let path_str = match URL_REGEX.captures(url) {
-        Some(n) => n.at(4),
+        Some(n) => n.at(4).unwrap_or(""),
         None    => return Err(get_error(InvalidInput, "No Path Found In url"))
     };
     
@@ -117,4 +120,25 @@ pub fn get_path(url: &str) -> IoResult<&str> {
 /// Used to fill an IoError with a kind and desc, leaving detail empty.
 pub fn get_error(err_type: IoErrorKind, msg: &'static str) -> IoError {
     IoError{ kind: err_type, desc: msg, detail: None }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{get_udp_wait, get_path};
+	
+	#[test]
+	fn positive_get_path() {
+		assert_eq!(get_path("http://test.com:80/test_path").unwrap(), "/test_path");
+		
+		assert_eq!(get_path("http://test.com/test_path").unwrap(), "/test_path");
+	}
+	
+	#[test]
+	fn positive_get_udp_wait() {
+		assert_eq!(get_udp_wait(0), 15u64);
+		
+		assert_eq!(get_udp_wait(1), 30u64);
+		
+		assert_eq!(get_udp_wait(-1), 0u64);
+	}
 }

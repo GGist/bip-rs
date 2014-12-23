@@ -50,7 +50,7 @@ impl UdpTracker {
                 let tx = tx.clone();
                 let recvd_response = recvd_response.clone();
                 
-                spawn(proc() {
+                spawn(move || {
                     let mut curr_attempt = 0;
                     let mut udp_sock = match util::get_udp_sock(SocketAddr{ ip: i, port: 6881 }, 9) {
                         Ok(n) => n,

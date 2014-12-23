@@ -1,50 +1,35 @@
-extern crate serialize;
 extern crate "rust-bt" as rust_bt;
-extern crate "rust-crypto" as crypto;   
+extern crate crypto;   
+extern crate serialize;
 
 fn main() {
     use std::io::fs::File;
-
+    
+    use serialize::hex::ToHex;
     use crypto::sha1::Sha1;
     use crypto::digest::Digest;
-    use rust_bt::bencode::BenVal;
+    use rust_bt::bencode::Bencode;
     use rust_bt::tracker_udp::UdpTracker;
     use rust_bt::tracker::Tracker;
     use rust_bt::torrent::{Torrent};
-    use rust_bt::upnp::UPnPIntf;
-    use rust_bt::upnp::ServiceDesc;
     
-    let mut torr_file = File::open(&Path::new("tests/data/udp_tracker/sample.torrent"));
-    let torr_bytes = match torr_file.read_to_end() {
-        Ok(n)  => n,
-        Err(n) => { println!("{}", n); return }
-    };
-    
-    let ben_val: BenVal = match BenVal::new(torr_bytes.as_slice()) {
-        Ok(n) => n,
-        Err(n) => { println!("{}", n); return }
-    };
-    let torrent = Torrent::new(&ben_val);
-    
-    if torrent.is_err() {
-        println!("{}", torrent.err().unwrap());
-        return;
-    }
-    let torrent = torrent.unwrap();
-    
-    let dict = ben_val.dict().expect("1");
-    
-    let announce_url = dict.get("announce").expect("2").str().expect("3");
+    let mut torr_file = File::open(&Path::new("tests/data/test.torrent"));
+    let torr_bytes = torr_file.read_to_end().unwrap();
+    let ben_val = Bencode::new(torr_bytes.as_slice()).unwrap();
+    let encoded = ben_val.dict().unwrap().get("info").unwrap().encoded();
+    let torrent = Torrent::new(&ben_val).unwrap();
     
     let mut sha = Sha1::new();
     let mut result = [0u8,..20];
-    let encoded = dict.get("info").expect("4").encoded();
-    
+	
     sha.input(encoded.as_slice());
     sha.result(result.as_mut_slice());
-    println!("{}", announce_url);
-    let mut tracker = UdpTracker::new(announce_url, &result).unwrap();
+	
+    let (_, name) = torrent.file_type();
+    println!("{}", result.to_hex());
+    
+    let mut tracker = UdpTracker::new(torrent.announce(), &result).unwrap();
     let scrape = tracker.scrape().unwrap();
-    println!("{} {} {}", scrape.leechers, scrape.seeders, scrape.downloads);
-    println!("{}", tracker.local_ip().unwrap());
+    println!("{} {} {} {}", name, scrape.leechers, scrape.seeders, scrape.downloads);
+    println!("{}", tracker.local_ip().unwrap()); 
 }

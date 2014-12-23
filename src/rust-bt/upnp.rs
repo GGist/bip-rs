@@ -12,8 +12,8 @@ use std::io::net::ip::{SocketAddr, Ipv4Addr};
 // {1} = Device Max Wait Period, {2} = Search Target
 static DISCOVERY_ADDR: SocketAddr = SocketAddr{ ip: Ipv4Addr(239, 255, 255, 250), port: 1900 };
 static GENERIC_SEARCH_REQUEST: &'static str = "M-SEARCH * HTTP/1.1\r
-HOST: 239.255.255.250:1900\r
-MAN: \"ssdp:discover\"\r
+Host: 239.255.255.250:1900\r
+Man: \"ssdp:discover\"\r
 MX: {1}\r
 ST: {2}\r\n\r\n";
 
@@ -25,11 +25,11 @@ Connection: close\r\n\r\n";
 // {1} = Control URL, {2} = IP Address:Port, {3} = Bytes In Payload,
 // {4} = Search Target Of Service, {5} = Action Name, {6} = Action Parameters
 static GENERIC_SOAP_REQUEST: &'static str = "POST {1} HTTP/1.1\r
-HOST: {2}\r
-CONNECTION: close\r
-CONTENT-LENGTH: {3}\r
-CONTENT-TYPE: text/xml; charset=\"utf-8\"\r
-SOAPACTION: \"{4}#{5}\"\r
+Host: {2}\r
+Connection: close\r
+Content-Length: {3}\r
+Content-Type: text/xml; charset=\"utf-8\"\r
+SOAPAction: \"{4}#{5}\"\r
 \r
 <?xml version=\"1.0\"?>
 <s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"
@@ -58,6 +58,12 @@ pub type StrPos = (uint, uint);
 
 /// Type used to represent a service description. Service actions can be viewed
 /// as well as related in and out parameters and service state variables.
+///
+/// Note: As of now, this object makes no guarantee that messages it sends to UPnP
+/// services that are not standard will be well formed; this is temporary as it allows
+/// the code to remain clean until a proper solution arises. A list of standardized 
+/// UPnP devices and their corresponding services can be found at 
+/// http://upnp.org/sdcps-and-certification/standards/sdcps/.
 pub struct ServiceDesc {
     location: SocketAddr,
     search_target: String,
@@ -104,12 +110,16 @@ impl ServiceDesc {
         // Pull Service Description Path And Control Path
         let service_tag = response.as_slice().slice(tag_begin, tag_end);
         
-        let scpd_path = try!(scpd_find.captures(service_tag).ok_or(
+        let scpd_path = try!(try!(scpd_find.captures(service_tag).ok_or(
             util::get_error(InvalidInput, "Could Not Capture SCPD Path")
-        )).at(1);
-        let control_path = try!(control_find.captures(service_tag).ok_or(
+        )).at(1).ok_or(
+           util::get_error(InvalidInput, "Could Not Capture SCPD Path") 
+        ));
+        let control_path = try!(try!(control_find.captures(service_tag).ok_or(
             util::get_error(InvalidInput, "Could Not Capture Control Path")
-        )).at(1);
+        )).at(1).ok_or(
+            util::get_error(InvalidInput, "Could Not Capture Control Path")
+        ));
 
         // Query Service Description
         tcp_sock = try!(TcpStream::connect(sock_addr));
@@ -200,7 +210,7 @@ impl ServiceDesc {
             .replace("{4}", self.search_target.as_slice())
             .replace("{5}", action)
             .replace("{6}", arguments.as_slice());
-
+println!("{}", request);
         // Send Request
         let mut tcp_sock = try!(TcpStream::connect(self.location));
         
@@ -536,8 +546,8 @@ fn send_search(from_addr: SocketAddr, timeout: uint, request: &str) -> IoResult<
         
         match udp_sock.recv_from(&mut reply_buf) {
             Ok(_) => {
-                let end = try!(reply_buf.iter().position({ |&b|
-                    b == 0u8
+                let end = try!(reply_buf.iter().position({ |b|
+                    *b == 0u8
                 }).ok_or(util::get_error(InvalidInput, "Search Reply Corrupt")));
                 
                 let payload: String = try!(reply_buf.slice_to(end).container_as_str().ok_or(

@@ -6,8 +6,8 @@
 //! Documentation is still in progress and is very segmented. Some of the documentation
 //! is near completion (ex: upnp module) and some of it is non existent (ex: bencode module).
 
+#![feature(macro_rules)]
 #![feature(phase)]
-#![feature(slicing_syntax)]
 
 #[phase(plugin)]
 
@@ -15,6 +15,7 @@ extern crate regex_macros;
 extern crate regex;
 
 pub mod bencode;
+pub mod error;
 pub mod torrent;
 pub mod tracker;
 pub mod tracker_udp;

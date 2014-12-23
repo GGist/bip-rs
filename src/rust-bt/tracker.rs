@@ -1,6 +1,7 @@
 use std::io::{IoResult};
 use std::io::net::ip::{SocketAddr, IpAddr};
 
+#[deriving(Copy)]
 pub struct ScrapeInfo {
     pub leechers: i32,
     pub seeders: i32,
