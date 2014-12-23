@@ -1,4 +1,5 @@
 use std::{rand};
+use std::thread::Thread;
 use std::time::duration::{Duration};
 use std::sync::{Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -50,7 +51,7 @@ impl UdpTracker {
                 let tx = tx.clone();
                 let recvd_response = recvd_response.clone();
                 
-                spawn(move || {
+                Thread::spawn(move || {
                     let mut curr_attempt = 0;
                     let mut udp_sock = match util::get_udp_sock(SocketAddr{ ip: i, port: 6881 }, 9) {
                         Ok(n) => n,
@@ -63,7 +64,7 @@ impl UdpTracker {
                             Err(_) => curr_attempt += 1
                         };
                     }
-                });
+                }).detach();
             }
         }
         

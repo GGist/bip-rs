@@ -1,9 +1,10 @@
 use util;
-use regex::Regex;
-use std::path::BytesContainer;
-use std::io::net::tcp::TcpStream;
+use regex::{Regex};
+use std::borrow::{ToOwned};
+use std::path::{BytesContainer};
+use std::io::net::tcp::{TcpStream};
 use std::io::{IoResult, InvalidInput};
-use std::io::net::udp::UdpSocket;
+use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr};
 
 // http://upnp.org/sdcps-and-certification/standards/sdcps/
@@ -552,7 +553,7 @@ fn send_search(from_addr: SocketAddr, timeout: uint, request: &str) -> IoResult<
                 
                 let payload: String = try!(reply_buf.slice_to(end).container_as_str().ok_or(
                     util::get_error(InvalidInput, "Search Reply Not A Valid String")
-                )).into_string();
+                )).to_owned();
                 
                 replies.push(payload);
             },

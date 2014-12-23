@@ -1,4 +1,3 @@
-use std::{str};
 use std::io::{BufReader, SeekCur};
 use std::collections::{HashMap};
 use std::path::{BytesContainer};
@@ -196,7 +195,7 @@ fn decode_int(buf: &mut BufReader, delim: char) -> ParseResult<i64> {
     let int_str = try!(int_bytes.container_as_str().ok_or(
         ParseError::new(try!(buf.tell()), "Could Not Parse Integer As UTF-8", None)
     ));
-    match str::from_str(int_str) {
+    match int_str.parse::<i64>() {
         Some(n) => Ok(n),
         None    => return Err(ParseError::new(try!(buf.tell()), "Could Not Convert Integer To i64", None))
     }

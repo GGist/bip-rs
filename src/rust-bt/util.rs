@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::{str, rand};
+use std::{rand};
 use std::num::Int;
 use std::io::{IoError, IoResult, IoErrorKind, InvalidInput, ConnectionFailed};
 use std::io::net::addrinfo;
@@ -100,7 +100,7 @@ pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
     }
     
     let host_ip = try!(addrinfo::get_host_addresses(host_str))[0];
-    let port_num = try!(str::from_str(port_str).ok_or(
+    let port_num = try!(port_str.parse::<u16>().ok_or(
         get_error(InvalidInput, "Invalid Port Number Found In url")
     ));
     

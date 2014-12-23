@@ -10,6 +10,3 @@ path = "src/rust-bt/lib.rs"
 [[bin]]
 name = "rust-bt-util"
 path = "src/rust-bt-util/tool.rs"
-
-[dependencies.rust-crypto]
-git = "https://github.com/DaGenix/rust-crypto"
