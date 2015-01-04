@@ -1,9 +1,10 @@
 use util;
-use regex::Regex;
-use std::path::BytesContainer;
-use std::io::net::tcp::TcpStream;
+use regex::{Regex};
+use std::path::{BytesContainer};
+use std::borrow::{ToOwned};
+use std::io::net::tcp::{TcpStream};
 use std::io::{IoResult, InvalidInput};
-use std::io::net::udp::UdpSocket;
+use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr};
 
 // http://upnp.org/sdcps-and-certification/standards/sdcps/
@@ -210,7 +211,7 @@ impl ServiceDesc {
             .replace("{4}", self.search_target.as_slice())
             .replace("{5}", action)
             .replace("{6}", arguments.as_slice());
-println!("{}", request);
+
         // Send Request
         let mut tcp_sock = try!(TcpStream::connect(self.location));
         
@@ -307,7 +308,7 @@ impl UPnPIntf {
         let replies = try!(send_search(from_addr, 5500, request.as_slice()));
             
         match parse_interfaces(replies) {
-            Ok(mut n) => Ok(n.remove(0)),
+            Ok(mut n) => Ok(Some(n.remove(0))),
             Err(n) => Err(n)
         }
     }
@@ -542,7 +543,7 @@ fn send_search(from_addr: SocketAddr, timeout: uint, request: &str) -> IoResult<
     
     let mut replies: Vec<String> = Vec::new();
     loop {
-        let mut reply_buf = [0u8,..1000];
+        let mut reply_buf = [0u8; 1000];
         
         match udp_sock.recv_from(&mut reply_buf) {
             Ok(_) => {
@@ -552,7 +553,7 @@ fn send_search(from_addr: SocketAddr, timeout: uint, request: &str) -> IoResult<
                 
                 let payload: String = try!(reply_buf.slice_to(end).container_as_str().ok_or(
                     util::get_error(InvalidInput, "Search Reply Not A Valid String")
-                )).into_string();
+                )).to_owned();
                 
                 replies.push(payload);
             },

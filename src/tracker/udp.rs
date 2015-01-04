@@ -1,6 +1,8 @@
 use std::{rand};
+use std::thread::{Thread};
 use std::time::duration::{Duration};
 use std::sync::{Arc};
+use std::sync::mpsc::{self, Receiver};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::io::timer::{Timer};
 use std::io::net::udp::{UdpSocket};
@@ -15,8 +17,8 @@ static MAX_ATTEMPTS: uint = 8;
 pub struct UdpTracker {
     conn: UdpSocket,
     tracker: SocketAddr,
-    peer_id: [u8,..20],
-    info_hash: [u8,..20],
+    peer_id: [u8; 20],
+    info_hash: [u8; 20],
     conn_id: i64,
     conn_id_expire: Receiver<()>
 }
@@ -33,7 +35,7 @@ impl UdpTracker {
             return Err(util::get_error(InvalidInput, "Invalid Size For info_hash"));
         }
         
-        let mut fixed_hash = [0u8,..20];
+        let mut fixed_hash = [0u8; 20];
         for (dst, &src) in fixed_hash.iter_mut().zip(info_hash.iter()) {
             *dst = src;
         }
@@ -42,7 +44,7 @@ impl UdpTracker {
         let ip_addrs = try!(util::get_net_addrs());
         
         let recvd_response = Arc::new(AtomicBool::new(false));
-        let (tx, rx) = channel();
+        let (tx, rx) = mpsc::channel();
         // If too many net interfaces are found, it could be bad spawning a kernel thread for each of them
         { // Need to move tx in scope so that it gets destroyed before receiving
             let tx = tx;
@@ -50,7 +52,7 @@ impl UdpTracker {
                 let tx = tx.clone();
                 let recvd_response = recvd_response.clone();
                 
-                spawn(move || {
+                Thread::spawn(move || {
                     let mut curr_attempt = 0;
                     let mut udp_sock = match util::get_udp_sock(SocketAddr{ ip: i, port: 6881 }, 9) {
                         Ok(n) => n,
@@ -59,16 +61,16 @@ impl UdpTracker {
                     
                     while curr_attempt < MAX_ATTEMPTS && !recvd_response.load(Ordering::Relaxed) {
                         match connect_request(&mut udp_sock, &dest_sock, 1) {
-                            Ok((id, expire)) => return tx.send((udp_sock, id, expire)),
+                            Ok((id, expire)) => return tx.send((udp_sock, id, expire)).unwrap(),
                             Err(_) => curr_attempt += 1
                         };
                     }
-                });
+                }).detach();
             }
         }
         
-        let (udp_sock, id, expire) = try!(rx.recv_opt().or_else( |_|
-            Err(util::get_error(ConnectionFailed, "Could Not Communicate On Any IPv4 Interfaces"))
+        let (udp_sock, id, expire) = try!(rx.recv().map_err( |_|
+            util::get_error(ConnectionFailed, "Could Not Communicate On Any IPv4 Interfaces")
         ));
         recvd_response.store(true, Ordering::Relaxed);
         
@@ -104,7 +106,7 @@ impl UdpTracker {
         try!(self.check_connection_id());
         let send_trans_id = rand::random::<i32>();
         
-        let mut send_bytes = [0u8,..98];
+        let mut send_bytes = [0u8; 98];
         {
             let mut send_buf = BufWriter::new(&mut send_bytes);
             
@@ -123,7 +125,7 @@ impl UdpTracker {
             try!(send_buf.write_be_i16(port));          // Port For Other Clients To Connect (Needs To Be Port Forwarded Behind NAT)
         }
         
-        let mut recv_bytes = [0u8,..10000];
+        let mut recv_bytes = [0u8; 10000];
         try!(send_request(&mut self.conn, &self.tracker, &send_bytes, &mut recv_bytes, MAX_ATTEMPTS));
         
         let mut recv_reader = BufReader::new(&recv_bytes);
@@ -190,7 +192,7 @@ fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [
 ///
 /// This is a blocking operation.
 fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: uint) -> IoResult<(i64, Receiver<()>)> {
-    let mut send_bytes = [0u8,..16];
+    let mut send_bytes = [0u8; 16];
     let send_trans_id = rand::random::<i32>();
 
     { // Limit Lifetime Of Writer Object
@@ -201,7 +203,7 @@ fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: uint) -> IoR
         try!(send_writer.write_be_i32(send_trans_id)); // Verify This In The Response
     }
 
-    let mut recv_bytes = [0u8,..16];
+    let mut recv_bytes = [0u8; 16];
     let bytes_read = try!(send_request(udp, dst, &send_bytes, &mut recv_bytes, attempts));
     if bytes_read != recv_bytes.len() {
         return Err(util::get_error(EndOfFile, "Didn't Receive All 16 Bytes From Tracker"));
@@ -232,7 +234,7 @@ impl Tracker for UdpTracker {
         try!(self.check_connection_id());
         let send_trans_id = rand::random::<i32>();
         
-        let mut send_bytes = [0u8,..36];
+        let mut send_bytes = [0u8; 36];
         {
             let mut send_buf = BufWriter::new(&mut send_bytes);
             
@@ -242,7 +244,7 @@ impl Tracker for UdpTracker {
             try!(send_buf.write(&self.info_hash));      // Identifies The Torrent File
         }
         
-        let mut recv_bytes = [0u8,..10000];
+        let mut recv_bytes = [0u8; 10000];
         try!(send_request(&mut self.conn, &self.tracker, &send_bytes, &mut recv_bytes, MAX_ATTEMPTS));
         
         let mut recv_reader = BufReader::new(&recv_bytes);

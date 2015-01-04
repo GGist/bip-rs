@@ -1,7 +1,10 @@
 use std::io::{IoResult};
+use std::sync::mpsc::{Receiver};
 use std::io::net::ip::{SocketAddr, IpAddr};
 
-#[deriving(Copy)]
+pub mod udp;
+
+#[derive(Copy)]
 pub struct ScrapeInfo {
     pub leechers: i32,
     pub seeders: i32,

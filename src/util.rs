@@ -1,16 +1,38 @@
-use regex::Regex;
-use std::{str, rand};
-use std::num::Int;
+use regex::{Regex};
+use std::{rand};
+use std::num::{Int};
 use std::io::{IoError, IoResult, IoErrorKind, InvalidInput, ConnectionFailed};
 use std::io::net::addrinfo;
 use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr, Ipv6Addr};
 
-static URL_REGEX: Regex = regex!(r"\A(\w+)://([^ ]+?)(?::(\d+))?(/.*)");
-static PEER_ID_PREFIX: &'static str = "RBT-0-1-1--";
+pub const PEER_ID_LEN: uint = 20;
+pub type SPeerID = [u8; PEER_ID_LEN];
+pub type UPeerID = [u8];
 
-#[deriving(Copy)]
-pub enum Transport { TCP, UDP, HTTP }
+pub const INFO_HASH_LEN: uint = 20;
+pub type SInfoHash = [u8; INFO_HASH_LEN];
+pub type UInfoHash = [u8];
+
+pub const BTP_10_LEN: uint = 19;
+pub type SBTP10 = [u8; BTP_10_LEN];
+pub type UBTP10 = [u8];
+
+pub enum Choice<O, T> {
+    One(O),
+    Two(T)
+}
+
+#[derive(Copy)]
+pub enum Transport { 
+    TCP, 
+    UDP, 
+    HTTP 
+}
+
+const PEER_ID_PREFIX: &'static str = "RBT-0.1.1--";
+
+static URL_REGEX: Regex = regex!(r"\A(\w+)://([^ ]+?)(?::(\d+))?(/.*)");
 
 /// Returns a list of all local IPv4 Addresses.
 pub fn get_net_addrs() -> IoResult<Vec<IpAddr>> {
@@ -54,8 +76,8 @@ pub fn get_udp_wait(attempt: uint) -> u64 {
 }
 
 /// Generates a peer id from a base identifier followed by random characters.
-pub fn gen_peer_id() -> [u8,..20] {
-    let mut bytes = [0u8, ..20];
+pub fn gen_peer_id() -> [u8; 20] {
+    let mut bytes = [0u8; 20];
     
     for (byte, pref) in bytes.iter_mut().zip(PEER_ID_PREFIX.chars()) {
         *byte = pref as u8;
@@ -100,7 +122,7 @@ pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
     }
     
     let host_ip = try!(addrinfo::get_host_addresses(host_str))[0];
-    let port_num = try!(str::from_str(port_str).ok_or(
+    let port_num = try!(port_str.parse::<u16>().ok_or(
         get_error(InvalidInput, "Invalid Port Number Found In url")
     ));
     
@@ -124,21 +146,21 @@ pub fn get_error(err_type: IoErrorKind, msg: &'static str) -> IoError {
 
 #[cfg(test)]
 mod tests {
-	use super::{get_udp_wait, get_path};
-	
-	#[test]
-	fn positive_get_path() {
-		assert_eq!(get_path("http://test.com:80/test_path").unwrap(), "/test_path");
-		
-		assert_eq!(get_path("http://test.com/test_path").unwrap(), "/test_path");
-	}
-	
-	#[test]
-	fn positive_get_udp_wait() {
-		assert_eq!(get_udp_wait(0), 15u64);
-		
-		assert_eq!(get_udp_wait(1), 30u64);
-		
-		assert_eq!(get_udp_wait(-1), 0u64);
-	}
+   use super::{get_udp_wait, get_path};
+   
+   #[test]
+   fn positive_get_path() {
+    assert_eq!(get_path("http://test.com:80/test_path").unwrap(), "/test_path");
+    
+    assert_eq!(get_path("http://test.com/test_path").unwrap(), "/test_path");
+   }
+   
+   #[test]
+   fn positive_get_udp_wait() {
+    assert_eq!(get_udp_wait(0), 15u64);
+    
+    assert_eq!(get_udp_wait(1), 30u64);
+    
+    assert_eq!(get_udp_wait(-1), 0u64);
+   }
 }

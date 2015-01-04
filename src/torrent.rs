@@ -143,7 +143,7 @@ impl<'a> Torrent<'a> {
     }
 }
 
-/// Used to transfor Vec<Bencode> into Vec<&str> if all Bencode values are of type
+/// Used to transform Vec<Bencode> into Vec<&str> if all Bencode values are of type
 /// Bencode::Bytes.
 fn get_str_vec<'a>(ben_list: &'a Vec<Bencode>, err_key: &'static str) -> TorrResult<Vec<&'a str>> {
     let mut str_vec = Vec::with_capacity(ben_list.len());
@@ -192,7 +192,7 @@ fn parse_metainfo<'a>(meta_map: &'a HashMap<String, Bencode>) -> TorrResult<Torr
 }
 
 /// Used to represent the type of torrent file.
-#[deriving(Copy, Show)]
+#[derive(Copy, Show)]
 pub enum TorrFileType {
     Single,
     Multi

@@ -6,6 +6,7 @@
 //! Documentation is still in progress and is very segmented. Some of the documentation
 //! is near completion (ex: upnp module) and some of it is non existent (ex: bencode module).
 
+#![feature(unboxed_closures)]
 #![feature(macro_rules)]
 #![feature(phase)]
 
@@ -16,8 +17,8 @@ extern crate regex;
 
 pub mod bencode;
 pub mod error;
+pub mod peer;
 pub mod torrent;
 pub mod tracker;
-pub mod tracker_udp;
 pub mod upnp;
 pub mod util;

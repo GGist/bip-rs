@@ -1,5 +1,5 @@
-use std::{str};
 use std::io::{BufReader, SeekCur};
+use std::str::Utf8Error::{InvalidByte, TooShort};
 use std::collections::{HashMap};
 use std::path::{BytesContainer};
 use error::{ParseResult, ParseError};
@@ -14,7 +14,7 @@ const BYTE_LEN_HIGH: char = '9';
 const BYTE_LEN_END: char = ':';
 
 /// Structure representing bencoded data.
-#[deriving(Show)]
+#[derive(Show)]
 pub enum Bencode {
     Int(i64),
     Bytes(Vec<u8>),
@@ -23,8 +23,8 @@ pub enum Bencode {
 }
 
 impl Bencode {
-	/// Processes bytes as bencoded data and builds a Bencode structure to represent
-	/// the bencoded bytes.
+   /// Processes bytes as bencoded data and builds a Bencode structure to represent
+   /// the bencoded bytes.
     ///
     /// All valid bencode will be accepted. However, any valid bencode containing 
     /// extra, unprocessed bytes at the end will be considered invalid.
@@ -39,7 +39,7 @@ impl Bencode {
         result
     }
     
-	/// Serializes the Bencode data structure back into a sequence of bytes.
+   /// Serializes the Bencode data structure back into a sequence of bytes.
     ///
     /// The returned byte sequence is guaranteed to be the same byte sequence 
     /// that was initially used to build the Bencode object.
@@ -47,7 +47,7 @@ impl Bencode {
         encode(self)
     }
 
-	/// Tries to convert the current Bencode value to an i64.
+   /// Tries to convert the current Bencode value to an i64.
     pub fn int(&self) -> Option<i64> {
         match self {
             &Bencode::Int(n) => Some(n),
@@ -55,7 +55,7 @@ impl Bencode {
         }
     }
     
-	/// Tries to convert the current Bencode value to a sequence of bytes.
+   /// Tries to convert the current Bencode value to a sequence of bytes.
     pub fn bytes(&self) -> Option<&[u8]> {
         match self {
             &Bencode::Bytes(ref n) => Some(n.slice_from(0)),
@@ -63,7 +63,7 @@ impl Bencode {
         }
     }
     
-	/// Tries to convert the current Bencode value to a str (only valid UTF-8
+   /// Tries to convert the current Bencode value to a str (only valid UTF-8
     /// byte sequences are convertible).
     pub fn str(&self) -> Option<&str> {
         match self {
@@ -72,7 +72,7 @@ impl Bencode {
         }
     }
 
-	/// Tries to convert the current Bencode value to a list of Bencoded values.
+   /// Tries to convert the current Bencode value to a list of Bencoded values.
     pub fn list(&self) -> Option<&Vec<Bencode>> {
         match self {
             &Bencode::List(ref n) => Some(n),
@@ -80,7 +80,7 @@ impl Bencode {
         }
     }
 
-	/// Tries to convert the current Bencode value to a dictionary of Bencoded 
+   /// Tries to convert the current Bencode value to a dictionary of Bencoded 
     /// values.
     pub fn dict(&self) -> Option<&HashMap<String, Bencode>> {
         match self {
@@ -196,7 +196,7 @@ fn decode_int(buf: &mut BufReader, delim: char) -> ParseResult<i64> {
     let int_str = try!(int_bytes.container_as_str().ok_or(
         ParseError::new(try!(buf.tell()), "Could Not Parse Integer As UTF-8", None)
     ));
-    match str::from_str(int_str) {
+    match int_str.parse::<i64>() {
         Some(n) => Ok(n),
         None    => return Err(ParseError::new(try!(buf.tell()), "Could Not Convert Integer To i64", None))
     }
@@ -231,10 +231,17 @@ fn decode_dict(buf: &mut BufReader) -> ParseResult<HashMap<String, Bencode>> {
     
     let mut last_key = String::with_capacity(0);
     while try!(peek_char(buf)) != BEN_END {
-        let key = match try!(decode_bytes(buf)).into_ascii_opt() {
-            Some(n) => n.into_string(),
-            None    => return Err(ParseError::new(try!(buf.tell()), "Dictionary Key Is Not Valid UTF-8", None))
+        let key = match String::from_utf8(try!(decode_bytes(buf))) {
+            Ok(n) => n,
+            Err(e) => {
+                let position: u64 = match e.utf8_error() {
+                    InvalidByte(s) => try!(buf.tell()) - e.into_bytes().len() as u64 + s as u64,
+                    TooShort       => try!(buf.tell()) - e.into_bytes().len() as u64
+                };
+                return Err(ParseError::new(position, "Dictionary Key Is Not Valid UTF-8", None))
+            }
         };
+        
         // Spec says that the keys must be in alphabetical order
         if last_key.len() != 0 && key < last_key {
             return Err(ParseError::new(try!(buf.tell()), "Dictionary Key Not In Alphabetical Order", None))
@@ -266,28 +273,28 @@ mod tests {
     use std::io::{BufReader, SeekCur};
     use super::{Bencode, decode_dict, decode_list, decode_bytes, decode_int, BEN_END};
 
-	// Positive Cases
+    // Positive Cases
     const GENERAL: &'static [u8] = b"d0:12:zero_len_key8:location17:udp://test.com:8011:nested dictd4:listli-500500eee6:numberi500500ee";
     const DICTIONARY: &'static [u8] = b"d9:test_dictd10:nested_key12:nested_value11:nested_listli500ei-500ei0eee8:test_key10:test_valuee";
-	const LIST: &'static [u8] = b"l10:test_bytesi500ei0ei-500el12:nested_bytesed8:test_key10:test_valueee";
-	const BYTES: &'static [u8] = b"5:\xC5\xE6\xBE\xE6\xF2";
-	const BYTES_UTF8: &'static [u8] = b"16:valid_utf8_bytes";
-	const BYTES_ZERO_LEN: &'static [u8] = b"0:";
-	const INT: &'static [u8] = b"i500e";
-	const INT_NEGATIVE: &'static [u8] = b"i-500e";
-	const INT_ZERO: &'static [u8] = b"i0e";
-	
-	// Negative Cases
-	const BYTES_NEG_LEN: &'static [u8] = b"-4:test";
-	const BYTES_EXTRA: &'static [u8] = b"l15:processed_bytese17:unprocessed_bytes";
+    const LIST: &'static [u8] = b"l10:test_bytesi500ei0ei-500el12:nested_bytesed8:test_key10:test_valueee";
+    const BYTES: &'static [u8] = b"5:\xC5\xE6\xBE\xE6\xF2";
+    const BYTES_UTF8: &'static [u8] = b"16:valid_utf8_bytes";
+    const BYTES_ZERO_LEN: &'static [u8] = b"0:";
+    const INT: &'static [u8] = b"i500e";
+    const INT_NEGATIVE: &'static [u8] = b"i-500e";
+    const INT_ZERO: &'static [u8] = b"i0e";
+   
+    // Negative Cases
+    const BYTES_NEG_LEN: &'static [u8] = b"-4:test";
+    const BYTES_EXTRA: &'static [u8] = b"l15:processed_bytese17:unprocessed_bytes";
     const INT_INVALID: &'static [u8] = b"i500a500e";
-	const INT_LEADING_ZERO: &'static [u8] = b"i0500e";
-	const INT_DOUBLE_ZERO: &'static [u8] = b"i00e";
+    const INT_LEADING_ZERO: &'static [u8] = b"i0500e";
+    const INT_DOUBLE_ZERO: &'static [u8] = b"i00e";
     const BYTES_NOT_UTF8: &'static [u8] = b"5:\xC5\xE6\xBE\xE6\xF2";
     const DICT_UNORDERED_KEYS: &'static [u8] = b"d5:z_key5:value5:a_key5:valuee";
-	
-	#[test]
-	fn positive_decode_general() {
+   
+   #[test]
+   fn positive_decode_general() {
         let bencode = Bencode::new(GENERAL).unwrap();
         
         let ben_dict = bencode.dict().unwrap();
@@ -298,10 +305,10 @@ mod tests {
         let nested_dict = ben_dict.get("nested dict").unwrap().dict().unwrap();
         let nested_list = nested_dict.get("list").unwrap().list().unwrap();
         assert_eq!(nested_list[0].int().unwrap(), -500500i64);
-	}
-	
-	#[test]
-	fn positive_decode_dict() {
+   }
+   
+   #[test]
+   fn positive_decode_dict() {
         let mut buf = BufReader::new(DICTIONARY);
         buf.seek(1, SeekCur).unwrap();
         
@@ -315,10 +322,10 @@ mod tests {
         assert_eq!(nested_list[0].int().unwrap(), 500i64);
         assert_eq!(nested_list[1].int().unwrap(), -500i64);
         assert_eq!(nested_list[2].int().unwrap(), 0i64);
-	}
-	
-	#[test]
-	fn positive_decode_list() {
+   }
+   
+   #[test]
+   fn positive_decode_list() {
         let mut buf = BufReader::new(LIST);
         buf.seek(1, SeekCur).unwrap();
         
@@ -333,10 +340,10 @@ mod tests {
         
         let nested_dict = list[5].dict().unwrap();
         assert_eq!(nested_dict.get("test_key").unwrap().str().unwrap(), "test_value");
-	}
-	
-	#[test]
-	fn positive_decode_bytes() {
+   }
+   
+   #[test]
+   fn positive_decode_bytes() {
         let mut buf = BufReader::new(BYTES);
         
         let bytes = decode_bytes(&mut buf).unwrap();
@@ -346,40 +353,40 @@ mod tests {
         assert_eq!(bytes[2] as char, '¾');
         assert_eq!(bytes[3] as char, 'æ');
         assert_eq!(bytes[4] as char, 'ò');
-	}
+   }
     
-	#[test]
-	fn positive_decode_bytes_utf8() {
+   #[test]
+   fn positive_decode_bytes_utf8() {
         let bencode = Bencode::new(BYTES_UTF8).unwrap();
         
         assert_eq!(bencode.str().unwrap(), "valid_utf8_bytes");
-	}
-	
-	#[test]
-	fn positive_decode_bytes_zero_len() {
+   }
+   
+   #[test]
+   fn positive_decode_bytes_zero_len() {
         let mut buf = BufReader::new(BYTES_ZERO_LEN);
         
         let bytes = decode_bytes(&mut buf).unwrap();
         assert_eq!(bytes.len(), 0);
-	}
-	
-	#[test]
-	fn positive_decode_int() {
+   }
+   
+   #[test]
+   fn positive_decode_int() {
         let mut buf = BufReader::new(INT);
         buf.seek(1, SeekCur).unwrap();
         
         let int_value = decode_int(&mut buf, BEN_END).unwrap();
         assert_eq!(int_value, 500i64);
-	}
-	
-	#[test]
-	fn positive_decode_int_negative() {
+   }
+   
+   #[test]
+   fn positive_decode_int_negative() {
         let mut buf = BufReader::new(INT_NEGATIVE);
         buf.seek(1, SeekCur).unwrap();
         
         let int_value = decode_int(&mut buf, BEN_END).unwrap();
         assert_eq!(int_value, -500i64);
-	}
+   }
     
     #[test]
     fn positive_decode_int_zero() {

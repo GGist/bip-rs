@@ -1,15 +1,4 @@
 [package]
-name = "rust-bt"
+name = "bittorrent"
 version = "0.1.0"
 authors = ["GGist <amiller4421@gmail.com>"]
-
-[lib]
-name = "rust-bt"
-path = "src/rust-bt/lib.rs"
-
-[[bin]]
-name = "rust-bt-util"
-path = "src/rust-bt-util/tool.rs"
-
-[dependencies.rust-crypto]
-git = "https://github.com/DaGenix/rust-crypto"

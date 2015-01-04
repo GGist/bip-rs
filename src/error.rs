@@ -10,7 +10,7 @@ pub type TorrResult<T> = Result<T, TorrError>;
 ///
 /// A pos of -1 indicates that this error was converted from another error where 
 /// a position value would not make sense.
-#[deriving(Show)]
+#[derive(Show)]
 pub struct ParseError {
     pub pos: u64,
     pub desc: &'static str,
@@ -50,7 +50,7 @@ impl Error for ParseError {
 }
 
 /// A list specifying the types of TorrErrors that may occur.
-#[deriving(Show, Copy)]
+#[derive(Show, Copy)]
 pub enum TorrErrorKind {
     /// A key is missing in one of the bencoded dictionaries.
     MissingKey,
@@ -62,7 +62,7 @@ pub enum TorrErrorKind {
 
 /// Used to raise an error when a piece of data required by the Torrent is 
 /// missing from the Bencode data.
-#[deriving(Show)]
+#[derive(Show)]
 pub struct TorrError {
     pub kind: TorrErrorKind,
     pub desc: &'static str,
