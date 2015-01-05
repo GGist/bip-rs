@@ -13,7 +13,7 @@
 //! torrent file has at the moment in real time. You can get this information easily
 //! with the following snippet:
 //!
-//! ```rust
+//! ```no_run
 //! extern crate bittorrent;
 //! extern crate crypto;
 //! 
