@@ -1,3 +1,5 @@
+//! Facilitates interaction with a UDP Tracker.
+
 use std::{rand};
 use std::thread::{Thread};
 use std::time::duration::{Duration};

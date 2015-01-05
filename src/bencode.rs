@@ -1,3 +1,11 @@
+//! Bencode parsing and validation.
+//!
+//! This module exposes a Bencode object that will take in a chunk of bytes and
+//! check whether it is valid Bencode or not. It will then allow access to Bencode
+//! object by mapping them to data structures for easy manipulation.
+
+#![stable]
+
 use std::io::{BufReader, SeekCur};
 use std::str::Utf8Error::{InvalidByte, TooShort};
 use std::collections::{HashMap};
@@ -23,8 +31,8 @@ pub enum Bencode {
 }
 
 impl Bencode {
-   /// Processes bytes as bencoded data and builds a Bencode structure to represent
-   /// the bencoded bytes.
+    /// Processes bytes as bencoded data and builds a Bencode structure to represent
+    /// the bencoded bytes.
     ///
     /// All valid bencode will be accepted. However, any valid bencode containing 
     /// extra, unprocessed bytes at the end will be considered invalid.
@@ -39,7 +47,7 @@ impl Bencode {
         result
     }
     
-   /// Serializes the Bencode data structure back into a sequence of bytes.
+    /// Serializes the Bencode data structure back into a sequence of bytes.
     ///
     /// The returned byte sequence is guaranteed to be the same byte sequence 
     /// that was initially used to build the Bencode object.

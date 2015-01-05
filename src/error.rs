@@ -1,3 +1,5 @@
+//! Error types used by the library.
+
 use std::io::{IoError};
 use std::error::{Error, FromError};
 use std::result::{Result};

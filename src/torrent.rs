@@ -1,3 +1,5 @@
+//! Torrent parsing and validation via the Bencode object.
+
 use bencode::{Bencode};
 use error::{TorrErrorKind, TorrError, TorrResult};
 use std::collections::{HashMap};

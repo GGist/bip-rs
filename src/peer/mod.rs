@@ -1,3 +1,5 @@
+//! Facilitates communication with a remote peer.
+
 use std::u32;
 use std::collections::{Bitv};
 use std::io::net::tcp::{TcpStream};

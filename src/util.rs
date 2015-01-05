@@ -1,3 +1,5 @@
+//! Utilities used throughout the library.
+
 use regex::{Regex};
 use std::{rand};
 use std::num::{Int};

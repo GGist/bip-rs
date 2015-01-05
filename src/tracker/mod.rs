@@ -1,3 +1,5 @@
+//! Unified interface for communicating with different trackers.
+
 use std::io::{IoResult};
 use std::sync::mpsc::{Receiver};
 use std::io::net::ip::{SocketAddr, IpAddr};

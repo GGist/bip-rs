@@ -1,4 +1,27 @@
 [package]
 name = "bittorrent"
 version = "0.1.0"
+description = "A library implementing the bittorrent protocol and a few key extensions."
+
 authors = ["GGist <amiller4421@gmail.com>"]
+
+documentation = "http://ggist.github.io/bittorrent-rs/index.html"
+homepage = "https://github.com/GGist/bittorrent-rs"
+repository = "https://github.com/GGist/bittorrent-rs"
+
+readme = "README.md"
+
+keywords = ["torrent", "bittorrent", "peer", "tracker"]
+
+license = "Apache-2.0"
+
+[[example]]
+name="scrape"
+path="examples/scrape_example.rs"
+
+[[example]]
+name="upnp"
+path="examples/upnp_example.rs"
+
+[dev-dependencies.rust-crypto]
+git = "https://github.com/DaGenix/rust-crypto.git"
