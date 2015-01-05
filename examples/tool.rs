@@ -1,21 +1,21 @@
-extern crate "rust-bt" as rust_bt;
-extern crate "crypto" as rust_crypto;
+extern crate bittorrent;
+//extern crate crypto;
 extern crate serialize;
 
 use std::io::fs::File;
 use std::io::net::ip::{SocketAddr, Ipv4Addr};
 use serialize::hex::ToHex;
-use rust_crypto::sha1::Sha1;
-use rust_crypto::digest::Digest;
-use rust_bt::bencode::Bencode;
-use rust_bt::tracker::udp::UdpTracker;
-use rust_bt::tracker::Tracker;
-use rust_bt::torrent::{Torrent};
-use rust_bt::upnp::{UPnPIntf, ServiceDesc};
+//use crypto::sha1::Sha1;
+//use crypto::digest::Digest;
+use bittorrent::bencode::Bencode;
+use bittorrent::tracker::udp::UdpTracker;
+use bittorrent::tracker::Tracker;
+use bittorrent::torrent::{Torrent};
+use bittorrent::upnp::{UPnPIntf};
 
 fn main() {
     check();
-    //forward_port();
+    forward_port();
 }
 
 fn check() {
@@ -38,7 +38,7 @@ fn forward_port() {
         ("NewInternalPort", "6882"),
         ("NewInternalClient", "192.168.1.102"),
         ("NewEnabled", "1"),
-        ("NewPortMappingDescription", "RustBT"),
+        ("NewPortMappingDescription", "bittorrent-rs"),
         ("NewLeaseDuration", "0")])
     .unwrap();
 }
@@ -50,11 +50,12 @@ fn scrape_torrent() {
     let encoded = ben_val.dict().unwrap().get("info").unwrap().encoded();
     let torrent = Torrent::new(&ben_val).unwrap();
 
-    let mut sha = Sha1::new();
+    //let mut sha = Sha1::new();
     let mut result = [0u8; 20];
 	
-    sha.input(encoded.as_slice());
-    sha.result(result.as_mut_slice());
+    // Crypto Package Was Not Updated
+    //sha.input(encoded.as_slice());
+    //sha.result(result.as_mut_slice());
 	
     let name = torrent.comment();
     println!("{}", result.to_hex());

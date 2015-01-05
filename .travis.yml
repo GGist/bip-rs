@@ -1,9 +1,19 @@
-language: rust
-
 env:
   global:
-  - secure: bN/hFV4Gg0m8oQtx+MsuFZuNW34wf3PTPspKfOPaoE5gNXhbzw/hRXZ94JNHqOUwp9j56jwD1LisxeUhKHuB/m7puTvmI3QURPQ5W2a+8Xcg7qLgPmJ/h9UDgxzRcR2Y7ddHHtZy+/159rWExX3NZR9QhZdZwBzTrPPoEsaARe0=
-
+    - secure: bN/hFV4Gg0m8oQtx+MsuFZuNW34wf3PTPspKfOPaoE5gNXhbzw/hRXZ94JNHqOUwp9j56jwD1LisxeUhKHuB/m7puTvmI3QURPQ5W2a+8Xcg7qLgPmJ/h9UDgxzRcR2Y7ddHHtZy+/159rWExX3NZR9QhZdZwBzTrPPoEsaARe0=
+language: rust
+script:
+    - cargo build
+    - cargo test
+    - cargo doc --no-deps
 after_success:
-- chmod +x .travis/push-rustdoc-to-gh-pages.sh
-- .travis/push-rustdoc-to-gh-pages.sh
+    - git config --global user.email "travis@travis-ci.org"
+    - git config --global user.name "travis-ci"
+    - git clone --quiet --branch=gh-pages https://${GH_TOKEN}@github.com/GGist/bittorrent-rs gh-pages > /dev/null
+    - cd gh-pages
+    - mv ./index.html ../target/doc
+    - rm ./*
+    - cp -rf ../target/doc/* .
+    - git add -A
+    - git commit -m "Latest rustdoc on successful travis build $TRAVIS_BUILD_NUMBER auto-pushed to gh-pages"
+    - git push -fq origin gh-pages > /dev/null
