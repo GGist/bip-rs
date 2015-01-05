@@ -1,4 +1,4 @@
-bittorrent-rs [![Build Status](https://travis-ci.org/GGist/bittorrent-rs.svg?branch=master)](https://travis-ci.org/GGist/RustBT) [![Documentation](http://img.shields.io/badge/docs-in--progress-blue.svg?style=flat)](http://ggist.github.io/bittorrent-rs/index.html) [![License](http://img.shields.io/badge/license-Apache%202-red.svg?style=flat)](https://raw.githubusercontent.com/GGist/RustBT/master/LICENSE)
+bittorrent-rs [![Build Status](https://travis-ci.org/GGist/bittorrent-rs.svg?branch=master)](https://travis-ci.org/GGist/bittorrent-rs) [![Documentation](http://img.shields.io/badge/docs-in--progress-blue.svg?style=flat)](http://ggist.github.io/bittorrent-rs/index.html) [![License](http://img.shields.io/badge/license-Apache%202-red.svg?style=flat)](https://raw.githubusercontent.com/GGist/RustBT/master/LICENSE)
 =======
 A bittorrent library and client written in pure Rust.
 
