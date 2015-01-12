@@ -23,5 +23,9 @@ path="examples/scrape_example.rs"
 name="upnp"
 path="examples/upnp_example.rs"
 
+[dependencies]
+regex = "0.1.10"
+regex_macros = "0.1.5"
+
 [dev-dependencies.rust-crypto]
 git = "https://github.com/DaGenix/rust-crypto.git"

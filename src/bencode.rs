@@ -217,7 +217,7 @@ fn decode_bytes(buf: &mut BufReader) -> ParseResult<Vec<u8>> {
         return Err(ParseError::new(try!(buf.tell()), "Negative Length String Found", None))
     }
     
-    match buf.read_exact(num_bytes as uint) {
+    match buf.read_exact(num_bytes as usize) {
         Ok(n)  => Ok(n),
         Err(e) => Err(ParseError::new(try!(buf.tell()), e.desc, e.detail))
     }

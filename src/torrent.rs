@@ -23,7 +23,7 @@ const PIECES_KEY: &'static str       = "pieces";
 // Multi File Info Dictionary Key
 const FILES_KEY: &'static str = "files";
 
-const MD5SUM_LENGTH: uint = 32;
+const MD5SUM_LENGTH: u32 = 32;
 
 /// Used to get a slice of a mandatory torrent value from a dictionary. 
 ///
@@ -256,7 +256,7 @@ impl<'a> TorrFile<'a> {
         let length = slice_map!(file_map, LENGTH_KEY, Bencode::int);
         let md5sum = slice_map_opt!(file_map, MD5SUM_KEY, Bencode::str);
         
-        if md5sum.is_some() && md5sum.unwrap().len() != MD5SUM_LENGTH {
+        if md5sum.is_some() && md5sum.unwrap().len() != MD5SUM_LENGTH as usize {
             return Err(TorrError{ kind: TorrErrorKind::Other, desc: "Length Of md5sum Is Invalid", detail: None })
         }
         

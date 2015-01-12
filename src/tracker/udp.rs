@@ -67,7 +67,7 @@ impl UdpTracker {
                             Err(_) => curr_attempt += 1
                         };
                     }
-                }).detach();
+                });
             }
         }
         

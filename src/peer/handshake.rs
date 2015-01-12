@@ -10,14 +10,20 @@ use util::{self, SPeerID, UPeerID, UInfoHash, UBTP10, Choice};
 const BTP_10_PROTOCOL: &'static str = "BitTorrent protocol";
 const BTP_10_HANDSHAKE_LEN: uint = 68;
 
+/// A struct representing a handshake that has successfully taken place.
 pub struct Handshake {
     conn: TcpStream,
     remote_id: SPeerID
 }
 
 impl Handshake {
-    pub fn initiate(recipient: SocketAddr, info: &UInfoHash, curr_id: &UPeerID, valid: |&UPeerID| -> bool) 
-        -> IoResult<Handshake> {
+    /// Initiates a handshake with the recipient sending the designated info hash and peer id.
+    /// If the response is malformed, the peer sends a different info hash, or the peer sends
+    /// us a peer id that we are already using, the handshake will fail.
+    ///
+    /// This is a blocking operation.
+    pub fn initiate<T>(recipient: SocketAddr, info: &UInfoHash, curr_id: &UPeerID, valid: T) 
+        -> IoResult<Handshake> where T: for<'a> Fn<(&'a UPeerID,), bool> {
         let mut conn = try!(TcpStream::connect(recipient));
         let mut handshake = [0u8; BTP_10_HANDSHAKE_LEN];
         
@@ -32,8 +38,11 @@ impl Handshake {
         )
     }
     
-    pub fn complete(mut initiater: TcpStream, info: &UInfoHash, curr_id: &UPeerID, valid: |&UPeerID| -> bool)
-        -> IoResult<Handshake> {
+    /// Completes a handshake that was initiated by the remote peer. If the handshake initiated
+    /// by the peer is malformed, the peer sent us a different info hash, or the peer sent us a
+    /// peer id that we are already using, the handshake will fail.
+    pub fn complete<T>(mut initiater: TcpStream, info: &UInfoHash, curr_id: &UPeerID, valid: T)
+        -> IoResult<Handshake> where T: for<'a> Fn<(&'a UPeerID,), bool> {
         let mut handshake = [0u8; BTP_10_HANDSHAKE_LEN];
         
         try!(initiater.read_at_least(handshake.len(), &mut handshake));
@@ -47,6 +56,8 @@ impl Handshake {
         )
     }
     
+    /// Consumes the handshake object and creates a peer object with the number of 
+    /// pieces in the current torrent set to num_pieces.
     pub fn into_peer(self, num_pieces: u32) -> Peer {
         Peer{ conn_buf: BufferedStream::new(self.conn),
             self_state: Default::default(),
@@ -55,8 +66,8 @@ impl Handshake {
             remote_pieces: Choice::Two(num_pieces) }
     }
     
-    fn verify_handshake(bytes: &[u8], curr_prot: &UBTP10, info: &UInfoHash, valid: |&UPeerID| -> bool)
-        -> IoResult<SPeerID> {
+    fn verify_handshake<T>(bytes: &[u8], curr_prot: &UBTP10, info: &UInfoHash, valid: T)
+        -> IoResult<SPeerID> where T: for<'a> Fn<(&'a UPeerID,), bool> {
         let mut buf = BufReader::new(bytes);
         
         let remote_length = try!(buf.read_u8());

@@ -1,19 +1,19 @@
-//! # The Rust Bittorrent Library
+//! # Rust Bittorrent Library
 //! This library is a dependency-free implementation of the bittorrent protocol
 //! and related extensions. Basic primitives are provided to allow you to connect
 //! to a tracker and communicate with other peers within a swarm.
 //!
 //! The interface for the library primitives allow you to build applications that
-//! leverage the protocol in ways that are not just limited to bittorrent client
-//! usage.
+//! leverage the protocol in a variety of ways that are not just limited to 
+//! bittorrent clients.
 //! # Examples
 //! Lets say you just want to scrape a tracker to gather statistics on a variety
 //! of torrent files. This is similar to what popular torrent hosting sites use
 //! to provide statistics to users about how many seeders and leechers a particular
-//! torrent file has at the moment in real time. You can get this information easily
+//! torrent file has at any moment in real time. You can get this information
 //! with the following snippet:
 //!
-//! ```no_run
+//! ```no_compile
 //! extern crate bittorrent;
 //! extern crate crypto;
 //! 
@@ -28,7 +28,7 @@
 //! fn main() {
 //!     let mut torr_file = File::open(&Path::new("tests/data/test.torrent"));
 //!     let torr_bytes = torr_file.read_to_end().unwrap();
-//!     let ben_val = Bencode::new(torr_bytes.as_slice()).unwrap();
+//!     let ben_val = Bencode::new(&torr_bytes[]).unwrap();
 //!     
 //!     let info_dict = ben_val.dict().unwrap().get("info")
 //!         .unwrap().encoded();
@@ -37,7 +37,7 @@
 //!     
 //!     let mut sha = Sha1::new();
 //!     let mut result = [0u8; 20];
-//!     sha.input(info_dict.as_slice());
+//!     sha.input(&info_dict[]);
 //!     sha.result(result.as_mut_slice());
 //!     
 //!     let mut tracker = UdpTracker::new(torrent.announce(), &result)
@@ -53,18 +53,18 @@
 //! }
 //! ```
 //!
-//! However, you will find utilizing all aspects of this library requires something
-//! like a traditional bittorrent client. In such a case, it is left up to the
-//! user to implement an efficient choking algorithm, peer selection heuristic/algorithm,
-//! as well as an end-game algorithm. All of these are required in order to be
-//! competitive with commercial client implementations.
+//! This is just a simple example, and if you are going to implement a full bittorrent
+//! client using this library, you will have to do a bit more work. For example,
+//! you are going to want to implement an efficient choking algorithm, some peer 
+//! selection heuristics, as well as an end-game algorithm. All of these are required 
+//! in order to be competitive with commercial client implementations.
 
 #![unstable]
 
-#![feature(macro_rules)]
-#![feature(phase)]
-
-#[phase(plugin)]
+#![allow(unstable)]
+#![feature(unboxed_closures)]
+#![feature(plugin)]
+#[plugin] #[no_link]
 
 extern crate regex_macros;
 extern crate regex;
