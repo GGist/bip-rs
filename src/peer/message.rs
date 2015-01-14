@@ -1,4 +1,7 @@
+//! Streaming data to and from the remote peer.
+
 use std::io::{IoResult, IoError, InvalidInput};
+use std::fmt::{String, Formatter, Result};
 use peer::block::{Block};
 
 const CHOKE_ID: u8        = 0;
@@ -27,7 +30,6 @@ pub type BlockOffset = u32;
 pub type BlockLength = u32;
 
 /// Represents a state change for one end of a connection.
-#[derive(Copy, Show)]
 pub enum StateChange {
     Choke,
     Unchoke,
@@ -35,8 +37,19 @@ pub enum StateChange {
     Uninterested
 }
 
+impl Copy for StateChange { }
+impl String for StateChange {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match *self {
+            StateChange::Choke        => f.write_str("Choke"),
+            StateChange::Unchoke      => f.write_str("Unchoke"),
+            StateChange::Interested   => f.write_str("Interested"),
+            StateChange::Uninterested => f.write_str("Uninterested")
+        }
+    }
+}
+
 /// Represents a message received from a remote peer.
-#[derive(Show)]
 pub enum PeerMessage {
     /// Message type has been hidden from client.
     Hidden,
@@ -55,6 +68,29 @@ pub enum PeerMessage {
     /// Peer has sent us a block of data that we requested that is too big to fit
     /// in the buffer provided by the client.
     BlockReceivedTooBig(PieceIndex, BlockOffset, Vec<u8>)
+}
+
+impl String for PeerMessage {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match *self {
+            PeerMessage::Hidden => 
+                f.write_str("Hidden"),
+            PeerMessage::StateUpdate(ref change) => 
+                f.write_fmt(format_args!("StateUpdate({})", change)),
+            PeerMessage::HaveUpdate(index) => 
+                f.write_fmt(format_args!("HaveUpdate({})", index)),
+            PeerMessage::BitfieldUpdate(..) => 
+                f.write_str("BitfieldUpdate(Vec<u8>)"),
+            PeerMessage::BlockRequest(piece, offset, len) => 
+                f.write_fmt(format_args!("BlockRequest({}, {}, {})", piece, offset, len)),
+            PeerMessage::CancelRequest(piece, offset, len) => 
+                f.write_fmt(format_args!("CancelRequest({}, {}, {})", piece, offset, len)),
+            PeerMessage::BlockReceived(piece, offset, len) => 
+                f.write_fmt(format_args!("BlockReceived({}, {}, {})", piece, offset, len)),
+            PeerMessage::BlockReceivedTooBig(piece, offset, _) => 
+                f.write_fmt(format_args!("BlockReceivedTooBig({}, {}, Vec<u8>)", piece, offset))
+        }
+    }
 }
 
 #[inline(always)]
@@ -117,13 +153,13 @@ impl<T: Reader> PeerReader for T {
                 }
                 message_action
             },
-            _               => { // Allow Unrecognize Message IDs
+            _ => { // Allow Unrecognize Message IDs
                 let block = block.call_mut((payload_len,));
                 
-                if payload_len <= block.len() {
-                    try!(self.read_at_least(payload_len as uint, block.as_mut_slice()));
+                if payload_len as usize <= block.as_slice().len() {
+                    try!(self.read_at_least(payload_len as usize, block.as_mut_slice()));
                 } else {
-                    try!(self.read_exact(payload_len as uint));
+                    try!(self.read_exact(payload_len as usize));
                 }
                 return Ok(PeerMessage::Hidden)
             }
@@ -151,7 +187,7 @@ impl<T: Reader> PeerReader for T {
             return Err(IoError{ kind: InvalidInput, desc: "Remote Peer Sent Invalid Length For Bitfield Message", detail: None})
         }
         
-        let bytes = try!(self.read_exact(payload_len as uint));
+        let bytes = try!(self.read_exact(payload_len as usize));
         
         Ok(PeerMessage::BitfieldUpdate(bytes))
     }
@@ -200,13 +236,12 @@ impl<T: Reader> PeerReader for T {
         
         let block_offset = try!(self.read_be_u32());
         let block_data_len = get_block_len(payload_len);
-        
-        if block_data_len as uint <= block_buffer.len() {
-            try!(self.read_at_least(block_data_len as uint, block_buffer));
+        if block_data_len as usize <= block_buffer.len() {
+            try!(self.read_at_least(block_data_len as usize, block_buffer));
             
             Ok(PeerMessage::BlockReceived(piece_index, block_offset, block_data_len))
         } else {
-            let block_data = try!(self.read_exact(block_data_len as uint));
+            let block_data = try!(self.read_exact(block_data_len as usize));
             
             Ok(PeerMessage::BlockReceivedTooBig(piece_index, block_offset, block_data))
         }
@@ -285,5 +320,381 @@ impl<T: Writer> PeerWriter for T {
         try!(self.write(block_data));
         
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{BufWriter, BufReader, SeekSet};
+    use peer::block::{Block};
+    use super::{PeerReader, PeerWriter, CHOKE_ID, UNCHOKE_ID, INTERESTED_ID, UNINTERESTED_ID, 
+        HAVE_ID, BITFIELD_ID, REQUEST_ID, BLOCK_ID, CANCEL_ID, StateChange, MESSAGE_ID_LEN,
+        PeerMessage, STATE_MESSAGE_LEN, HAVE_MESSAGE_LEN, REQUEST_MESSAGE_LEN, 
+        BASE_BLOCK_MESSAGE_LEN};
+    
+    const MESSAGE_LENGTH_LEN: u32 = 4;
+    
+    #[test]
+    fn positive_read_write_message() {
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + STATE_MESSAGE_LEN) as usize];
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_state(StateChange::Choke).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != STATE_MESSAGE_LEN ||
+           buf_reader.read_u8().unwrap() != CHOKE_ID ||
+           !buf_reader.eof() {
+            panic!("Write Failed For Single Message")
+        }
+        
+        // Verify Read
+        buf_reader.seek(0, SeekSet).unwrap();
+        let mut block = Block::with_capacity(0);
+        match buf_reader.read_message(0, &mut |_: u32| &mut block) {
+            Ok(PeerMessage::StateUpdate(change)) => {
+                match change {
+                    StateChange::Choke => (),
+                    _ => panic!("Read/Write Failed For Single Message")
+                }
+            },
+            e => panic!("Read Failed For Single Message: {}", e.unwrap())
+        }
+    }
+    
+        #[test]
+    fn positive_read_write_messages() {
+        let mut buffer = [0u8; (2 * MESSAGE_LENGTH_LEN + STATE_MESSAGE_LEN + REQUEST_MESSAGE_LEN) as usize];
+        let (piece, offset, len) = (0u32, 100u32, 50u32);
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_state(StateChange::Interested).unwrap();
+            buf_writer.write_request(piece, offset, len).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != STATE_MESSAGE_LEN ||
+           buf_reader.read_u8().unwrap() != INTERESTED_ID ||
+           buf_reader.read_be_u32().unwrap() != REQUEST_MESSAGE_LEN ||
+           buf_reader.read_u8().unwrap() != REQUEST_ID ||
+           buf_reader.read_be_u32().unwrap() != piece ||
+           buf_reader.read_be_u32().unwrap() != offset ||
+           buf_reader.read_be_u32().unwrap() != len ||
+           !buf_reader.eof() {
+            panic!("Write Failed For Multi Message")
+        }
+        
+        // Verify Read
+        buf_reader.seek(0, SeekSet).unwrap();
+        let mut block = Block::with_capacity(0);
+        match buf_reader.read_message(0, &mut |_: u32| &mut block) {
+            Ok(PeerMessage::StateUpdate(change)) => {
+                match change {
+                    StateChange::Interested => (),
+                    _ => panic!("Read Failed For Multi Message")
+                }
+            },
+            e => panic!("Read Failed For Multi Message: {}", e.unwrap())
+        };
+        match buf_reader.read_message(1, &mut |_: u32| &mut block) {
+            Ok(PeerMessage::BlockRequest(ret_piece, ret_offset, ret_len)) => {
+                if ret_piece != piece || ret_offset != offset || ret_len != len {
+                    panic!("Read Failed For Multi Message");
+                }
+            },
+            e => panic!("Read Failed For Multi Message: {}", e.unwrap())
+        };
+    }
+    
+    #[test]
+    fn positive_read_message_keep_alive() {
+        let buffer = [0u8, 0u8, 0u8, 0u8]; // Equal To A 32 Bit 0
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        let mut block = Block::with_capacity(0);
+        
+        match buf_reader.read_message(0, &mut |_: u32| &mut block) {
+            Ok(PeerMessage::Hidden) => (),
+            e => panic!("Read Failed For Keep Alive Message: {}", e.unwrap())
+        };
+    }
+    
+    #[test]
+    fn positive_read_unkown_message() {
+        let mut buffer = [0u8; 4 + 1 + 100];
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_be_u32(101).unwrap();
+            buf_writer.write_u8(255).unwrap(); // Some Invalid Action Id
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Reader shouldn't be writing to block, make block length 0
+        let mut block = Block::with_capacity(0); 
+        match buf_reader.read_message(0, &mut |_: u32| &mut block) {
+            Ok(PeerMessage::Hidden) => (),
+            e => panic!("Read Failed For Unknown Message: {}", e.unwrap())
+        };
+    }
+    
+    // Used To Test All State Message Reads And Writes
+    fn read_write_state(state_change: StateChange, state_id: u8) {
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + STATE_MESSAGE_LEN) as usize];
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_state(state_change).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != STATE_MESSAGE_LEN ||
+           buf_reader.read_u8().unwrap() != state_id ||
+           !buf_reader.eof() {
+            panic!("Write Failed For {} Message", state_change)
+        }
+        
+        // Verify Read
+        buf_reader.seek(0, SeekSet).unwrap();
+        let mut block = Block::with_capacity(0);
+        match buf_reader.read_message(0, &mut |_: u32| &mut block) {
+            Ok(PeerMessage::StateUpdate(change)) => {
+                // Make Sure Enum Passed In Matches Enum Passed Out
+                match (change, state_change) {
+                    (StateChange::Choke, StateChange::Choke) => (),
+                    (StateChange::Unchoke, StateChange::Unchoke) => (),
+                    (StateChange::Interested, StateChange::Interested) => (),
+                    (StateChange::Uninterested, StateChange::Uninterested) => (),
+                    _ => panic!("Read Failed For {} Message", state_change)
+                }
+            },
+            e => panic!("Read Failed For {} Message: {}", state_change, e.unwrap())
+        };
+    }
+    
+    #[test]
+    fn positive_read_write_choke() {
+        read_write_state(StateChange::Choke, CHOKE_ID);
+    }
+    
+    #[test]
+    fn positive_read_write_unchoke() {
+        read_write_state(StateChange::Unchoke, UNCHOKE_ID);
+    }
+    
+    #[test]
+    fn positive_read_write_interested() {
+        read_write_state(StateChange::Interested, INTERESTED_ID);
+    }
+    
+    #[test]
+    fn positive_read_write_uninterested() {
+        read_write_state(StateChange::Uninterested, UNINTERESTED_ID);
+    }
+    
+    #[test]
+    fn positive_read_write_have() {
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + HAVE_MESSAGE_LEN) as usize];
+        let piece = 50;
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_have(piece).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != HAVE_MESSAGE_LEN ||
+           buf_reader.read_u8().unwrap() != HAVE_ID ||
+           buf_reader.read_be_u32().unwrap() != piece ||
+           !buf_reader.eof() {
+            panic!("Write Failed For Have Message")
+        }
+        
+        // Verify Read
+        buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
+        match buf_reader.read_have(HAVE_MESSAGE_LEN - MESSAGE_ID_LEN, 51) {
+            Ok(PeerMessage::HaveUpdate(ret_piece)) if ret_piece == piece => (),
+            e => panic!("Read Failed For Have Message: {}", e.unwrap())
+        };
+    }
+    
+    #[test]
+    fn positive_read_write_bitfield() {
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN + 2) as usize];
+        let (first_byte, second_byte) = (0x7F, 0xFE); // All Bits Set Except First And Last
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_bitfield([first_byte, second_byte].as_slice()).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != MESSAGE_ID_LEN + 2 ||
+           buf_reader.read_u8().unwrap() != BITFIELD_ID ||
+           buf_reader.read_u8().unwrap() != first_byte ||
+           buf_reader.read_u8().unwrap() != second_byte ||
+           !buf_reader.eof() {
+            panic!("Write Failed For Bitfield Message")
+        }
+        
+        // Verify Read
+        buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
+        // Testing 8 + 1 Edge Case Requires Two Bytes For 9 Bits
+        match buf_reader.read_bitfield(2, 8 + 1) {
+            Ok(PeerMessage::BitfieldUpdate(bytes)) => {
+                if bytes[0] != first_byte || bytes[1] != second_byte {
+                    panic!("Read Failed For Bitfield Message")
+                }
+            },
+            e => panic!("Read Failed For Bitfield Message: {}", e.unwrap())
+        };
+    }
+    
+    // Used For Request And Cancel Messages
+    fn write_request_or_cancel_message(message_id: u8, piece: u32, offset: u32, len: u32) -> [u8; (MESSAGE_LENGTH_LEN + REQUEST_MESSAGE_LEN) as usize] {
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + REQUEST_MESSAGE_LEN) as usize];
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            
+            if message_id == REQUEST_ID {
+                buf_writer.write_request(piece, offset, len).unwrap();
+            } else if message_id == CANCEL_ID {
+                buf_writer.write_cancel(piece, offset, len).unwrap();
+            } else {
+                panic!("Function Cannot Check Message With ID {}", message_id)
+            }
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != REQUEST_MESSAGE_LEN ||
+           buf_reader.read_u8().unwrap() != message_id ||
+           buf_reader.read_be_u32().unwrap() != piece ||
+           buf_reader.read_be_u32().unwrap() != offset ||
+           buf_reader.read_be_u32().unwrap() != len ||
+           !buf_reader.eof() {
+            panic!("Write Failed For Message")
+        }
+        
+        buffer
+    }
+    
+    #[test]
+    fn positive_read_write_request() {
+        // Verify Write And Get Buffer
+        let (piece, offset, len) = (0, 500, 500);
+        let buffer = write_request_or_cancel_message(REQUEST_ID, piece, offset, len);
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Read
+        buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
+        match buf_reader.read_request(REQUEST_MESSAGE_LEN - MESSAGE_ID_LEN, piece + 500) {
+            Ok(PeerMessage::BlockRequest(ret_piece, ret_offset, ret_len)) => {
+                if piece != ret_piece || offset != ret_offset || len != ret_len {
+                    panic!("Read Failed For Request Message")
+                }
+            },
+            e => panic!("Read Failed For Request Message: {}", e.unwrap())
+        };
+    }
+    
+    #[test]
+    fn positive_read_write_cancel() {
+        // Verify Write And Get Buffer
+        let (piece, offset, len) = (100, 500, 500);
+        let buffer = write_request_or_cancel_message(CANCEL_ID, piece, offset, len);
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Read
+        buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
+        match buf_reader.read_cancel(REQUEST_MESSAGE_LEN - MESSAGE_ID_LEN, piece + 1) {
+            Ok(PeerMessage::CancelRequest(ret_piece, ret_offset, ret_len)) => {
+                if piece != ret_piece || offset != ret_offset || len != ret_len {
+                    panic!("Read Failed For Cancel Message")
+                }
+            },
+            e => panic!("Read Failed For Cancel Message: {}", e.unwrap())
+        };
+    }
+    
+    #[test]
+    fn positive_read_write_block() {
+        const BLOCK_LEN: u32 = 4;
+        
+        let (piece, offset) = (1, 20);
+        let payload = [0xFE, 0x80, 0x92, 0xBA];
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + BASE_BLOCK_MESSAGE_LEN + BLOCK_LEN) as usize];
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_block(piece, offset, payload.as_slice()).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != BASE_BLOCK_MESSAGE_LEN + BLOCK_LEN ||
+           buf_reader.read_u8().unwrap() != BLOCK_ID ||
+           buf_reader.read_be_u32().unwrap() != piece ||
+           buf_reader.read_be_u32().unwrap() != offset ||
+           buf_reader.read_u8().unwrap() != payload[0] || buf_reader.read_u8().unwrap() != payload[1] ||
+           buf_reader.read_u8().unwrap() != payload[2] || buf_reader.read_u8().unwrap() != payload[3] {
+            panic!("Write Failed For Block Message")
+        }
+        
+        // Verify Read
+        let mut block = Block::with_capacity(BLOCK_LEN);
+        buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
+        match buf_reader.read_block(BASE_BLOCK_MESSAGE_LEN + BLOCK_LEN - MESSAGE_ID_LEN, piece + 1, block.as_mut_slice()) {
+            Ok(PeerMessage::BlockReceived(ret_piece, ret_offset, ret_len)) => {
+                let ret_block = block.as_slice();
+                if ret_piece != piece || ret_offset != offset || ret_len != BLOCK_LEN {
+                    panic!("Read Failed For Block Message (Bad Payload Info)")
+                } else if ret_block[0] != payload[0] || ret_block[1] != payload[1] || 
+                          ret_block[2] != payload[2] || ret_block[3] != payload[3] {
+                    panic!("Read Failed For Block Message (Bad Payload)")
+                }
+            },
+            e => panic!("Read Failed For Block Message: {}", e.unwrap())
+        }
+    }
+    
+    #[test]
+    fn positive_read_block_big() {
+        const BLOCK_LEN: u32 = 5;
+        
+        let (piece, offset) = (1, 20);
+        let payload = [0xFE, 0x80, 0x92, 0xBA, 0x00];
+        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + BASE_BLOCK_MESSAGE_LEN + BLOCK_LEN) as usize];
+        {
+            let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
+            buf_writer.write_block(piece, offset, payload.as_slice()).unwrap();
+        }
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        // Verify Write
+        if buf_reader.read_be_u32().unwrap() != BASE_BLOCK_MESSAGE_LEN + BLOCK_LEN ||
+           buf_reader.read_u8().unwrap() != BLOCK_ID ||
+           buf_reader.read_be_u32().unwrap() != piece ||
+           buf_reader.read_be_u32().unwrap() != offset ||
+           buf_reader.read_u8().unwrap() != payload[0] || buf_reader.read_u8().unwrap() != payload[1] ||
+           buf_reader.read_u8().unwrap() != payload[2] || buf_reader.read_u8().unwrap() != payload[3] {
+            panic!("Write Failed For Block Big Message")
+        }
+        
+        // Verify Read
+        let mut block = Block::with_capacity(BLOCK_LEN - 1);
+        buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
+        match buf_reader.read_block(BASE_BLOCK_MESSAGE_LEN + BLOCK_LEN - MESSAGE_ID_LEN, piece + 1, block.as_mut_slice()) {
+            Ok(PeerMessage::BlockReceivedTooBig(ret_piece, ret_offset, ret_data)) => {
+                if ret_piece != piece || ret_offset != offset || ret_data.len() != BLOCK_LEN as usize {
+                    panic!("Read Failed For Block Message (Bad Payload Info)")
+                } else if ret_data[0] != payload[0] || ret_data[1] != payload[1] || 
+                          ret_data[2] != payload[2] || ret_data[3] != payload[3] || 
+                          ret_data[4] != payload[4] {
+                    panic!("Read Failed For Block Big Message (Bad Payload)")
+                }
+            },
+            e => panic!("Read Failed For Block Big Message: {}", e.unwrap())
+        }
     }
 }

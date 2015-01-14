@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate bittorrent;
 extern crate crypto;
 

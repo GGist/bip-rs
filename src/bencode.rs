@@ -24,9 +24,13 @@ const BYTE_LEN_END: char = ':';
 /// Structure representing bencoded data.
 #[derive(Show)]
 pub enum Bencode {
+    /// Bencode integer.
     Int(i64),
+    /// Bencode bytes which may be convertable to a UTF-8 string.
     Bytes(Vec<u8>),
+    /// Bencode list
     List(Vec<Bencode>),
+    /// Bencode dictionary
     Dict(HashMap<String, Bencode>)
 }
 

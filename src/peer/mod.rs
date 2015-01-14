@@ -1,13 +1,12 @@
 //! Facilitates communication with a remote peer.
 
-use std::u32;
 use std::default::{Default};
 use std::collections::{Bitv};
 use std::io::net::tcp::{TcpStream};
-use std::io::{IoResult, IoError, InvalidInput, BufferedStream, TimedOut, Closed};
+use std::io::{IoResult, IoError, BufferedStream, TimedOut, Closed};
 use peer::message::{BlockLength, PeerMessage, PeerReader, PeerWriter, StateChange, PieceIndex, BlockOffset};
 use peer::block::{Block};
-use util::{UPeerID, SPeerID, Choice};
+use util::{SPeerID, Choice};
 
 pub mod block;
 pub mod handshake;
@@ -16,9 +15,10 @@ pub mod message;
 const ASYNC_READ_TIMEOUT: u64 = 1;
 
 /// Represents the state associated with one side of a peer connection.
+#[allow(dead_code)]
 pub struct PeerState {
-    choked:     bool,
-    interested: bool
+    pub choked:     bool,
+    pub interested: bool
 }
 
 impl Copy for PeerState { }
@@ -88,7 +88,10 @@ impl Peer {
     
     /// Sends a message to the remote peer telling them that we are changing their state.
     pub fn change_state(&mut self, state: StateChange) -> IoResult<()> {
-        try!(self.conn_buf.write_state(state));
+        match self.conn_buf.write_state(state) {
+            Err(e) => { try!(self.close_stream()); return Err(e) },
+            Ok(_)  => ()
+        };
         
         self.conn_buf.flush()
     }
@@ -96,7 +99,10 @@ impl Peer {
     /// Sends a message to the remote peer telling them that we have successfully
     /// downloaded and verified the hash of piece.
     pub fn notify_have(&mut self, piece: PieceIndex) -> IoResult<()> {
-        try!(self.conn_buf.write_have(piece));
+        match self.conn_buf.write_have(piece) {
+            Err(e) => { try!(self.close_stream()); return Err(e) },
+            Ok(_)  => ()
+        };
         
         self.conn_buf.flush()
     }
@@ -107,7 +113,10 @@ impl Peer {
     /// To save bandwidth, partial bitfields combined with have messages to fill in
     /// spread out piece indices are generally allowed.
     pub fn notify_bitfield(&mut self, bitfield: &[u8]) -> IoResult<()> {
-        try!(self.conn_buf.write_bitfield(bitfield));
+        match self.conn_buf.write_bitfield(bitfield) {
+            Err(e) => { try!(self.close_stream()); return Err(e) },
+            Ok(_)  => ()
+        };
         
         self.conn_buf.flush()
     }
@@ -118,7 +127,10 @@ impl Peer {
     /// This is a data-oriented message and should not be sent if the peer is choking 
     /// us (local end of connection has choked set to true).
     pub fn request_block(&mut self, piece: PieceIndex, offset: BlockOffset, len: BlockLength) -> IoResult<()> {
-        try!(self.conn_buf.write_request(piece, offset, len));
+        match self.conn_buf.write_request(piece, offset, len) {
+            Err(e) => { try!(self.close_stream()); return Err(e) },
+            Ok(_)  => ()
+        };
         
         self.conn_buf.flush()
     }
@@ -129,7 +141,10 @@ impl Peer {
     /// This is a data-oriented message and should not be sent if the peer is choking 
     /// us (local end of connection has choked set to true).
     pub fn cancel_block(&mut self, piece: PieceIndex, offset: BlockOffset, len: BlockLength) -> IoResult<()> {
-        try!(self.conn_buf.write_cancel(piece, offset, len));
+        match self.conn_buf.write_cancel(piece, offset, len) {
+            Err(e) => { try!(self.close_stream()); return Err(e) },
+            Ok(_)  => ()
+        };
         
         self.conn_buf.flush()
     }
@@ -140,7 +155,10 @@ impl Peer {
     /// This is a data-oriented message and should not be sent if the peer is choking 
     /// us (local end of connection has choked set to true).
     pub fn send_block(&mut self, piece: PieceIndex, offset: BlockOffset, block_data: &[u8]) -> IoResult<()> {
-        try!(self.conn_buf.write_block(piece, offset, block_data));
+        match self.conn_buf.write_block(piece, offset, block_data) {
+            Err(e) => { try!(self.close_stream()); return Err(e) },
+            Ok(_)  => ()
+        };
         
         self.conn_buf.flush()
     }

@@ -12,7 +12,7 @@ after_success:
     - git clone --quiet --branch=gh-pages https://${GH_TOKEN}@github.com/GGist/bittorrent-rs gh-pages > /dev/null
     - cd gh-pages
     - mv ./index.html ../target/doc
-    - rm ./*
+    - rm -rf ./*
     - cp -rf ../target/doc/* .
     - git add -A
     - git commit -m "Latest rustdoc on successful travis build $TRAVIS_BUILD_NUMBER auto-pushed to gh-pages"

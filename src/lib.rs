@@ -13,10 +13,12 @@
 //! torrent file has at any moment in real time. You can get this information
 //! with the following snippet:
 //!
-//! ```no_compile
+//! ```no_run
+//! #![allow(unstable)]
+//!
 //! extern crate bittorrent;
 //! extern crate crypto;
-//! 
+//!
 //! use std::io::fs::{File};
 //! use crypto::sha1::{Sha1};
 //! use crypto::digest::{Digest};

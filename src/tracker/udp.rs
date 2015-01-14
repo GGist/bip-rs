@@ -14,7 +14,7 @@ use std::io::{IoResult, BufWriter, BufReader, ConnectionFailed, EndOfFile, Other
 use util;
 use tracker::{AnnounceInfo, ScrapeInfo, Tracker};
 
-static MAX_ATTEMPTS: uint = 8;
+static MAX_ATTEMPTS: usize = 8;
 
 pub struct UdpTracker {
     conn: UdpSocket,
@@ -142,7 +142,7 @@ impl UdpTracker {
         let interval = try!(recv_reader.read_be_i32()) as i64;
         let leechers = try!(recv_reader.read_be_i32());
         let seeders = try!(recv_reader.read_be_i32());
-        let mut peers: Vec<SocketAddr> = Vec::with_capacity(leechers as uint + seeders as uint);
+        let mut peers: Vec<SocketAddr> = Vec::with_capacity(leechers as usize + seeders as usize);
         
         for _ in range(0, seeders + leechers) {
             peers.push(SocketAddr{ ip: Ipv4Addr(try!(recv_reader.read_u8()), 
@@ -162,7 +162,7 @@ impl UdpTracker {
 /// to wait for a response from the server before failing.
 ///
 /// This is a blocking operation.
-fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [u8], attempts: uint) -> IoResult<uint> {
+fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [u8], attempts: usize) -> IoResult<usize> {
     let mut attempt = 0;
 
     let mut bytes_read = 0;
@@ -193,7 +193,7 @@ fn send_request(udp: &mut UdpSocket, dst: &SocketAddr, send: &[u8], recv: &mut [
 /// spoofing later on. This connection id is valid until the receiver is activated.
 ///
 /// This is a blocking operation.
-fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: uint) -> IoResult<(i64, Receiver<()>)> {
+fn connect_request(udp: &mut UdpSocket, dst: &SocketAddr, attempts: usize) -> IoResult<(i64, Receiver<()>)> {
     let mut send_bytes = [0u8; 16];
     let send_trans_id = rand::random::<i32>();
 
@@ -272,20 +272,20 @@ impl Tracker for UdpTracker {
         Ok(ScrapeInfo{ leechers: leechers, seeders: seeders, downloads: downloads})
     }
 
-    fn start_announce(&mut self, total_size: uint) -> IoResult<AnnounceInfo> {
+    fn start_announce(&mut self, total_size: usize) -> IoResult<AnnounceInfo> {
         self.announce(0, total_size as i64, 0, 0, 6882)
     }
 
-    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<AnnounceInfo> {
+    fn update_announce(&mut self, total_down: usize, total_left: usize, total_up: usize) -> IoResult<AnnounceInfo> {
         self.announce(total_down as i64, total_left as i64, total_up as i64, 2, 6882)
     }
 
-    fn stop_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<()> {
+    fn stop_announce(&mut self, total_down: usize, total_left: usize, total_up: usize) -> IoResult<()> {
         try!(self.announce(total_down as i64, total_left as i64, total_up as i64, 3, 6882));
         Ok(())
     }
 
-    fn complete_announce(&mut self, total_bytes: uint) -> IoResult<()> {
+    fn complete_announce(&mut self, total_bytes: usize) -> IoResult<()> {
         try!(self.announce(total_bytes as i64, 0, total_bytes as i64, 1, 6882));
         Ok(())
     }

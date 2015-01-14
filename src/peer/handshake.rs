@@ -1,3 +1,5 @@
+//! Establishing a secure connection with a peer.
+
 use std::io::{BufReader, BufWriter, BufferedStream, IoResult, IoError, Closed};
 use std::default::{Default};
 use std::io::net::tcp::{TcpStream};
@@ -8,7 +10,7 @@ use util::{self, SPeerID, UPeerID, UInfoHash, UBTP10, Choice};
 
 // TODO: Need To Add A One Time Check Somewhere That This Is Valid ASCII
 const BTP_10_PROTOCOL: &'static str = "BitTorrent protocol";
-const BTP_10_HANDSHAKE_LEN: uint = 68;
+const BTP_10_HANDSHAKE_LEN: usize = 68;
 
 /// A struct representing a handshake that has successfully taken place.
 pub struct Handshake {
@@ -16,6 +18,7 @@ pub struct Handshake {
     remote_id: SPeerID
 }
 
+/// The entry point for connecting with remote peers.
 impl Handshake {
     /// Initiates a handshake with the recipient sending the designated info hash and peer id.
     /// If the response is malformed, the peer sends a different info hash, or the peer sends
@@ -71,7 +74,7 @@ impl Handshake {
         let mut buf = BufReader::new(bytes);
         
         let remote_length = try!(buf.read_u8());
-        if remote_length as uint != curr_prot.len() {
+        if remote_length as usize != curr_prot.len() {
             return Err(IoError{ kind: Closed, desc: "Invalid Handshake Length", detail: None })
         }
         

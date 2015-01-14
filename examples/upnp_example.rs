@@ -1,3 +1,5 @@
+#![allow(unstable)]
+
 extern crate bittorrent;
 
 use std::io::net::ip::{SocketAddr, Ipv4Addr};

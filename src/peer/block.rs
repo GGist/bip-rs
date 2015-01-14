@@ -1,3 +1,5 @@
+//! Unit of data being sent from a remote peer.
+
 use peer::message::{PieceIndex, BlockOffset, BlockLength};
 
 /// Represents a block of data within a piece. Many blocks make up a piece, many
@@ -14,7 +16,12 @@ pub struct Block {
 impl Block {
     /// Creates a block with capacity size.
     pub fn with_capacity(capacity: BlockLength) -> Block {
-        Block{ data: Vec::with_capacity(capacity as usize), active: false, 
+        let mut data_storage = Vec::with_capacity(capacity as usize);
+        
+        // Changing Vector's Length Equal To It's Capacity Should Be Safe
+        unsafe{ data_storage.set_len(capacity as usize) }
+        
+        Block{ data: data_storage, active: false, 
             piece_index: -1, block_offset: -1, block_len: -1 }
     }
     
@@ -48,12 +55,12 @@ impl Block {
     }
     
     /// Returns the byte offset within the piece that this block belongs to.
-    pub fn offset(&self) -> BlockOffset {
+    pub fn block_offset(&self) -> BlockOffset {
         self.block_offset
     }
     
     /// Returns the block length for the current block.
-    pub fn len(&self) -> BlockLength {
+    pub fn block_len(&self) -> BlockLength {
         self.block_len
     }
 }

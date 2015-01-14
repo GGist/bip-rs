@@ -6,6 +6,7 @@ use std::io::net::ip::{SocketAddr, IpAddr};
 
 pub mod udp;
 
+/// Statistics for a specific torrent.
 #[derive(Copy)]
 pub struct ScrapeInfo {
     pub leechers: i32,
@@ -13,6 +14,7 @@ pub struct ScrapeInfo {
     pub downloads: i32
 }
 
+/// Information pertaining to the swarm we are in.
 pub struct AnnounceInfo {
     pub interval: Receiver<()>,
     pub leechers: i32,
@@ -23,6 +25,7 @@ pub struct AnnounceInfo {
     // has most likely, not changed or added/removed a few peers.
 }
 
+/// Interface for communicating with an generic tracker.
 pub trait Tracker {
     /// Returns the local ip address that is being used to communicate with the tracker.
     fn local_ip(&mut self) -> IoResult<IpAddr>;
@@ -39,26 +42,26 @@ pub trait Tracker {
     /// should be sent with update_announce.
     ///
     /// This is a blocking operation.
-    fn start_announce(&mut self, total_bytes: uint) -> IoResult<AnnounceInfo>;
+    fn start_announce(&mut self, total_bytes: usize) -> IoResult<AnnounceInfo>;
     
     /// Sends an announce request to the tracker signalling an update event. This request
     /// acts as a heartbeat so that the tracker knows we are still connected and wanting
     /// to be kept in the swarm.
     ///
     /// This is a blocking operation.
-    fn update_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<AnnounceInfo>;
+    fn update_announce(&mut self, total_down: usize, total_left: usize, total_up: usize) -> IoResult<AnnounceInfo>;
     
     /// Sends an announce request to the tracker signalling a stop event. This request
     /// exists to let the tracker know that we are gracefully shutting down and that
     /// it should remove us from the swarm.
     ///
     /// This is a blocking operation.
-    fn stop_announce(&mut self, total_down: uint, total_left: uint, total_up: uint) -> IoResult<()>;
+    fn stop_announce(&mut self, total_down: usize, total_left: usize, total_up: usize) -> IoResult<()>;
     
     /// Sends an announce request to the tracker signalling a completed event. This request
     /// exists to let the tracker know that we have completed our download TEST TO CHECK
     /// WHAT EXACTLY THIS MAKES THE TRACKER DO.
     ///
     /// This is a blocking operation.
-    fn complete_announce(&mut self, total_bytes: uint) -> IoResult<()>;
+    fn complete_announce(&mut self, total_bytes: usize) -> IoResult<()>;
 }

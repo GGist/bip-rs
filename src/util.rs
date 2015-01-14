@@ -8,15 +8,15 @@ use std::io::net::addrinfo;
 use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr, Ipv6Addr};
 
-pub const PEER_ID_LEN: uint = 20;
+pub const PEER_ID_LEN: usize = 20;
 pub type SPeerID = [u8; PEER_ID_LEN];
 pub type UPeerID = [u8];
 
-pub const INFO_HASH_LEN: uint = 20;
+pub const INFO_HASH_LEN: usize = 20;
 pub type SInfoHash = [u8; INFO_HASH_LEN];
 pub type UInfoHash = [u8];
 
-pub const BTP_10_LEN: uint = 19;
+pub const BTP_10_LEN: usize = 19;
 pub type SBTP10 = [u8; BTP_10_LEN];
 pub type UBTP10 = [u8];
 
@@ -54,7 +54,7 @@ pub fn get_net_addrs() -> IoResult<Vec<IpAddr>> {
 /// 
 /// If the connection is unsuccessful, it will try again up to (attempts - 1)
 /// times, incrementing the port for each attempt.
-pub fn get_udp_sock(mut addr: SocketAddr, mut attempts: uint) -> IoResult<UdpSocket> {
+pub fn get_udp_sock(mut addr: SocketAddr, mut attempts: usize) -> IoResult<UdpSocket> {
     let mut udp_socket = UdpSocket::bind(addr);
     attempts -= 1;
     
@@ -73,8 +73,8 @@ pub fn get_udp_sock(mut addr: SocketAddr, mut attempts: uint) -> IoResult<UdpSoc
 
 /// The standard wait algorithm defined in the UDP Tracker Protocol. Returned value
 /// is in seconds.
-pub fn get_udp_wait(attempt: uint) -> u64 {
-    (15 * 2i.pow(attempt)) as u64
+pub fn get_udp_wait(attempt: usize) -> u64 {
+    (15 * 2is.pow(attempt)) as u64
 }
 
 /// Generates a peer id from a base identifier followed by random characters.

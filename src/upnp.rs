@@ -41,7 +41,7 @@ s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">
 </s:Envelope>";
 // Ignores Replace Identifiers And Escape Characters 
 // (Including Implicit Newline Escape)
-static BASE_CONTENT_LENGTH: uint = 216;
+static BASE_CONTENT_LENGTH: usize = 216;
 
 // UPnPIntf Classifiers
 static ROOT_REGEX: Regex = regex!(r"upnp:(rootdevice)");
@@ -55,7 +55,7 @@ static USN_REGEX: Regex = regex!(r"(?i)USN: *([^\r\n]+)");
 static LOCATION_REGEX: Regex = regex!(r"(?i)Location: *([^\r\n]+)");
 
 /// A tuple consisting of start and end position.
-pub type StrPos = (uint, uint);
+pub type StrPos = (usize, usize);
 
 /// Type used to represent a service description. Service actions can be viewed
 /// as well as related in and out parameters and service state variables.
@@ -425,18 +425,6 @@ impl UPnPIntf {
             _ => Err(util::get_error(InvalidInput, "UPnPIntf Is Not A Service"))
         }
     }
-    
-    /// Get the services that this device exposes.
-    ///
-    /// Note that the services returned are the immediate services that this device
-    /// exposes. Any services that are nested within devices within this device will
-    /// not be returned. An error will always be returned if this is called on an
-    /// object that is of type service.
-    ///
-    /// This is a blocking operation.
-    //pub fn service_descs(&self) -> IoResult<Vec<ServiceDesc>> {
-        
-    //}
 }
 
 /// Takes ownership of a vector of String objects that correspond to M-Search respones
@@ -535,7 +523,7 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPIntf>> {
 // TODO: Make this more robust by stuffing the text into the current String object
 // until the \r\n\r\n is reached (this could span multiple receive requests) in case
 // our static buffer is not big enough (rare case).
-fn send_search(from_addr: SocketAddr, timeout: uint, request: &str) -> IoResult<Vec<String>> {
+fn send_search(from_addr: SocketAddr, timeout: usize, request: &str) -> IoResult<Vec<String>> {
     let mut udp_sock = try!(UdpSocket::bind(from_addr));
     
     udp_sock.set_read_timeout(Some(timeout as u64));
