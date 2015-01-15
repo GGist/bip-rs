@@ -108,6 +108,11 @@ fn get_block_len(payload_len: u32) -> u32 {
     payload_len - get_payload_len(BASE_BLOCK_MESSAGE_LEN)
 }
 
+/// Trait for reading Peer Wire Protocol messages. 
+///
+/// Unlike the corresponding PeerWriter, the methods defined here should do bounds
+/// checking on both message lengths and piece indices in order to combat against
+/// buffer overflow attacks.
 pub trait PeerReader {
     fn read_message<'a, F>(&mut self, max_pieces: u32, block: &mut F) -> IoResult<PeerMessage>
         where F: FnMut<(BlockLength,), &'a mut Block>;
@@ -248,6 +253,10 @@ impl<T: Reader> PeerReader for T {
     }
 }
 
+/// Trait for writing Peer Wire Protocol messages.
+///
+/// No piece validation will be done here, all pieces passed in are assumed to be
+/// within bounds.
 pub trait PeerWriter {
     fn write_state(&mut self, state: StateChange) -> IoResult<()>;
     
@@ -431,7 +440,7 @@ mod tests {
         }
         let mut buf_reader = BufReader::new(buffer.as_slice());
         
-        // Reader shouldn't be writing to block, make block length 0
+        // Force reader to discard contents (don't write to block)
         let mut block = Block::with_capacity(0); 
         match buf_reader.read_message(0, &mut |_: u32| &mut block) {
             Ok(PeerMessage::Hidden) => (),
@@ -493,10 +502,8 @@ mod tests {
         read_write_state(StateChange::Uninterested, UNINTERESTED_ID);
     }
     
-    #[test]
-    fn positive_read_write_have() {
+    fn read_write_have(piece: u32, max_pieces: u32) {
         let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + HAVE_MESSAGE_LEN) as usize];
-        let piece = 50;
         {
             let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
             buf_writer.write_have(piece).unwrap();
@@ -513,42 +520,89 @@ mod tests {
         
         // Verify Read
         buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
-        match buf_reader.read_have(HAVE_MESSAGE_LEN - MESSAGE_ID_LEN, 51) {
+        match buf_reader.read_have(HAVE_MESSAGE_LEN - MESSAGE_ID_LEN, max_pieces) {
             Ok(PeerMessage::HaveUpdate(ret_piece)) if ret_piece == piece => (),
             e => panic!("Read Failed For Have Message: {}", e.unwrap())
         };
     }
     
     #[test]
-    fn positive_read_write_bitfield() {
-        let mut buffer = [0u8; (MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN + 2) as usize];
-        let (first_byte, second_byte) = (0x7F, 0xFE); // All Bits Set Except First And Last
+    fn positive_read_write_have() {
+        // First Piece
+        read_write_have(0, 100);
+        // Last Piece
+        read_write_have(99, 100);
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_read_write() {
+        // Out Of Bounds Piece
+        read_write_have(100, 0);
+        // Out Of Bounds (Off By 1) Piece
+        read_write_have(100, 100);
+        // Out Of Bounds (Off By 2) Piece
+        read_write_have(101, 100);
+    }
+    
+    fn read_write_bitfield(bytes: &[u8], max_pieces: u32) {
+        let buffer_length: usize = (MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as usize + bytes.len();
+        let mut buffer = Vec::with_capacity(buffer_length);
+        
+        unsafe{ buffer.set_len(buffer_length); }
         {
             let mut buf_writer = BufWriter::new(buffer.as_mut_slice());
-            buf_writer.write_bitfield([first_byte, second_byte].as_slice()).unwrap();
+            buf_writer.write_bitfield(bytes).unwrap();
         }
         let mut buf_reader = BufReader::new(buffer.as_slice());
         
         // Verify Write
-        if buf_reader.read_be_u32().unwrap() != MESSAGE_ID_LEN + 2 ||
-           buf_reader.read_u8().unwrap() != BITFIELD_ID ||
-           buf_reader.read_u8().unwrap() != first_byte ||
-           buf_reader.read_u8().unwrap() != second_byte ||
-           !buf_reader.eof() {
+        if buf_reader.read_be_u32().unwrap() != MESSAGE_ID_LEN + bytes.len() as u32 ||
+           buf_reader.read_u8().unwrap() != BITFIELD_ID {
             panic!("Write Failed For Bitfield Message")
         }
-        
+        for i in bytes.iter() {
+            if *i != buf_reader.read_u8().unwrap() { 
+                panic!("Write Failed For Bitfield Message (Payload)")
+            }
+        }
+        if !buf_reader.eof() {
+            panic!("Write Failed For Bitfield Message (Extra Bytes)")
+        }
+
         // Verify Read
         buf_reader.seek((MESSAGE_LENGTH_LEN + MESSAGE_ID_LEN) as i64, SeekSet).unwrap();
-        // Testing 8 + 1 Edge Case Requires Two Bytes For 9 Bits
-        match buf_reader.read_bitfield(2, 8 + 1) {
-            Ok(PeerMessage::BitfieldUpdate(bytes)) => {
-                if bytes[0] != first_byte || bytes[1] != second_byte {
-                    panic!("Read Failed For Bitfield Message")
+        match buf_reader.read_bitfield(bytes.len() as u32, max_pieces) {
+            Ok(PeerMessage::BitfieldUpdate(ret_bytes)) => {
+                for (a, b) in ret_bytes.iter().zip(bytes.iter()) {
+                    if a != b {
+                        panic!("Write Failed For Bitfield Message (Payload)")
+                    }
                 }
             },
             e => panic!("Read Failed For Bitfield Message: {}", e.unwrap())
         };
+    }
+    
+    #[test]
+    fn positive_read_write_bitfield() {
+        // Full Bitfield
+        read_write_bitfield([0xEE, 0xA8, 0xBC, 0x44, 0x23, 0x00].as_slice(), 6 * 8);
+        // Full Bitfield With 1 Valid Bit In Last Byte
+        read_write_bitfield([0xEE, 0xA8, 0xBC, 0x44, 0x23, 0x00].as_slice(), 6 * 8 - 7);
+        // Partial Bitfield
+        read_write_bitfield([0xEE, 0xA8, 0xBC, 0x44, 0x23, 0x00].as_slice(), 10 * 8);
+        // Partial Bitfield With 1 Valid Bit In Last Byte
+        read_write_bitfield([0xEE, 0xA8, 0xBC, 0x44, 0x23, 0x00].as_slice(), 10 * 8 - 7);
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_read_write_bitfield() {
+        // Extra Byte
+        read_write_bitfield([0xEE, 0xA8, 0xBC, 0x44, 0x23, 0x00].as_slice(), 5 * 8);
+        // Extra Bytes
+        read_write_bitfield([0xEE, 0xA8, 0xBC, 0x44, 0x23, 0x00].as_slice(), 0 * 8);
     }
     
     // Used For Request And Cancel Messages

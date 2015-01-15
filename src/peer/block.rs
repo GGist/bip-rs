@@ -19,7 +19,7 @@ impl Block {
         let mut data_storage = Vec::with_capacity(capacity as usize);
         
         // Changing Vector's Length Equal To It's Capacity Should Be Safe
-        unsafe{ data_storage.set_len(capacity as usize) }
+        unsafe{ data_storage.set_len(capacity as usize); }
         
         Block{ data: data_storage, active: false, 
             piece_index: -1, block_offset: -1, block_len: -1 }
