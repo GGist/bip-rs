@@ -121,3 +121,133 @@ impl Handshake {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::{BytesContainer};
+    use std::io::{BufReader};
+    use super::{Handshake, BTP_10_PROTOCOL, BTP_10_HANDSHAKE_LEN};
+
+    const VALID_INFO_HASH_ONE: &'static [u8] = b"\xcf\x23\xdf\x22\x07\xd9\x9a\x74\xfb\xe1\x69\xe3\xeb\xa0\x35\xe6\x33\xb6\x5d\x94";
+    const VALID_INFO_HASH_TWO: &'static [u8] = b"\xd0\xd1\x4c\x92\x6e\x6e\x99\x76\x1a\x2f\xdc\xff\x27\xb4\x03\xd9\x63\x76\xef\xf6";
+    
+    const VALID_PEER_ID: &'static [u8] = b"bittorrent-rs_a52dez";
+    
+    #[test]
+    fn positive_write_handshake() {
+        let mut buffer = [0u8; BTP_10_HANDSHAKE_LEN];
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+        
+        let mut buf_reader = BufReader::new(buffer.as_slice());
+        
+        if buf_reader.read_u8().unwrap() as usize != BTP_10_PROTOCOL.len() {
+            panic!("Write Failed For Name Length")
+        }
+        
+        let protocol_bytes = buf_reader.read_exact(BTP_10_PROTOCOL.len()).unwrap();
+        if protocol_bytes.container_as_str().unwrap() != BTP_10_PROTOCOL {
+            panic!("Wrong Failed For Protocol")
+        }
+        
+        buf_reader.read_exact(8).unwrap();
+        
+        for &i in VALID_INFO_HASH_ONE.iter() {
+            if i != buf_reader.read_u8().unwrap() {
+                panic!("Write Failed For Info Hash")
+            }
+        }
+        
+        for &i in VALID_PEER_ID.iter() {
+            if i != buf_reader.read_u8().unwrap() {
+                panic!("Write Failed For Peer ID")
+            }
+        }
+        
+        if !buf_reader.eof() {
+            panic!("Write Wrote Extra Bytes")
+        }
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_write_handshake_buffer_too_small() {
+        let mut buffer = [0u8; 1];
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+    }
+    
+    #[test]
+    fn positive_verify_handshake() {
+        let mut buffer = [0u8; BTP_10_HANDSHAKE_LEN];
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+        
+        // In closure, just check to make sure our peer id was checked
+        Handshake::verify_handshake(buffer.as_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, |&: remote_id| {
+            VALID_PEER_ID.len() == remote_id.len() && remote_id.iter().zip(VALID_PEER_ID.iter()).all(|(a, b)| a == b)
+        }).unwrap();
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_verify_handshake_invalid_peer_id() {
+        let mut buffer = [0u8; BTP_10_HANDSHAKE_LEN];
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+        
+        // In closure, just check to make sure our peer id was checked
+        Handshake::verify_handshake(buffer.as_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, |&: _| false)
+        .unwrap();
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_verify_handshake_invalid_info_hash() {
+        let mut buffer = [0u8; BTP_10_HANDSHAKE_LEN];
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+        
+        // In closure, just check to make sure our peer id was checked
+        Handshake::verify_handshake(buffer.as_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_TWO, |&: _| true)
+        .unwrap();
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_verify_handshake_diff_protocol() {
+        let mut buffer = [0u8; BTP_10_HANDSHAKE_LEN];
+        let same_len_protocol = "81tt0rr3nt pr0t0c01";
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+        
+        // In closure, just check to make sure our peer id was checked
+        Handshake::verify_handshake(buffer.as_slice(), same_len_protocol.as_bytes(),
+            VALID_INFO_HASH_ONE, |&: _| true )
+        .unwrap();
+    }
+    
+    #[test]
+    #[should_fail]
+    fn negative_verify_handshake_diff_protocol_len() {
+        let mut buffer = [0u8; BTP_10_HANDSHAKE_LEN];
+        let different_len_protocol = "Bittorrent protocol in Rust!!!";
+        Handshake::write_handshake(buffer.as_mut_slice(), BTP_10_PROTOCOL.as_bytes(),
+            VALID_INFO_HASH_ONE, VALID_PEER_ID)
+        .unwrap();
+        
+        // In closure, just check to make sure our peer id was checked
+        Handshake::verify_handshake(buffer.as_slice(), different_len_protocol.as_bytes(),
+            VALID_INFO_HASH_ONE, |&: _| true )
+        .unwrap();
+    }
+}
