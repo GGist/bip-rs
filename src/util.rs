@@ -8,18 +8,6 @@ use std::io::net::addrinfo;
 use std::io::net::udp::{UdpSocket};
 use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr, Ipv6Addr};
 
-pub const PEER_ID_LEN: usize = 20;
-pub type SPeerID = [u8; PEER_ID_LEN];
-pub type UPeerID = [u8];
-
-pub const INFO_HASH_LEN: usize = 20;
-pub type SInfoHash = [u8; INFO_HASH_LEN];
-pub type UInfoHash = [u8];
-
-pub const BTP_10_LEN: usize = 19;
-pub type SBTP10 = [u8; BTP_10_LEN];
-pub type UBTP10 = [u8];
-
 pub enum Choice<O, T> {
     One(O),
     Two(T)

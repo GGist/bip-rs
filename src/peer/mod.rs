@@ -6,7 +6,8 @@ use std::io::net::tcp::{TcpStream};
 use std::io::{IoResult, IoError, BufferedStream, TimedOut, Closed};
 use peer::message::{BlockLength, PeerMessage, PeerReader, PeerWriter, StateChange, PieceIndex, BlockOffset};
 use peer::block::{Block};
-use util::{SPeerID, Choice};
+use types::{PeerID};
+use util::{Choice};
 
 pub mod block;
 pub mod handshake;
@@ -36,7 +37,7 @@ pub struct Peer {
     conn_buf:      BufferedStream<TcpStream>,
     self_state:    PeerState,
     remote_state:  PeerState,
-    remote_id:     SPeerID,
+    remote_id:     PeerID,
     remote_pieces: Choice<Bitv, u32> // Bitfield Or Number Of Pieces
 }
 
@@ -52,7 +53,7 @@ impl Peer {
     }
 
     /// Returns a reference to a buffer containing the peer id of the remote peer.
-    pub fn remote_peer_id(&self) -> &SPeerID {
+    pub fn remote_peer_id(&self) -> &PeerID {
         &self.remote_id
     }
     

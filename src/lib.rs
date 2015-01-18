@@ -76,5 +76,6 @@ pub mod error;
 pub mod peer;
 pub mod torrent;
 pub mod tracker;
+pub mod types;
 pub mod upnp;
 pub mod util;
