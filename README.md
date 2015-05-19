@@ -1,6 +1,12 @@
-bittorrent-rs [![Build Status](https://travis-ci.org/GGist/bittorrent-rs.svg?branch=master)](https://travis-ci.org/GGist/bittorrent-rs) [![Documentation](http://img.shields.io/badge/docs-in--progress-blue.svg?style=flat)](http://ggist.github.io/bittorrent-rs/index.html) [![License](http://img.shields.io/badge/license-Apache%202-red.svg?style=flat)](https://raw.githubusercontent.com/GGist/RustBT/master/LICENSE)
+redox-rs
 =======
 A bittorrent library and client written in pure Rust.
+
+Dashboard
+---------
+| Linux CI | Windows CI | Test Coverage | Crate | Documentation |
+|:--------:|:----------:|:-------------:|:---------:|:-------------:|:-------:|
+| [![Build Status](https://travis-ci.org/GGist/redox-rs.svg?branch=master)](https://travis-ci.org/GGist/redox-rs) | [![Build status](https://ci.appveyor.com/api/projects/status/vwp832w2u745aa1u/branch/master?svg=true)](https://ci.appveyor.com/project/GGist/redox-rs/branch/master) | [![Coverage Status](https://coveralls.io/repos/GGist/redox-rs/badge.svg)](https://coveralls.io/r/GGist/redox-rs) |  | [![Docs](https://img.shields.io/badge/docs-in--progress-blue.svg)](http://ggist.github.io/redox-rs/index.html)
 
 Roadmap
 -------
