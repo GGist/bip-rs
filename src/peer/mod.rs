@@ -2,8 +2,8 @@
 
 use std::default::{Default};
 use std::collections::{Bitv};
-use std::io::net::tcp::{TcpStream};
-use std::io::{IoResult, IoError, BufferedStream, TimedOut, Closed};
+use std::old_io::net::tcp::{TcpStream};
+use std::old_io::{IoResult, IoError, BufferedStream, TimedOut, Closed};
 use peer::message::{BlockLength, PeerMessage, PeerReader, PeerWriter, StateChange, PieceIndex, BlockOffset};
 use peer::block::{Block};
 use types::{PeerID};
@@ -62,7 +62,7 @@ impl Peer {
     /// This method will not block while waiting for messages to be sent to us, but
     /// it will block if only part of a message was sent to us so far.
     pub fn process_messages<'a, T>(&mut self, messages: &mut [PeerMessage], block: &mut T) -> IoResult<()>
-        where T: FnMut<(BlockLength,), &'a mut Block> {
+        where T: FnMut(BlockLength) -> &'a mut Block {
         let mut emptied_messages = false;
         let mut message_index = 0;
         

@@ -1,11 +1,11 @@
 use util;
 use regex::{Regex};
-use std::path::{BytesContainer};
+use std::old_path::{BytesContainer};
 use std::borrow::{ToOwned};
-use std::io::net::tcp::{TcpStream};
-use std::io::{IoResult, InvalidInput};
-use std::io::net::udp::{UdpSocket};
-use std::io::net::ip::{SocketAddr, Ipv4Addr};
+use std::old_io::net::tcp::{TcpStream};
+use std::old_io::{IoResult, InvalidInput};
+use std::old_io::net::udp::{UdpSocket};
+use std::old_io::net::ip::{SocketAddr, Ipv4Addr};
 
 // http://upnp.org/sdcps-and-certification/standards/sdcps/
 // http://www.upnp.org/specs/arch/UPnP-arch-DeviceArchitecture-v1.0-20080424.pdf
@@ -83,7 +83,7 @@ impl ServiceDesc {
         // Setup Regex For Parsing Device Description Page
         let service_find = String::from_str("<service>\\s*?<serviceType>{1}</serviceType>(?:.|\n)+?</service>").replace("{1}", st);
         let service_regex = try!(Regex::new(service_find.as_slice()).or_else( |_|
-            Err(util::get_error(InvalidInput, "Failed To Create Service Regex"))
+            Err(util::simple_ioerror(InvalidInput, "Failed To Create Service Regex"))
         ));
         let scpd_find: Regex = regex!(r"<SCPDURL>(.+?)</SCPDURL>");
         let control_find: Regex = regex!(r"<controlURL>(.+?)</controlURL>");
@@ -93,8 +93,8 @@ impl ServiceDesc {
         let state_vars_regex: Regex = regex!(r"<serviceStateTable>(?:.|\n)+?</serviceStateTable>");
         
         // Setup Data To Query Device Description Page
-        let path = try!(util::get_path(location));
-        let sock_addr = try!(util::get_sockaddr(location));
+        let path = try!(util::extract_path(location));
+        let sock_addr = try!(util::lookup_url(location));
         let request = String::from_str(GENERIC_HTTP_REQUEST).replace("{1}", path)
             .replace("{2}", sock_addr.to_string().as_slice());
 
@@ -105,21 +105,21 @@ impl ServiceDesc {
         let response = try!(tcp_sock.read_to_string());
         
         let (tag_begin, tag_end) = try!(service_regex.find(response.as_slice()).ok_or(
-            util::get_error(InvalidInput, "Could Not Find Service Tag")
+            util::simple_ioerror(InvalidInput, "Could Not Find Service Tag")
         ));
 
         // Pull Service Description Path And Control Path
-        let service_tag = response.as_slice().slice(tag_begin, tag_end);
+        let service_tag = &response[tag_begin..tag_end];
         
         let scpd_path = try!(try!(scpd_find.captures(service_tag).ok_or(
-            util::get_error(InvalidInput, "Could Not Capture SCPD Path")
+            util::simple_ioerror(InvalidInput, "Could Not Capture SCPD Path")
         )).at(1).ok_or(
-           util::get_error(InvalidInput, "Could Not Capture SCPD Path") 
+           util::simple_ioerror(InvalidInput, "Could Not Capture SCPD Path") 
         ));
         let control_path = try!(try!(control_find.captures(service_tag).ok_or(
-            util::get_error(InvalidInput, "Could Not Capture Control Path")
+            util::simple_ioerror(InvalidInput, "Could Not Capture Control Path")
         )).at(1).ok_or(
-            util::get_error(InvalidInput, "Could Not Capture Control Path")
+            util::simple_ioerror(InvalidInput, "Could Not Capture Control Path")
         ));
 
         // Query Service Description
@@ -149,10 +149,9 @@ impl ServiceDesc {
     /// parsing responses.
     pub fn actions<'a>(&'a self) -> Vec<&'a str> {
         let mut actions_list: Vec<&'a str> = Vec::new();
-        let service_desc = self.service_desc.as_slice();
         
         for &(start, end) in self.actions.iter() {
-            actions_list.push(service_desc.slice(start, end));
+            actions_list.push(&self.service_desc[start..end]);
         }
         
         actions_list
@@ -168,7 +167,7 @@ impl ServiceDesc {
     /// parsing responses.
     pub fn state_variables<'a>(&'a self) -> Option<&'a str> {
         match self.var_table {
-            Some((start, end)) => Some(self.service_desc.as_slice().slice(start, end)),
+            Some((start, end)) => Some(&self.service_desc[start..end]),
             None               => None
         }
     }
@@ -184,7 +183,7 @@ impl ServiceDesc {
     pub fn send_action(&self, action: &str, params: &[(&str, &str)]) -> IoResult<String> {
         let response_find = String::from_str("<\\w*:?{1}Response(?:.|\n)+?</\\w*:?{1}Response>").replace("{1}", action);
         let response_regex = try!(Regex::new(response_find.as_slice()).or_else( |_|
-            Err(util::get_error(InvalidInput, "Failed To Create Response Regex"))
+            Err(util::simple_ioerror(InvalidInput, "Failed To Create Response Regex"))
         ));
     
         // Build Parameter Section Of Payload
@@ -220,13 +219,13 @@ impl ServiceDesc {
         
         // Service Should Be Using HTTP Codes To Signify Errors
         if !response.as_slice().contains("200 OK") {
-            return Err(util::get_error(InvalidInput, "Service Returned An Error"));
+            return Err(util::simple_ioerror(InvalidInput, "Service Returned An Error"));
         }
         
         let (a, b) = try!(response_regex.find(response.as_slice()).ok_or(
-            util::get_error(InvalidInput, "Unexpected Procedure Return Value")
+            util::simple_ioerror(InvalidInput, "Unexpected Procedure Return Value")
         ));
-        Ok(response.as_slice().slice(a, b).to_string())
+        Ok(response[a..b].to_string())
     }
 }
 
@@ -361,7 +360,7 @@ impl UPnPIntf {
             &UPnPIntf::Identifier(ref n, seg, _, _, _, _) => (n, seg)
         };
         
-        payload.as_slice().slice(start, end)
+        &payload[start..end]
     }
     
     /// Get the device version, service version, or no version (in the case of an 
@@ -374,7 +373,7 @@ impl UPnPIntf {
             &UPnPIntf::Identifier(ref n, _, seg, _, _, _) => (n, seg)
         };
         
-        payload.as_slice().slice(start, end)
+        &payload[start..end]
     }
     
     /// Get the location (url) of the root device description web page corresponding
@@ -387,7 +386,7 @@ impl UPnPIntf {
             &UPnPIntf::Identifier(ref n, _, _, seg, _, _) => (n, seg)
         };
         
-        payload.as_slice().slice(start, end)
+        &payload[start..end]
     }
     
     /// Get the search target of this UPnPIntf.
@@ -399,7 +398,7 @@ impl UPnPIntf {
             &UPnPIntf::Identifier(ref n, _, _, _, seg, _) => (n, seg)
         };
         
-        payload.as_slice().slice(start, end)
+        &payload[start..end]
     }
     
     /// Get the full Unique Service Name of this UPnPIntf.
@@ -411,7 +410,7 @@ impl UPnPIntf {
             &UPnPIntf::Identifier(ref n, _, _, _, _, seg) => (n, seg)
         };
         
-        payload.as_slice().slice(start, end)
+        &payload[start..end]
     }
 
     /// Get a service description object for this service.
@@ -422,7 +421,7 @@ impl UPnPIntf {
     pub fn service_desc(&self) -> IoResult<ServiceDesc> {
         match self {
             &UPnPIntf::Service(..) => ServiceDesc::parse(self.location(), self.st()),
-            _ => Err(util::get_error(InvalidInput, "UPnPIntf Is Not A Service"))
+            _ => Err(util::simple_ioerror(InvalidInput, "UPnPIntf Is Not A Service"))
         }
     }
 }
@@ -435,30 +434,30 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPIntf>> {
     
     for i in payloads.into_iter() {
         let usn = try!(try!(USN_REGEX.captures(i.as_slice()).ok_or(
-            util::get_error(InvalidInput, "USN Match Failed")
-        )).pos(1).ok_or(util::get_error(InvalidInput, "USN Field Missing")));
+            util::simple_ioerror(InvalidInput, "USN Match Failed")
+        )).pos(1).ok_or(util::simple_ioerror(InvalidInput, "USN Field Missing")));
         
         let st = try!(try!(ST_REGEX.captures(i.as_slice()).ok_or(
-            util::get_error(InvalidInput, "ST Match Failed")
-        )).pos(1).ok_or(util::get_error(InvalidInput, "ST Field Missing")));
+            util::simple_ioerror(InvalidInput, "ST Match Failed")
+        )).pos(1).ok_or(util::simple_ioerror(InvalidInput, "ST Field Missing")));
         
         let location = try!(try!(LOCATION_REGEX.captures(i.as_slice()).ok_or(
-            util::get_error(InvalidInput, "Location Match Failed")
-        )).pos(1).ok_or(util::get_error(InvalidInput, "Location Field Missing")));
+            util::simple_ioerror(InvalidInput, "Location Match Failed")
+        )).pos(1).ok_or(util::simple_ioerror(InvalidInput, "Location Field Missing")));
         
         if SERVICE_REGEX.is_match(i.as_slice()) {
             let (name, version): (StrPos, StrPos);
 
             { // Scope Borrow Of i In captures
                 let captures = try!(SERVICE_REGEX.captures(i.as_slice()).ok_or(
-                   util::get_error(InvalidInput, "Service Match Failed") 
+                   util::simple_ioerror(InvalidInput, "Service Match Failed") 
                 ));
                 
                 name = try!(captures.pos(1).ok_or(
-                    util::get_error(InvalidInput, "Service Name Match Failed") 
+                    util::simple_ioerror(InvalidInput, "Service Name Match Failed") 
                 ));
                 version = try!(captures.pos(2).ok_or(
-                    util::get_error(InvalidInput, "Service Version Match Failed") 
+                    util::simple_ioerror(InvalidInput, "Service Version Match Failed") 
                 ));
             }
 
@@ -468,14 +467,14 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPIntf>> {
             
             { // Scope Borrow Of i In captures
                 let captures = try!(DEVICE_REGEX.captures(i.as_slice()).ok_or(
-                   util::get_error(InvalidInput, "Device Match Failed") 
+                   util::simple_ioerror(InvalidInput, "Device Match Failed") 
                 ));
                 
                 name = try!(captures.pos(1).ok_or(
-                    util::get_error(InvalidInput, "Device Name Match Failed") 
+                    util::simple_ioerror(InvalidInput, "Device Name Match Failed") 
                 ));
                 version = try!(captures.pos(2).ok_or(
-                    util::get_error(InvalidInput, "Device Version Match Failed") 
+                    util::simple_ioerror(InvalidInput, "Device Version Match Failed") 
                 ));
             }
         
@@ -485,11 +484,11 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPIntf>> {
             
             { // Scope Borrow Of i In captures
                 let captures = try!(ROOT_REGEX.captures(i.as_slice()).ok_or(
-                   util::get_error(InvalidInput, "Root Match Failed") 
+                   util::simple_ioerror(InvalidInput, "Root Match Failed") 
                 ));
                 
                 name = try!(captures.pos(1).ok_or(
-                    util::get_error(InvalidInput, "Root Name Match Failed") 
+                    util::simple_ioerror(InvalidInput, "Root Name Match Failed") 
                 ));
             }
         
@@ -499,11 +498,11 @@ fn parse_interfaces(payloads: Vec<String>) -> IoResult<Vec<UPnPIntf>> {
             
             { // Scope Borrow Of i In captures
                 let captures = try!(IDENTIFIER_REGEX.captures(i.as_slice()).ok_or(
-                   util::get_error(InvalidInput, "Identifier Match Failed") 
+                   util::simple_ioerror(InvalidInput, "Identifier Match Failed") 
                 ));
                 
                 name = try!(captures.pos(1).ok_or(
-                    util::get_error(InvalidInput, "Identifier Name Match Failed") 
+                    util::simple_ioerror(InvalidInput, "Identifier Name Match Failed") 
                 ));
             }
         
@@ -537,10 +536,10 @@ fn send_search(from_addr: SocketAddr, timeout: usize, request: &str) -> IoResult
             Ok(_) => {
                 let end = try!(reply_buf.iter().position({ |b|
                     *b == 0u8
-                }).ok_or(util::get_error(InvalidInput, "Search Reply Corrupt")));
+                }).ok_or(util::simple_ioerror(InvalidInput, "Search Reply Corrupt")));
                 
-                let payload: String = try!(reply_buf.slice_to(end).container_as_str().ok_or(
-                    util::get_error(InvalidInput, "Search Reply Not A Valid String")
+                let payload: String = try!(reply_buf[..end].container_as_str().ok_or(
+                    util::simple_ioerror(InvalidInput, "Search Reply Not A Valid String")
                 )).to_owned();
                 
                 replies.push(payload);

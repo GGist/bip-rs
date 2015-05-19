@@ -1,156 +1,103 @@
 //! Utilities used throughout the library.
 
-use regex::{Regex};
-use std::{rand};
-use std::num::{Int};
-use std::io::{IoError, IoResult, IoErrorKind, InvalidInput, ConnectionFailed};
-use std::io::net::addrinfo;
-use std::io::net::udp::{UdpSocket};
-use std::io::net::ip::{SocketAddr, Ipv4Addr, IpAddr, Ipv6Addr};
+use std::borrow::{Borrow, ToOwned};
+use std::collections::{HashMap, BTreeMap};
+use std::hash::{Hash};
+use std::io::{Result, Error, ErrorKind};
+use std::net::{self, UdpSocket, Ipv4Addr, SocketAddr};
 
-pub enum Choice<O, T> {
-    One(O),
-    Two(T)
-}
+use rand;
 
-#[derive(Copy)]
-pub enum Transport { 
-    TCP, 
-    UDP, 
-    HTTP 
-}
-
-const PEER_ID_PREFIX: &'static str = "RBT-0.1.1--";
-
-static URL_REGEX: Regex = regex!(r"\A(\w+)://([^ ]+?)(?::(\d+))?(/.*)");
+const UNUSED_PORT_START: u16 = 1024;
+const UNUSED_PORT_END: u16 = 49151;
 
 /// Returns a list of all local IPv4 Addresses.
-pub fn get_net_addrs() -> IoResult<Vec<IpAddr>> {
-    let addr_list = try!(addrinfo::get_host_addresses(""));
+pub fn ipv4_net_addrs() -> Result<Vec<Ipv4Addr>> {
+    let sock_iter = try!(net::lookup_host(""));
     
-    let addr_list = addr_list.into_iter().filter(|&addr|
+    let ipv4_list = sock_iter.filter_map(|addr|
         match addr {
-            Ipv4Addr(..) => true,
-            Ipv6Addr(..) => false
+            Ok(SocketAddr::V4(n)) => Some(*n.ip()),
+            _                     => None
         }
     ).collect();
     
-    Ok(addr_list)
+    Ok(ipv4_list)
 }
 
-/// Attempts to open a udp connection on addr. 
-/// 
-/// If the connection is unsuccessful, it will try again up to (attempts - 1)
-/// times, incrementing the port for each attempt.
-pub fn get_udp_sock(mut addr: SocketAddr, mut attempts: usize) -> IoResult<UdpSocket> {
-    let mut udp_socket = UdpSocket::bind(addr);
-    attempts -= 1;
+/// Try to bind to a UDP port within the minimum and maximum range.
+pub fn try_bind_udp(ip: Ipv4Addr) -> Result<UdpSocket> {
+    try_range_udp(ip, UNUSED_PORT_START, UNUSED_PORT_END).map_err( |_|
+        Error::new(ErrorKind::Other, "Could Not Bind To Any Ports")
+    )
+}
+
+/// Try to bind to a UDP port within the range [start,end].
+pub fn try_range_udp(ip: Ipv4Addr, start: u16, end: u16) -> Result<UdpSocket> {
+    if start < UNUSED_PORT_START || start > UNUSED_PORT_END {
+        return Err(Error::new(ErrorKind::Other, "Start Port Range Is Not In Bounds [1024,49151]"))
+    } else if end < UNUSED_PORT_START || end > UNUSED_PORT_END {
+        return Err(Error::new(ErrorKind::Other, "End Port Range Is Not In Bounds [1024,49151]"))
+    }
     
-    while udp_socket.is_err() && attempts > 0 {
-        addr.port += 1;
-        attempts -= 1;
+    for i in start..(end + 1) {
+        if let Ok(udp_sock) = UdpSocket::bind((ip, i)) {
+            return Ok(udp_sock)
+        }
+    }
+    
+    Err(Error::new(ErrorKind::Other, "Could Not Bind To A Port Within The Range Specified"))
+}
+
+/// Applies a Fisher-Yates shuffle on the given list.
+pub fn fisher_shuffle<T: Copy>(list: &mut [T]) {
+    for i in 0..list.len() {
+        let swap_index = (rand::random::<usize>() % (list.len() - i)) + i;
         
-        udp_socket = UdpSocket::bind(addr);
-    }
-    
-    match udp_socket {
-        Ok(n)  => Ok(n),
-        _ => Err(get_error(ConnectionFailed, "Could Not Bind To A UDP Port"))
+        let temp = list[i];
+        list[i] = list[swap_index];
+        list[swap_index] = temp;
     }
 }
 
-/// The standard wait algorithm defined in the UDP Tracker Protocol. Returned value
-/// is in seconds.
-pub fn get_udp_wait(attempt: usize) -> u64 {
-    (15 * 2is.pow(attempt)) as u64
+//----------------------------------------------------------------------------//
+
+/// Trait for working with generic map data structures.
+pub trait Dictionary<K, V> where K: Borrow<str> {
+    /// Convert the dictionary to an unordered list of key/value pairs.
+    fn to_list<'a>(&'a self) -> Vec<(&'a K, &'a V)>;
+
+    /// Lookup a value in the dictionary.
+    fn lookup<'a>(&'a self, key: &str) -> Option<&'a V>;
+
+    /// Insert a key/value pair into the dictionary.
+    fn insert(&mut self, key: K, value: V) -> Option<V>;
 }
 
-/// Generates a peer id from a base identifier followed by random characters.
-pub fn gen_peer_id() -> [u8; 20] {
-    let mut bytes = [0u8; 20];
-    
-    for (byte, pref) in bytes.iter_mut().zip(PEER_ID_PREFIX.chars()) {
-        *byte = pref as u8;
+impl<K, V> Dictionary<K, V> for HashMap<K, V> where K: Hash + Eq + Borrow<str> {
+    fn to_list<'a>(&'a self) -> Vec<(&'a K, &'a V)> {
+        self.iter().collect()
     }
-    
-    for i in range(PEER_ID_PREFIX.len(), 20) {
-        bytes[i] = rand::random::<char>() as u8;
-    }
-    
-    bytes
-}
 
-/// Takes a url and returns the transport type that it specifies.
-pub fn get_transport(url: &str) -> IoResult<Transport> {
-    let trans_str = try!(try!(URL_REGEX.captures(url).ok_or(
-        get_error(InvalidInput, "Transport Protocol Not Found In url")
-    )).at(1).ok_or(
-        get_error(InvalidInput, "Transport Protocol Not Found In url")
-    ));
-    
-    if trans_str.len() == 0 {
-        return Err(get_error(InvalidInput, "Transport Protocol Not Found In url"));
+    fn lookup<'a>(&'a self, key: &str) -> Option<&'a V> {
+        self.get(key)
     }
-        
-    match trans_str {
-        "http" => Ok(Transport::HTTP), 
-        "tcp"  => Ok(Transport::TCP),
-        "udp"  => Ok(Transport::UDP),
-        _ => Err(get_error(InvalidInput, "Transport Protocol Not Found In url"))
+
+    fn insert(&mut self, key: K, value: V) -> Option<V> {
+        self.insert(key, value)
     }
 }
 
-/// Returns the first found DNS entry as a SocketAddr for the specified url.
-pub fn get_sockaddr(url: &str) -> IoResult<SocketAddr> {
-    let captures = try!(URL_REGEX.captures(url).ok_or(
-        get_error(InvalidInput, "Hostname And/Or Port Number Not Found In url")
-    ));
-    
-    let (host_str, port_str) = (captures.at(2).unwrap_or(""), captures.at(3).unwrap_or(""));
-    if host_str.len() == 0 || port_str.len() == 0 {
-        return Err(get_error(InvalidInput, "Hostname And/Or Port Number Not Found In url"))
+impl<K, V> Dictionary<K, V> for BTreeMap<K, V> where K: Ord + Borrow<str> {
+    fn to_list<'a>(&'a self) -> Vec<(&'a K, &'a V)> {
+        self.iter().collect()
     }
-    
-    let host_ip = try!(addrinfo::get_host_addresses(host_str))[0];
-    let port_num = try!(port_str.parse::<u16>().ok_or(
-        get_error(InvalidInput, "Invalid Port Number Found In url")
-    ));
-    
-    Ok(SocketAddr{ ip: host_ip, port: port_num })
-}
 
-/// Returns the path portion of a supplied url.
-pub fn get_path(url: &str) -> IoResult<&str> {
-    let path_str = match URL_REGEX.captures(url) {
-        Some(n) => n.at(4).unwrap_or(""),
-        None    => return Err(get_error(InvalidInput, "No Path Found In url"))
-    };
-    
-    Ok(path_str)
-}
+    fn lookup<'a>(&'a self, key: &str) -> Option<&'a V> {
+        self.get(key)
+    }
 
-/// Used to fill an IoError with a kind and desc, leaving detail empty.
-pub fn get_error(err_type: IoErrorKind, msg: &'static str) -> IoError {
-    IoError{ kind: err_type, desc: msg, detail: None }
-}
-
-#[cfg(test)]
-mod tests {
-   use super::{get_udp_wait, get_path};
-   
-   #[test]
-   fn positive_get_path() {
-    assert_eq!(get_path("http://test.com:80/test_path").unwrap(), "/test_path");
-    
-    assert_eq!(get_path("http://test.com/test_path").unwrap(), "/test_path");
-   }
-   
-   #[test]
-   fn positive_get_udp_wait() {
-    assert_eq!(get_udp_wait(0), 15u64);
-    
-    assert_eq!(get_udp_wait(1), 30u64);
-    
-    assert_eq!(get_udp_wait(-1), 0u64);
-   }
+    fn insert(&mut self, key: K, value: V) -> Option<V> {
+        self.insert(key, value)
+    }
 }

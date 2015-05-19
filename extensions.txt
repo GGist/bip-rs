@@ -1,0 +1,7 @@
+BEP_0012 - Multitracker Metadata Extension
+    announce-list
+    
+BEP_0015 - UDP Tracker Protocol
+
+BEP_0019 - HTTP/FTP Seeding (GetRight Style)
+

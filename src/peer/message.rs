@@ -1,27 +1,27 @@
 //! Streaming data to and from the remote peer.
 
-use std::io::{IoResult, IoError, InvalidInput};
-use std::fmt::{String, Formatter, Result};
+use std::old_io::{IoResult, IoError, InvalidInput};
+use std::fmt::{Display, Formatter, Result};
 use peer::block::{Block};
 
-const CHOKE_ID: u8        = 0;
-const UNCHOKE_ID: u8      = 1;
-const INTERESTED_ID: u8   = 2;
+const CHOKE_ID:        u8 = 0;
+const UNCHOKE_ID:      u8 = 1;
+const INTERESTED_ID:   u8 = 2;
 const UNINTERESTED_ID: u8 = 3;
-const HAVE_ID: u8         = 4;
-const BITFIELD_ID: u8     = 5;
-const REQUEST_ID: u8      = 6;
-const BLOCK_ID: u8        = 7;
-const CANCEL_ID: u8       = 8;
+const HAVE_ID:         u8 = 4;
+const BITFIELD_ID:     u8 = 5;
+const REQUEST_ID:      u8 = 6;
+const BLOCK_ID:        u8 = 7;
+const CANCEL_ID:       u8 = 8;
 
 const KEEP_ALIVE_MESSAGE_LEN: u32 = 0;
 
 const MESSAGE_ID_LEN: u32 = 1;
 
-const STATE_MESSAGE_LEN: u32   = MESSAGE_ID_LEN;
-const HAVE_MESSAGE_LEN: u32    = MESSAGE_ID_LEN + 4;
+const STATE_MESSAGE_LEN:   u32 = MESSAGE_ID_LEN;
+const HAVE_MESSAGE_LEN:    u32 = MESSAGE_ID_LEN + 4;
 const REQUEST_MESSAGE_LEN: u32 = MESSAGE_ID_LEN + 12;
-const CANCEL_MESSAGE_LEN: u32  = MESSAGE_ID_LEN + 12;
+const CANCEL_MESSAGE_LEN:  u32 = MESSAGE_ID_LEN + 12;
 
 const BASE_BLOCK_MESSAGE_LEN: u32 = MESSAGE_ID_LEN + 8;
 
@@ -38,7 +38,7 @@ pub enum StateChange {
 }
 
 impl Copy for StateChange { }
-impl String for StateChange {
+impl Display for StateChange {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match *self {
             StateChange::Choke        => f.write_str("Choke"),
@@ -70,7 +70,7 @@ pub enum PeerMessage {
     BlockReceivedTooBig(PieceIndex, BlockOffset, Vec<u8>)
 }
 
-impl String for PeerMessage {
+impl Display for PeerMessage {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match *self {
             PeerMessage::Hidden => 
@@ -115,7 +115,7 @@ fn get_block_len(payload_len: u32) -> u32 {
 /// buffer overflow attacks.
 pub trait PeerReader {
     fn read_message<'a, F>(&mut self, max_pieces: u32, block: &mut F) -> IoResult<PeerMessage>
-        where F: FnMut<(BlockLength,), &'a mut Block>;
+        where F: FnMut(BlockLength) -> &'a mut Block;
     
     fn read_have(&mut self, payload_len: u32, max_pieces: u32) -> IoResult<PeerMessage>;
     
@@ -130,7 +130,7 @@ pub trait PeerReader {
 
 impl<T: Reader> PeerReader for T {
     fn read_message<'a, F>(&mut self, max_pieces: u32, block: &mut F) ->  IoResult<PeerMessage>
-        where F: FnMut<(BlockLength,), &'a mut Block> {
+        where F: FnMut(BlockLength) -> &'a mut Block {
         let message_len = try!(self.read_be_u32());
             
         if message_len == KEEP_ALIVE_MESSAGE_LEN {
@@ -150,7 +150,7 @@ impl<T: Reader> PeerReader for T {
             REQUEST_ID      => try!(self.read_request(payload_len, max_pieces)),
             CANCEL_ID       => try!(self.read_cancel(payload_len, max_pieces)),
             BLOCK_ID        => {
-                let block = block.call_mut((get_block_len(payload_len),));
+                let block = block(get_block_len(payload_len));
                 let message_action = try!(self.read_block(payload_len, max_pieces, block.as_mut_slice()));
                 
                 if let PeerMessage::BlockReceived(index, offset, length) = message_action {
@@ -159,7 +159,7 @@ impl<T: Reader> PeerReader for T {
                 message_action
             },
             _ => { // Allow Unrecognize Message IDs
-                let block = block.call_mut((payload_len,));
+                let block = block(payload_len);
                 
                 if payload_len as usize <= block.as_slice().len() {
                     try!(self.read_at_least(payload_len as usize, block.as_mut_slice()));
@@ -296,7 +296,7 @@ impl<T: Writer> PeerWriter for T {
     fn write_bitfield(&mut self, bitfield: &[u8]) -> IoResult<()> {
         try!(self.write_be_u32(MESSAGE_ID_LEN + bitfield.len() as u32));
         try!(self.write_u8(BITFIELD_ID));
-        try!(self.write(bitfield));
+        try!(self.write_all(bitfield));
         
         Ok(())
     }
@@ -326,7 +326,7 @@ impl<T: Writer> PeerWriter for T {
         try!(self.write_u8(BLOCK_ID));
         try!(self.write_be_u32(piece));
         try!(self.write_be_u32(offset));
-        try!(self.write(block_data));
+        try!(self.write_all(block_data));
         
         Ok(())
     }
@@ -334,7 +334,7 @@ impl<T: Writer> PeerWriter for T {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{BufWriter, BufReader, SeekSet};
+    use std::old_io::{BufWriter, BufReader, SeekSet};
     use peer::block::{Block};
     use super::{PeerReader, PeerWriter, CHOKE_ID, UNCHOKE_ID, INTERESTED_ID, UNINTERESTED_ID, 
         HAVE_ID, BITFIELD_ID, REQUEST_ID, BLOCK_ID, CANCEL_ID, StateChange, MESSAGE_ID_LEN,

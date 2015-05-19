@@ -1,86 +1,105 @@
 //! Error types used by the library.
 
-use std::io::{IoError};
-use std::error::{Error, FromError};
+use std::error::{Error};
+use std::fmt::{self, Display, Formatter, Debug};
 use std::result::{Result};
 
-pub type ParseResult<T> = Result<T, ParseError>;
-pub type TorrResult<T> = Result<T, TorrError>;
+pub type BencodeResult<T> = Result<T, BencodeError>;
+pub type TorrentResult<T> = Result<T, TorrentError>;
 
-/// Used when parsing external data that may have errors at any position within
-/// the buffer.
-///
-/// A pos of -1 indicates that this error was converted from another error where 
-/// a position value would not make sense.
-#[derive(Show)]
-pub struct ParseError {
-    pub pos: u64,
+/// A list specifying categories of BencodeError types.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum BencodeErrorKind {
+    /// An Incomplete Number Of Bytes.
+    BytesEmpty,
+    /// An Invalid Byte Was Found.
+    ///
+    /// Position Of Invalid Byte Has Been Provided.
+    InvalidByte,
+    /// An Invalid Integer Was Found.
+    InvalidInt,
+    /// An Invalid Key Was Found.
+    InvalidKey,
+    /// An Invalid Byte Length Was Found.
+    InvalidLength,
+    /// Some Other Error, Possibly Converted From Another Type.
+    Other
+}
+
+/// A type for specifying errors when decoding Bencoded data.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct BencodeError {
+    pub kind: BencodeErrorKind,
     pub desc: &'static str,
-    pub detail: Option<String>
+    pub pos:  Option<usize>
 }
 
-impl ParseError {
-    /// Constructs a new ParseError object where the pos information will get
-    /// embedded within the detail value so that it is preserved when accessing
-    /// methods via Error or when converting to another error.
-    pub fn new(pos: u64, desc: &'static str, detail: Option<String>) -> ParseError {
-        let mut more_detail = match detail {
-            Some(mut n) => {
-                n.push_str(" - Occurred At Position: ");
-                n
-            },
-            None    => String::from_str("Error At Position: ")
-        };
-        more_detail.push_str(pos.to_string().as_slice());
+impl BencodeError {
+    /// Construct a new BencodeError.
+    pub fn new(kind: BencodeErrorKind, desc: &'static str, pos: Option<usize>) -> BencodeError {
+        BencodeError{ kind: kind, desc: desc, pos: pos }
+    }
+}
+
+impl Display for BencodeError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        try!(f.write_fmt(format_args!("Kind: {:?}", self.kind)));
         
-        ParseError{ pos: pos, desc: desc, detail: Some(more_detail) }
-    }
+        try!(f.write_fmt(format_args!(" Description: {}", self.desc)));
+        
+        if let Some(n) = self.pos {
+            try!(f.write_fmt(format_args!("Position: {}", n)));
+        }
+
+        Ok(())
+    }   
 }
 
-impl FromError<IoError> for ParseError {
-    fn from_error(err: IoError) -> ParseError {
-        ParseError{ pos: -1, desc: err.desc, detail: err.detail }
-    }
-}
-
-impl Error for ParseError {
+impl Error for BencodeError {
     fn description(&self) -> &str { self.desc }
-    
-    fn detail(&self) -> Option<String> { self.detail.clone() }
     
     fn cause(&self) -> Option<&Error> { None }
 }
 
-/// A list specifying the types of TorrErrors that may occur.
-#[derive(Show, Copy)]
-pub enum TorrErrorKind {
-    /// A key is missing in one of the bencoded dictionaries.
+/// A list specifying the types of TorrentErrors that may occur.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum TorrentErrorKind {
+    /// A Mandatory Key Is Missing In The File.
     MissingKey,
-    /// The data type of one of the bencoded values is wrong.
+    /// A Value Was Found That Has The Wrong Type.
     WrongType,
-    /// An error occurred that is not in this list.
+    /// Some Other Error, Possibly Converted From Another Type.
     Other
 }
 
-/// Used to raise an error when a piece of data required by the Torrent is 
-/// missing from the Bencode data.
-#[derive(Show)]
-pub struct TorrError {
-    pub kind: TorrErrorKind,
+/// A type for specifying errors when reading a torrent file.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct TorrentError {
+    pub kind: TorrentErrorKind,
     pub desc: &'static str,
     pub detail: Option<String>
 }
 
-impl FromError<IoError> for TorrError {
-    fn from_error(err: IoError) -> TorrError {
-        TorrError{ kind: TorrErrorKind::Other, desc: err.desc, detail: err.detail }
-    }
+impl Display for TorrentError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        try!(f.write_str("Kind: "));
+        try!(Debug::fmt(&self.kind, f));
+        
+        try!(f.write_str(" Description: "));
+        try!(f.write_str(self.desc));
+        
+        try!(f.write_str(" Detail: "));
+        match self.detail {
+            Some(ref n) => try!(f.write_str(n)),
+            None        => ()
+        };
+        
+        Ok(())
+    }   
 }
 
-impl Error for TorrError {
+impl Error for TorrentError {
     fn description(&self) -> &str { self.desc }
-    
-    fn detail(&self) -> Option<String> { self.detail.clone() }
     
     fn cause(&self) -> Option<&Error> { None }
 }
