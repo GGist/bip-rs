@@ -1,6 +1,6 @@
 //! # Rust Bittorrent Library
 
-#![feature(collections, lookup_host)]
+#![feature(collections)]
 
 extern crate rand;
 

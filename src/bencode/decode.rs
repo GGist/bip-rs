@@ -1,82 +1,85 @@
 use std::collections::{HashMap};
 use std::collections::hash_map::{Entry};
+use std::io::{Read};
 use std::iter::{Peekable};
 
-use bencode::{Bencode, Bencoded, BencodedKind};
-use error::{BencodeResult, BencodeError, BencodeErrorKind};
+use bencode::{self, BencodeView, BencodeKind, FromBencode};
+use bencode::error::{BencodeError, BencodeErrorKind, BencodeResult};
 use util::{Dictionary};
 
-const BEN_END:    u8 = b'e';
-const DICT_START: u8 = b'd';
-const LIST_START: u8 = b'l';
-const INT_START:  u8 = b'i';
+/// Standard implementation of an object implementing BencodeView.
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum Bencode {
+    #[doc(hidden)]
+    /// Bencode Integer.
+    Int(i64),
+    #[doc(hidden)]
+    /// Bencode Bytes.
+    Bytes(Vec<u8>),
+    #[doc(hidden)]
+    /// Bencode List.
+    List(Vec<Bencode>),
+    #[doc(hidden)]
+    /// Bencode Dictionary.
+    Dict(HashMap<String, Bencode>)
+}
 
-const BYTE_LEN_LOW:  u8 = b'0';
-const BYTE_LEN_HIGH: u8 = b'9';
-const BYTE_LEN_END:  u8 = b':';
+impl<'a> FromBencode<&'a [u8]> for Bencode {
+    fn from_bencode(bytes: &'a [u8]) -> BencodeResult<Bencode> {
+        let mut bytes_iter = bytes.iter().map(|&n| n).enumerate().peekable();
 
-pub fn encode<T>(val: T<Output=T>) -> Vec<u8> 
-    where T: Bencoded {
-    match val.kind() {
-        BencodedKind::Int(n)   => encode_int(n),
-        BencodedKind::Bytes(n) => encode_bytes(&n),
-        BencodedKind::List(n)  => encode_list(n),
-        BencodedKind::Dict(n)  => encode_dict(n)
-    }
-}
-    
-fn encode_int(val: i64) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    
-    bytes.push(INT_START);
-    bytes.push_all(val.to_string().as_bytes());
-    bytes.push(BEN_END);
-    
-    bytes
-}
-    
-fn encode_bytes(list: &[u8]) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    
-    bytes.push_all(list.len().to_string().as_bytes());
-    bytes.push(BYTE_LEN_END);
-    bytes.push_all(list);
-    
-    bytes
-}
-    
-fn encode_list<T>(list: &[T]) -> Vec<u8>
-    where T: Bencoded {
-    let mut bytes: Vec<u8> = Vec::new();
-    
-    bytes.push(LIST_START);
-    for i in list {
-        bytes.push_all(&encode(i));
-    }
-    bytes.push(BEN_END);
-    
-    bytes
-}
-    
-fn encode_dict<T>(dict: &Dictionary<String, T>) -> Vec<u8>
-    where T: Bencoded {
-    // Need To Sort The Keys In The Map Before Encoding
-    let mut bytes: Vec<u8> = Vec::new();
-
-    let mut sort_dict = dict.to_list();
-    sort_dict.sort_by(|&(a, _), &(b, _)| a.cmp(b));
+        // Apply try so any errors return before the eof check
+        let result = try!(decode(&mut bytes_iter));
         
-    bytes.push(DICT_START);
-    // Iterate And Dictionary Encode The (String, Bencode) Pairs
-    for &(ref key, ref value) in sort_dict.iter() {
-        bytes.push_all(&encode_bytes(key.as_bytes()));
-        bytes.push_all(&encode(*value));
+        if bytes_iter.peek().is_some() {
+            return Err(BencodeError::new(BencodeErrorKind::BytesEmpty,
+                "End Portion Of bytes Not Processed", None))
+        }
+        
+        Ok(result)
     }
-    bytes.push(BEN_END);
-    
-    bytes
 }
 
+impl BencodeView for Bencode {
+    type InnerItem = Bencode;
+
+    fn kind<'a>(&'a self) -> BencodeKind<'a, <Self as BencodeView>::InnerItem> {
+        match self {
+            &Bencode::Int(n)       => BencodeKind::Int(n),
+            &Bencode::Bytes(ref n) => BencodeKind::Bytes(n),
+            &Bencode::List(ref n)  => BencodeKind::List(n),
+            &Bencode::Dict(ref n)  => BencodeKind::Dict(n)
+        }
+   }
+    
+    fn int(&self) -> Option<i64> {
+        match self {
+            &Bencode::Int(n) => Some(n),
+            _                => None
+        }
+    }
+    
+    fn bytes(&self) -> Option<&[u8]> {
+        match self {
+            &Bencode::Bytes(ref n) => Some(&n[0..]),
+            _                      => None
+        }
+    }
+    
+    fn list(&self) -> Option<&[<Self as BencodeView>::InnerItem]> {
+    match self {
+            &Bencode::List(ref n) => Some(n),
+            _                     => None
+        }
+    }
+
+    fn dict(&self) -> Option<&Dictionary<String, <Self as BencodeView>::InnerItem>> {
+        match self {
+            &Bencode::Dict(ref n) => Some(n),
+            _                     => None
+        }
+    }
+}
 
 pub fn decode<T>(bytes: &mut Peekable<T>) -> BencodeResult<Bencode>
     where T: Iterator<Item=(usize, u8)> {
@@ -85,19 +88,19 @@ pub fn decode<T>(bytes: &mut Peekable<T>) -> BencodeResult<Bencode>
     ));
     
     match curr_char {
-        INT_START  => {
+        bencode::INT_START  => {
             bytes.next();
-            Ok(Bencode::Int(try!(decode_int(bytes, BEN_END))))
+            Ok(Bencode::Int(try!(decode_int(bytes, bencode::BEN_END))))
         },
-        LIST_START => {
+        bencode::LIST_START => {
             bytes.next();
             Ok(Bencode::List(try!(decode_list(bytes))))
         },
-        DICT_START => {
+        bencode::DICT_START => {
             bytes.next();
             Ok(Bencode::Dict(try!(decode_dict(bytes))))
         },
-        BYTE_LEN_LOW...BYTE_LEN_HIGH => {
+        bencode::BYTE_LEN_LOW...bencode::BYTE_LEN_HIGH => {
             // Include The Length Digit, Don't Consume It
             Ok(Bencode::Bytes(try!(decode_bytes(bytes))))
         },
@@ -140,7 +143,7 @@ fn decode_int<T>(bytes: &mut Peekable<T>, delim: u8) -> BencodeResult<i64>
 fn decode_bytes<T>(bytes: &mut Peekable<T>) -> BencodeResult<Vec<u8>>
     where T: Iterator<Item=(usize, u8)> {
     let curr_pos = try!(peek_position(bytes, "Stopped At Start Of Bytes Decode"));
-    let num_bytes = try!(decode_int(bytes, BYTE_LEN_END));
+    let num_bytes = try!(decode_int(bytes, bencode::BYTE_LEN_END));
 
     if num_bytes < 0 {
         return Err(BencodeError::new(BencodeErrorKind::InvalidLength, 
@@ -164,7 +167,7 @@ fn decode_list<T>(bytes: &mut Peekable<T>) -> BencodeResult<Vec<Bencode>>
     let mut ben_list: Vec<Bencode> = Vec::new();
     
     let mut curr_byte = try!(peek_byte(bytes, "Stopped At List Element"));
-    while curr_byte != BEN_END {
+    while curr_byte != bencode::BEN_END {
         ben_list.push(try!(decode(bytes)));
         
         curr_byte = try!(peek_byte(bytes, "Stopped At List Element"));
@@ -182,10 +185,10 @@ fn decode_dict<T>(bytes: &mut Peekable<T>) -> BencodeResult<HashMap<String, Benc
     let mut last_key = String::with_capacity(0);
     let mut curr_byte = try!(peek_byte(bytes, "Stopped At Dict Element"));
     
-    while curr_byte != BEN_END {
+    while curr_byte != bencode::BEN_END {
         let key = match String::from_utf8(try!(decode_bytes(bytes))) {
-            Ok(n) => n,
-            Err(e) => {
+            Ok(n)  => n,
+            Err(_) => {
                 return Err(BencodeError::new(BencodeErrorKind::InvalidByte,
                     "Dictionary Key Is Not Valid UTF-8", Some(curr_pos)))
             }
@@ -230,12 +233,12 @@ fn peek_position<T>(bytes: &mut Peekable<T>, err_msg: &'static str) -> BencodeRe
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Read};
-    
-    use bencode::{Bencoded};
-    use super::{BEN_END};
+    use super::{Bencode};
+    use bencode::{self, BencodeView, FromBencode};
 
     // Positive Cases
+    const GENERAL: &'static [u8] = b"d0:12:zero_len_key8:location17:udp://test.com:8011:nested dictd4:listli-500500eee6:numberi500500ee";
+    const BYTES_UTF8: &'static [u8] = b"16:valid_utf8_bytes";
     const DICTIONARY: &'static [u8] = b"d9:test_dictd10:nested_key12:nested_value11:nested_listli500ei-500ei0eee8:test_key10:test_valuee";
     const LIST: &'static [u8] = b"l10:test_bytesi500ei0ei-500el12:nested_bytesed8:test_key10:test_valueee";
     const BYTES: &'static [u8] = b"5:\xC5\xE6\xBE\xE6\xF2";
@@ -243,17 +246,41 @@ mod tests {
     const INT: &'static [u8] = b"i500e";
     const INT_NEGATIVE: &'static [u8] = b"i-500e";
     const INT_ZERO: &'static [u8] = b"i0e";
-    
+   
     // Negative Cases
+    const BYTES_NEG_LEN: &'static [u8] = b"-4:test";
+    const BYTES_EXTRA: &'static [u8] = b"l15:processed_bytese17:unprocessed_bytes";
+    const BYTES_NOT_UTF8: &'static [u8] = b"5:\xC5\xE6\xBE\xE6\xF2";
     const INT_NAN: &'static [u8] = b"i500a500e";
     const INT_LEADING_ZERO: &'static [u8] = b"i0500e";
     const INT_DOUBLE_ZERO: &'static [u8] = b"i00e";
     const INT_NEGATIVE_ZERO: &'static [u8] = b"i-0e";
     const INT_DOUBLE_NEGATIVE: &'static [u8] = b"i--5e";
     const DICT_UNORDERED_KEYS: &'static [u8] = b"d5:z_key5:value5:a_key5:valuee";
-    const DICT_DUPLICATE_KEYS_SAME_DATA: &'static [u8] = b"d5:a_keyi0e5:a_keyi0ee";
-    const DICT_DUPLICATE_KEYS_DIFF_DATA: &'static [u8] = b"d5:a_keyi0e5:a_key7:a_valuee";
+    const DICT_DUP_KEYS_SAME_DATA: &'static [u8] = b"d5:a_keyi0e5:a_keyi0ee";
+    const DICT_DUP_KEYS_DIFF_DATA: &'static [u8] = b"d5:a_keyi0e5:a_key7:a_valuee";
+   
+   #[test]
+   fn positive_decode_general() {
+        let bencode = Bencode::from_bencode(GENERAL).unwrap();
+        
+        let ben_dict = bencode.dict().unwrap();
+        assert_eq!(ben_dict.lookup("").unwrap().str().unwrap(), "zero_len_key");
+        assert_eq!(ben_dict.lookup("location").unwrap().str().unwrap(), "udp://test.com:80");
+        assert_eq!(ben_dict.lookup("number").unwrap().int().unwrap(), 500500i64);
+        
+        let nested_dict = ben_dict.lookup("nested dict").unwrap().dict().unwrap();
+        let nested_list = nested_dict.lookup("list").unwrap().list().unwrap();
+        assert_eq!(nested_list[0].int().unwrap(), -500500i64);
+   }
     
+   #[test]
+   fn positive_decode_bytes_utf8() {
+        let bencode = Bencode::from_bencode(BYTES_UTF8).unwrap();
+        
+        assert_eq!(bencode.str().unwrap(), "valid_utf8_bytes");
+   }
+   
     #[test]
     fn positive_decode_dict() {
         let mut buf = DICTIONARY.iter().map(|&n| n).enumerate().peekable();
@@ -315,7 +342,7 @@ mod tests {
         let mut buf = INT.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        let int_value = super::decode_int(&mut buf, BEN_END).unwrap();
+        let int_value = super::decode_int(&mut buf, bencode::BEN_END).unwrap();
         assert_eq!(int_value, 500i64);
     }
    
@@ -324,7 +351,7 @@ mod tests {
         let mut buf = INT_NEGATIVE.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        let int_value = super::decode_int(&mut buf, BEN_END).unwrap();
+        let int_value = super::decode_int(&mut buf, bencode::BEN_END).unwrap();
         assert_eq!(int_value, -500i64);
     }
     
@@ -333,8 +360,28 @@ mod tests {
         let mut buf = INT_ZERO.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        let int_value = super::decode_int(&mut buf, BEN_END).unwrap();
+        let int_value = super::decode_int(&mut buf, bencode::BEN_END).unwrap();
         assert_eq!(int_value, 0i64);
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_decode_bytes_neg_len() {
+        Bencode::from_bencode(BYTES_NEG_LEN).unwrap();
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_decode_bytes_extra() {
+        Bencode::from_bencode(BYTES_EXTRA).unwrap();
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_decode_bytes_not_utf8() {
+        let bencode = Bencode::from_bencode(BYTES_NOT_UTF8).unwrap();
+        
+        bencode.str().unwrap();
     }
     
     #[test]
@@ -343,7 +390,7 @@ mod tests {
         let mut buf = INT_NAN.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        super::decode_int(&mut buf, BEN_END).unwrap();
+        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
     }
     
     #[test]
@@ -352,7 +399,7 @@ mod tests {
         let mut buf = INT_LEADING_ZERO.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        super::decode_int(&mut buf, BEN_END).unwrap();
+        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
     }
     
     #[test]
@@ -361,7 +408,7 @@ mod tests {
         let mut buf = INT_DOUBLE_ZERO.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        super::decode_int(&mut buf, BEN_END).unwrap();
+        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
     }
     
     #[test]
@@ -370,7 +417,7 @@ mod tests {
         let mut buf = INT_NEGATIVE_ZERO.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        super::decode_int(&mut buf, BEN_END).unwrap();
+        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
     }
     
     #[test]
@@ -379,7 +426,7 @@ mod tests {
         let mut buf = INT_DOUBLE_NEGATIVE.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
-        super::decode_int(&mut buf, BEN_END).unwrap();
+        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
     }
     
     #[test]
@@ -393,8 +440,8 @@ mod tests {
     
     #[test]
     #[should_panic]
-    fn negative_decode_dict_duplicate_keys_same_data() {
-        let mut buf = DICT_DUPLICATE_KEYS_SAME_DATA.iter().map(|&n| n).enumerate().peekable();
+    fn negative_decode_dict_dup_keys_same_data() {
+        let mut buf = DICT_DUP_KEYS_SAME_DATA.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
         super::decode_dict(&mut buf).unwrap();
@@ -402,8 +449,8 @@ mod tests {
     
     #[test]
     #[should_panic]
-    fn negative_decode_dict_duplicate_keys_diff_data() {
-        let mut buf = DICT_DUPLICATE_KEYS_DIFF_DATA.iter().map(|&n| n).enumerate().peekable();
+    fn negative_decode_dict_dup_keys_diff_data() {
+        let mut buf = DICT_DUP_KEYS_DIFF_DATA.iter().map(|&n| n).enumerate().peekable();
         buf.next().unwrap();
         
         super::decode_dict(&mut buf).unwrap();
