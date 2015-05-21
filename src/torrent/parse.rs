@@ -1,12 +1,9 @@
-//! Parse Torrent fields from a recursively defined Bencoded object.
+//! Parse Torrent fields from a recursively defined BencodeView object.
 
-#![allow(dead_code)]
-
-use bencode::{Bencoded, Bencodable};
+use bencode::{BencodeView};
 use error::{TorrentError, TorrentResult};
 use error::TorrentErrorKind::{self, WrongType, MissingKey, Other};
-use hash;
-use util::types::{InfoHash, Dictionary};
+use util::{Dictionary};
 
 use std::borrow::{ToOwned};
 
@@ -37,7 +34,7 @@ const FILES_KEY: &'static str = "files";
 const MD5SUM_LEN: usize = 32;
 const NODE_LEN:   usize = 2;
 
-/// Slice from a Bencoded object to another type.
+/// Slice from a BencodeView object to another type.
 ///
 /// Returns a WrongType error if it cannot convert to the given type.
 macro_rules! slice_ben {
@@ -51,10 +48,10 @@ macro_rules! slice_ben {
     )
 }
 
-/// Slice from a Dictionary object to a converted Bencoded object.
+/// Slice from a Dictionary object to a converted BencodeView object.
 ///
 /// Returns a MissingKey error if the value is not in the dictionary or a
-/// WrongType error if the value cannot be converted from the Bencoded object.
+/// WrongType error if the value cannot be converted from the BencodeView object.
 macro_rules! slice_dict {
     ($dict:ident, $key:expr, $f:expr) => (
         match $dict.lookup($key) {
@@ -69,9 +66,9 @@ macro_rules! slice_dict {
     );
 }
 
-/// Optionally slice from a Dictionary object to a converted Bencoded object.
+/// Optionally slice from a Dictionary object to a converted BencodeView object.
 ///
-/// Returns a WrongType error if the value cannot be converted from the Bencoded 
+/// Returns a WrongType error if the value cannot be converted from the BencodeView 
 /// object.
 macro_rules! slice_dict_opt {
     ($dict:ident, $key:expr, $f:expr) => (
@@ -86,33 +83,33 @@ macro_rules! slice_dict_opt {
     );
 }
 
-/// Tries to convert the root Bencoded value to a Dictionary.
-pub fn slice_root_dict<T>(root: &T) -> TorrentResult<&Dictionary<String, T>>
-    where T: Bencoded<Output=T> {
-    Ok(slice_ben!(root, ROOT_IDENT, Bencoded::dict))
+/// Tries to convert the root BencodeView value to a Dictionary.
+pub fn slice_root_dict<'a, T>(root: &'a T) -> TorrentResult<&'a Dictionary<String, <T as BencodeView>::InnerItem>>
+    where T: BencodeView {
+    Ok(slice_ben!(root, ROOT_IDENT, BencodeView::dict))
 }
 
-/// Tries to find the Info dictionary given the root Bencoded object.
-pub fn slice_info_dict<T>(root: &T) -> TorrentResult<&Dictionary<String, T>>
-    where T: Bencoded<Output=T> {
+/// Tries to find the Info dictionary given the root BencodeView object.
+pub fn slice_info_dict<'a, T>(root: &'a T) -> TorrentResult<&'a Dictionary<String, <T as BencodeView>::InnerItem>>
+    where T: BencodeView {
     let root_dict = try!(slice_root_dict(root));
     
-    Ok(slice_dict!(root_dict, INFO_KEY, Bencoded::dict))
+    Ok(slice_dict!(root_dict, INFO_KEY, BencodeView::dict))
 }
-
-/// Tries to pull out the Announce value from the root Bencoded value.
-pub fn slice_announce<T>(root: &T) -> TorrentResult<&str>
-    where T: Bencoded<Output=T> {
+/*
+/// Tries to pull out the Announce value from the root BencodeView value.
+pub fn slice_announce<'a, T>(root: T) -> TorrentResult<&'a str>
+    where T: BencodeView + 'a {
     let root_dict = try!(slice_root_dict(root));
 
-    Ok(slice_dict!(root_dict, ANNOUNCE_KEY, Bencoded::str))
+    Ok(slice_dict!(root_dict, ANNOUNCE_KEY, BencodeView::str))
 }
 
-/// Tries to pull out the Nodes value from the root Bencoded value.
-pub fn slice_nodes<T>(root: &T) -> TorrentResult<Vec<(&str, u16)>>
-    where T: Bencoded<Output=T> {
+/// Tries to pull out the Nodes value from the root BencodeView value.
+pub fn slice_nodes<'a, T>(root: T) -> TorrentResult<Vec<(&'a str, u16)>>
+    where T: BencodeView + 'a {
     let root_dict = try!(slice_root_dict(root));
-    let nodes = slice_dict!(root_dict, NODES_KEY, Bencoded::list);
+    let nodes = slice_dict!(root_dict, NODES_KEY, BencodeView::list);
     
     let mut nodes_list = Vec::with_capacity(nodes.len());
     for i in nodes {
@@ -137,60 +134,60 @@ pub fn slice_nodes<T>(root: &T) -> TorrentResult<Vec<(&str, u16)>>
     Ok(nodes_list)
 }
 
-/// Tries to pull out the Comment value from the root Bencoded value.
-pub fn slice_comment<T>(root: &T) -> TorrentResult<Option<&str>>
-    where T: Bencoded<Output=T> {
+/// Tries to pull out the Comment value from the root BencodeView value.
+pub fn slice_comment<'a, T>(root: T) -> TorrentResult<Option<&'a str>>
+    where T: BencodeView + 'a {
     let root_dict = try!(slice_root_dict(root));
 
-    Ok(slice_dict_opt!(root_dict, COMMENT_KEY, Bencoded::str))
+    Ok(slice_dict_opt!(root_dict, COMMENT_KEY, BencodeView::str))
 }
 
-/// Tries to pull out the Created By value from the root Bencoded value.
-pub fn slice_created_by<T>(root: &T) -> TorrentResult<Option<&str>>
-    where T: Bencoded<Output=T> {
+/// Tries to pull out the Created By value from the root BencodeView value.
+pub fn slice_created_by<'a, T>(root: T) -> TorrentResult<Option<&'a str>>
+    where T: BencodeView + 'a {
     let root_dict = try!(slice_root_dict(root));
 
-    Ok(slice_dict_opt!(root_dict, CREATED_BY_KEY, Bencoded::str))
+    Ok(slice_dict_opt!(root_dict, CREATED_BY_KEY, BencodeView::str))
 }
 
-/// Tries to pull out the Creation Date value from the root Bencoded value.
-pub fn slice_creation_date<T>(root: &T) -> TorrentResult<Option<i64>>
-    where T: Bencoded<Output=T> {
+/// Tries to pull out the Creation Date value from the root BencodeView value.
+pub fn slice_creation_date<T>(root: T) -> TorrentResult<Option<i64>>
+    where T: BencodeView {
     let root_dict = try!(slice_root_dict(root));
 
-    Ok(slice_dict_opt!(root_dict, CREATION_DATE_KEY, Bencoded::int))
+    Ok(slice_dict_opt!(root_dict, CREATION_DATE_KEY, BencodeView::int))
 }
 
-/// Tries to pull out the Piece Length value from the root Bencoded value.
-pub fn slice_piece_length<T>(root: &T) -> TorrentResult<i64> 
-    where T: Bencoded<Output=T> {
+/// Tries to pull out the Piece Length value from the root BencodeView value.
+pub fn slice_piece_length<T>(root: T) -> TorrentResult<i64> 
+    where T: BencodeView {
     let info_dict = try!(slice_info_dict(root));
     
-    Ok(slice_dict!(info_dict, PIECE_LENGTH_KEY, Bencoded::int))
+    Ok(slice_dict!(info_dict, PIECE_LENGTH_KEY, BencodeView::int))
 }
 
-/// Tires to pull out the Pieces value from the root Bencoded value.
-pub fn slice_pieces<T>(root: &T) -> TorrentResult<&[u8]> 
-    where T: Bencoded<Output=T> {
+/// Tires to pull out the Pieces value from the root BencodeView value.
+pub fn slice_pieces<'a, T>(root: T) -> TorrentResult<&'a [u8]> 
+    where T: BencodeView + 'a {
     let info_dict = try!(slice_info_dict(root));
     
-    Ok(slice_dict!(info_dict, PIECES_KEY, Bencoded::bytes))
+    Ok(slice_dict!(info_dict, PIECES_KEY, BencodeView::bytes))
 }
 
-/// Tries to pull out the Name value from the root Bencoded value.
-pub fn slice_name<T>(root: &T) -> TorrentResult<&str> 
-    where T: Bencoded<Output=T> {
+/// Tries to pull out the Name value from the root BencodeView value.
+pub fn slice_name<'a, T>(root: T) -> TorrentResult<&'a str> 
+    where T: BencodeView + 'a {
     let info_dict = try!(slice_info_dict(root));
     
-    Ok(slice_dict!(info_dict, NAME_KEY, Bencoded::str))
+    Ok(slice_dict!(info_dict, NAME_KEY, BencodeView::str))
 }
 
 /// Tries to pull out the Md5sum value from the given map.
 ///
 /// Returns an error if the checksum is present but of the wrong length.
-pub fn slice_checksum<'a, T>(dict: &'a Dictionary<String, T>) -> TorrentResult<Option<&[u8]>>
-    where T: Bencoded<Output=T> + 'a {
-    let checksum = slice_dict_opt!(dict, MD5SUM_KEY, Bencoded::bytes);
+pub fn slice_checksum<'a, T>(dict: &'a Dictionary<String, T>) -> TorrentResult<Option<&'a [u8]>>
+    where T: BencodeView + 'a {
+    let checksum = slice_dict_opt!(dict, MD5SUM_KEY, BencodeView::bytes);
     
     if checksum.is_some() && checksum.unwrap().len() != MD5SUM_LEN {
         Err(TorrentError{ kind: WrongType, desc: MD5SUM_KEY, detail: Some("Checksum Is The Wrong Length".to_owned()) })
@@ -199,25 +196,25 @@ pub fn slice_checksum<'a, T>(dict: &'a Dictionary<String, T>) -> TorrentResult<O
     }
 }
 
-/// Tires to pull out all files from the root Bencoded value.
+/// Tires to pull out all files from the root BencodeView value.
 ///
 /// Works for both single and multi file torrents where the name value will always
 /// be the first entry in the paths list that is returned.
-pub fn slice_files<T>(root: &T) -> TorrentResult<Vec<(i64, Option<&[u8]>, Vec<&str>)>>
-    where T: Bencoded<Output=T> {
+pub fn slice_files<'a, T>(root: T) -> TorrentResult<Vec<(i64, Option<&'a [u8]>, Vec<&'a str>)>>
+    where T: BencodeView + 'a {
     let info_dict = try!(slice_info_dict(root));
     
     let mut file_list = Vec::new();
-    let name = slice_dict!(info_dict, NAME_KEY, Bencoded::str);
+    let name = slice_dict!(info_dict, NAME_KEY, BencodeView::str);
     
     // Single File Or Multi File
     if info_dict.lookup(LENGTH_KEY).is_some() {
-        let length = slice_dict!(info_dict, LENGTH_KEY, Bencoded::int);
+        let length = slice_dict!(info_dict, LENGTH_KEY, BencodeView::int);
         let checksum = try!(slice_checksum(info_dict));
         
         file_list.push((length, checksum, vec![name]));
     } else {
-        let files = slice_dict!(info_dict, FILES_KEY, Bencoded::list);
+        let files = slice_dict!(info_dict, FILES_KEY, BencodeView::list);
         
         for i in files {
             let file = try!(slice_file(i, name));
@@ -229,17 +226,17 @@ pub fn slice_files<T>(root: &T) -> TorrentResult<Vec<(i64, Option<&[u8]>, Vec<&s
     Ok(file_list)
 }
 
-/// Tries to pull out all file fields from the file Bencoded value.
-pub fn slice_file<'a: 'c, 'b: 'c, 'c, T>(file: &'a T, name: &'b str) 
-    -> TorrentResult<(i64, Option<&'a [u8]>, Vec<&'c str>)> where T: Bencoded<Output=T> {
+/// Tries to pull out all file fields from the file BencodeView value.
+pub fn slice_file<'a: 'c, 'b: 'c, 'c, T>(file: T, name: &'b str) 
+    -> TorrentResult<(i64, Option<&'a [u8]>, Vec<&'c str>)> where T: BencodeView + 'a {
     let file = try!(file.dict().ok_or(
         TorrentError{ kind: WrongType, desc: FILES_KEY, detail: Some("File Entry Is Not A Dictionary".to_owned()) }
     ));
     
-    let length = slice_dict!(file, LENGTH_KEY, Bencoded::int);
+    let length = slice_dict!(file, LENGTH_KEY, BencodeView::int);
     let checksum = try!(slice_checksum(file));
     
-    let paths = slice_dict!(file, PATH_KEY, Bencoded::list);
+    let paths = slice_dict!(file, PATH_KEY, BencodeView::list);
     
     let mut path_list = Vec::with_capacity(paths.len());
     path_list.push(name);
@@ -255,9 +252,9 @@ pub fn slice_file<'a: 'c, 'b: 'c, 'c, T>(file: &'a T, name: &'b str)
     Ok((length, checksum, path_list))
 }
 
-/// Generate an InfoHash from the given Bencoded value.
+/// Generate an InfoHash from the given BencodeView value.
 pub fn generate_info_hash<T>(root: &T) -> TorrentResult<InfoHash>
-    where T: Bencoded<Output=T> {
+    where T: BencodeView<Output=T> {
     let root_dict = try!(slice_root_dict(root));
     let info = try!(root_dict.lookup(INFO_KEY).ok_or(
         TorrentError{ kind: MissingKey, desc: INFO_KEY, detail: None }
@@ -269,8 +266,8 @@ pub fn generate_info_hash<T>(root: &T) -> TorrentResult<InfoHash>
     hash::apply_sha1(&info_bytes[..], &mut dest_bytes[..]);
     
     let info_hash = try!(InfoHash::from_bytes(&dest_bytes[..]).ok_or(
-        TorrentError{ kind: Other, desc: "Failed To Generate InfoHash From Torrent Bencoded", detail: None }
+        TorrentError{ kind: Other, desc: "Failed To Generate InfoHash From Torrent BencodeView", detail: None }
     ));
     
     Ok(info_hash)
-}
+}*/

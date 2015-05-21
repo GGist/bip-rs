@@ -5,6 +5,9 @@ use std::collections::{HashMap, BTreeMap};
 use std::hash::{Hash};
 
 use rand;
+use sha1::{Sha1};
+
+pub const SHA1_HASH_LEN: usize = 20;
 
 /// Trait for working with generic map data structures.
 pub trait Dictionary<K, V> where K: Borrow<str> {
@@ -44,6 +47,14 @@ impl<K, V> Dictionary<K, V> for BTreeMap<K, V> where K: Ord + Borrow<str> {
     fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.insert(key, value)
     }
+}
+
+pub fn apply_sha1(src: &[u8], dst: &mut [u8]) {
+    let mut sha = Sha1::new();
+    
+    sha.update(src);
+    
+    sha.output(dst);
 }
 
 /// Applies a Fisher-Yates shuffle on the given list.

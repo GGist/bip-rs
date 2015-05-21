@@ -1,15 +1,14 @@
 //! Accessing fields within a Torrent file.
 
-use bencode::{Bencoded};
+use bencode::{BencodeView};
 use error::{TorrentResult};
-use hash;
-use util::types::{InfoHash};
-
+use util;
+/*
 pub mod extension;
 pub mod metainfo;
-
+*/
 mod parse;
-
+/*
 /// Different methods for discovering peers for the current torrent.
 #[derive(Debug)]
 pub enum ContactType<'a> {
@@ -36,7 +35,7 @@ pub enum ContactType<'a> {
 /// in the form of a contact type.
 pub trait Torrent {
     /// Templated for the type of Bencoded representation returned.
-    type BencodeType: Bencoded;
+    type BencodeType: BencodeView;
 
     /// Allows for extensions to the bittorrent protocol to expose data.
     ///
@@ -58,8 +57,8 @@ pub trait Torrent {
     /// Info dictionary of the torrent file.
     fn info<'a>(&'a self) -> &InfoView<'a>;
     
-    /// SHA-1 hash of the bencoded Info dictionary.
-    fn info_hash(&self) -> &InfoHash;
+    ///// SHA-1 hash of the bencoded Info dictionary.
+    //fn info_hash(&self) -> &InfoHash;
 }
 
 /// The info dictionary of the current torrent.
@@ -71,7 +70,7 @@ pub struct InfoView<'a> {
 
 impl<'a> InfoView<'a> {
     fn new<T>(root: &'a T) -> TorrentResult<InfoView<'a>>
-        where T: Bencoded<Output=T> {
+        where T: BencodeView {
         let files = try!(parse::slice_files(root));
         
         let file_views = files.into_iter().map(|(len, sum, path)|
@@ -95,8 +94,8 @@ impl<'a> InfoView<'a> {
     ///
     /// Returns None if index is out of bounds (>= self.num_pieces()).
     pub fn piece_hash(&self, index: usize) -> Option<&[u8]> {
-        let start_index = index * hash::SHA1_HASH_LEN;
-        let end_index = start_index + hash::SHA1_HASH_LEN;
+        let start_index = index * util::SHA1_HASH_LEN;
+        let end_index = start_index + util::SHA1_HASH_LEN;
         
         if end_index >= self.pieces.len() {
             None
@@ -150,4 +149,4 @@ impl<'a> FileView<'a> {
     pub fn path(&self) -> &[&str] {
         &self.path[..]
     }
-}
+}*/
