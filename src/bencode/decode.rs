@@ -1,10 +1,11 @@
 use std::collections::{HashMap};
 use std::collections::hash_map::{Entry};
+use std::convert::{AsRef};
 use std::io::{Read};
 use std::iter::{Peekable};
 
-use bencode::{self, BencodeView, BencodeKind, FromBencode};
-use bencode::error::{BencodeError, BencodeErrorKind, BencodeResult};
+use bencode::{self, BencodeView, BencodeKind, DecodeBencode};
+use error::{BencodeError, BencodeErrorKind, BencodeResult};
 use util::{Dictionary};
 
 /// Standard implementation of an object implementing BencodeView.
@@ -24,9 +25,9 @@ pub enum Bencode {
     Dict(HashMap<String, Bencode>)
 }
 
-impl<'a> FromBencode<&'a [u8]> for Bencode {
-    fn from_bencode(bytes: &'a [u8]) -> BencodeResult<Bencode> {
-        let mut bytes_iter = bytes.iter().map(|&n| n).enumerate().peekable();
+impl<'a, T> DecodeBencode<T> for Bencode where T: AsRef<[u8]> {
+    fn decode(bytes: T) -> BencodeResult<Bencode> {
+        let mut bytes_iter = bytes.as_ref().iter().map(|&n| n).enumerate().peekable();
 
         // Apply try so any errors return before the eof check
         let result = try!(decode(&mut bytes_iter));
@@ -234,7 +235,7 @@ fn peek_position<T>(bytes: &mut Peekable<T>, err_msg: &'static str) -> BencodeRe
 #[cfg(test)]
 mod tests {
     use super::{Bencode};
-    use bencode::{self, BencodeView, FromBencode};
+    use bencode::{self, BencodeView, DecodeBencode};
 
     // Positive Cases
     const GENERAL: &'static [u8] = b"d0:12:zero_len_key8:location17:udp://test.com:8011:nested dictd4:listli-500500eee6:numberi500500ee";
@@ -262,7 +263,7 @@ mod tests {
    
    #[test]
    fn positive_decode_general() {
-        let bencode = Bencode::from_bencode(GENERAL).unwrap();
+        let bencode = Bencode::decode(GENERAL).unwrap();
         
         let ben_dict = bencode.dict().unwrap();
         assert_eq!(ben_dict.lookup("").unwrap().str().unwrap(), "zero_len_key");
@@ -276,7 +277,7 @@ mod tests {
     
    #[test]
    fn positive_decode_bytes_utf8() {
-        let bencode = Bencode::from_bencode(BYTES_UTF8).unwrap();
+        let bencode = Bencode::decode(BYTES_UTF8).unwrap();
         
         assert_eq!(bencode.str().unwrap(), "valid_utf8_bytes");
    }
@@ -367,19 +368,19 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_decode_bytes_neg_len() {
-        Bencode::from_bencode(BYTES_NEG_LEN).unwrap();
+        Bencode::decode(BYTES_NEG_LEN).unwrap();
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_bytes_extra() {
-        Bencode::from_bencode(BYTES_EXTRA).unwrap();
+        Bencode::decode(BYTES_EXTRA).unwrap();
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_bytes_not_utf8() {
-        let bencode = Bencode::from_bencode(BYTES_NOT_UTF8).unwrap();
+        let bencode = Bencode::decode(BYTES_NOT_UTF8).unwrap();
         
         bencode.str().unwrap();
     }

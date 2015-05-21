@@ -1,50 +1,53 @@
-//! Accessing fields within a Torrent file.
+//! Torrent file parsing and validation.
 
-use bencode::{Bencoded};
-use error::{TorrentResult};
-use hash;
-use util::types::{InfoHash};
-
-pub mod extension;
+//pub mod extension;
 pub mod metainfo;
 
-mod parse;
+const PIECE_HASH_LEN: usize = 20;
+const INFO_HASH_LEN:  usize = 20;
 
-/// Different methods for discovering peers for the current torrent.
-#[derive(Debug)]
+/// Hash of the Info dictionary of a torrent file.
+pub type InfoHash = [u8; INFO_HASH_LEN];
+
+/// Contact information for a remote node.
+pub type Node<'a> = (&'a str, u16);
+
+/// Main tracker specified in a torrent file.
+pub type MainTracker<'a> = &'a str;
+
+//----------------------------------------------------------------------------//
+
+/// Enumerates different methods of gathering peers.
 pub enum ContactType<'a> {
     /// Corresponds To A Torrent File With An "announce" Key.
-    Tracker(&'a str),
+    Tracker(MainTracker<'a>),
     /// Corresponds To A Torrent File With A "nodes" Key.
-    Trackerless(&'a [(&'a str, u16)]),
+    Trackerless(Nodes<'a>),
     /// Corresponds To A Torrent File With An "announce" and "nodes" Key.
-    Either(&'a str, &'a [(&'a str, u16)]),
+    Either(MainTracker<'a>, Nodes<'a>),
     /// Corresponds To A Torrent File With No Contact Type.
-    ///
-    /// This can happen when a magnet link does not include any form of contact
-    /// in which case it will want us to use the DHT. It can also happen when
-    /// a client generates a metainfo file from a magnet link and uses that file
-    /// at a later point in time.
     None
 }
 
-/// Represents a torrent file that *adheres* to the torrent file specification.
-/// 
-/// * Currently BEP-0005 makes a distinction between tracker and trackerless
-/// metainfo files. Because of it's widespread adoption and in an attempt to
-/// make this interface more cohesive, this extension has been incorporated
-/// in the form of a contact type.
-pub trait Torrent {
-    /// Templated for the type of Bencoded representation returned.
-    type BencodeType: Bencoded;
+/// Iterator over remote node contact information.
+pub struct Nodes<'a> {
+    iter: Box<Iterator<Item=Node<'a>> + 'a>
+}
 
-    /// Allows for extensions to the bittorrent protocol to expose data.
-    ///
-    /// Should not be used by clients unless a TorrentExt method has not been provided.
-    fn bencode(&self) -> &Self::BencodeType;
+impl<'a> Iterator for Nodes<'a> {
+    type Item = Node<'a>;
+    
+    fn next(&mut self) -> Option<Node<'a>> {
+        self.iter.next()
+    }
+}
 
+//----------------------------------------------------------------------------//
+
+/// Trait for accessing information wtihin a torrent file.
+pub trait TorrentView {
     /// Contact method for finding peers for the torrent file. 
-    fn contact_type<'a>(&'a self) -> ContactType<'a>;
+    fn contact<'a>(&'a self) -> ContactType<'a>;
     
     /// Comment tag of the current torrent file.
     fn comment(&self) -> Option<&str>;
@@ -52,102 +55,207 @@ pub trait Torrent {
     /// Created by tag of the current torrent file.
     fn created_by(&self) -> Option<&str>;
     
-    /// Creation date of the current torrent file in standard UNIX epoch format.
+    /// Creation date of the current torrent file in UNIX epoch format.
     fn creation_date(&self) -> Option<i64>;
 
-    /// Info dictionary of the torrent file.
-    fn info<'a>(&'a self) -> &InfoView<'a>;
+    /// Piece information for the torrent file.
+    fn piece_info<'a>(&'a self) -> PieceInfo<'a>;
+    
+    /// Iterator over each file within the torrent file.
+    fn file_info<'a>(&'a self) -> FileInfo<'a>;
     
     /// SHA-1 hash of the bencoded Info dictionary.
-    fn info_hash(&self) -> &InfoHash;
+    fn info_hash(&self) -> InfoHash;
 }
 
-/// The info dictionary of the current torrent.
-pub struct InfoView<'a> {
-    files:        Vec<FileView<'a>>,
-    pieces:       &'a [u8],
-    piece_length: i64
-}
-
-impl<'a> InfoView<'a> {
-    fn new<T>(root: &'a T) -> TorrentResult<InfoView<'a>>
-        where T: Bencoded<Output=T> {
-        let files = try!(parse::slice_files(root));
-        
-        let file_views = files.into_iter().map(|(len, sum, path)|
-            FileView{ length: len, path: path, checksum: sum }
-        ).collect();
-        
-        Ok(InfoView{ files: file_views, 
-            pieces: try!(parse::slice_pieces(root)),
-            piece_length: try!(parse::slice_piece_length(root))
-        })
+impl<'b, T> TorrentView for &'b T where T: TorrentView {
+    fn contact<'a>(&'a self) -> ContactType<'a> {
+        TorrentView::contact(*self)
     }
     
-    /// Number of pieces in total.
-    ///
-    /// Equal to the number of piece hahses in the torrent file.
-    pub fn num_pieces(&self) -> usize {
-        self.pieces.len()
+    fn comment(&self) -> Option<&str> {
+        TorrentView::comment(*self)
     }
     
-    /// SHA-1 hash for the specified piece.
-    ///
-    /// Returns None if index is out of bounds (>= self.num_pieces()).
-    pub fn piece_hash(&self, index: usize) -> Option<&[u8]> {
-        let start_index = index * hash::SHA1_HASH_LEN;
-        let end_index = start_index + hash::SHA1_HASH_LEN;
-        
-        if end_index >= self.pieces.len() {
-            None
-        } else {
-            Some(&self.pieces[start_index..end_index])
-        }
+    fn created_by(&self) -> Option<&str> {
+        TorrentView::created_by(*self)
+    }
+    
+    fn creation_date(&self) -> Option<i64> {
+        TorrentView::creation_date(*self)
     }
 
-    /// Number of bytes in each piece.
-    pub fn piece_length(&self) -> i64 {
-        self.piece_length
+    fn piece_info<'a>(&'a self) -> PieceInfo<'a> {
+        TorrentView::piece_info(*self)
     }
     
-    /// An ordered list of files for the current torrent.
-    ///
-    /// Single file torrents and multi file torrents have been abstracted over.
-    /// See the path method of the File trait for more information.
-    pub fn files(&self) -> &[FileView<'a>] {
-        &self.files[..]
+    fn file_info<'a>(&'a self) -> FileInfo<'a> {
+        TorrentView::file_info(*self)
+    }
+    
+    fn info_hash(&self) -> InfoHash {
+        TorrentView::info_hash(*self)
     }
 }
 
-/// A file within the current torrent.
-pub struct FileView<'a> {
-    length:   i64,
-    path:     Vec<&'a str>,
-    checksum: Option<&'a [u8]>
+impl<'b, T> TorrentView for &'b mut T where T: TorrentView {
+    fn contact<'a>(&'a self) -> ContactType<'a> {
+        TorrentView::contact(*self)
+    }
+    
+    fn comment(&self) -> Option<&str> {
+        TorrentView::comment(*self)
+    }
+    
+    fn created_by(&self) -> Option<&str> {
+        TorrentView::created_by(*self)
+    }
+    
+    fn creation_date(&self) -> Option<i64> {
+        TorrentView::creation_date(*self)
+    }
+
+    fn piece_info<'a>(&'a self) -> PieceInfo<'a> {
+        TorrentView::piece_info(*self)
+    }
+    
+    fn file_info<'a>(&'a self) -> FileInfo<'a> {
+        TorrentView::file_info(*self)
+    }
+    
+    fn info_hash(&self) -> InfoHash {
+        TorrentView::info_hash(*self)
+    }
 }
 
-impl<'a> FileView<'a> {
-    /// Size of the file in bytes.
-    pub fn file_size(&self) -> i64 {
+//----------------------------------------------------------------------------//
+
+/// Piece information for a torrent file.
+pub struct PieceInfo<'a> {
+    pieces: &'a [u8],
+    length: i64
+}
+
+impl<'a> PieceInfo<'a> {
+    fn new(pieces: &'a [u8], length: i64) -> PieceInfo<'a> {
+        PieceInfo{ pieces: pieces, length: length }
+    }
+
+    pub fn length(&self) -> i64 {
         self.length
     }
     
-    /// MD5 checksum of the file.
+    pub fn pieces(&self) -> Pieces<'a> {
+        Pieces::new(self.pieces)
+    }
+}
+
+/// Iterator over each piece hash of a torrent file.
+pub struct Pieces<'a> {
+    pieces:   &'a [u8],
+    position: usize
+}
+
+impl<'a> Pieces<'a> {
+    fn new(pieces: &'a [u8]) -> Pieces<'a> {
+        Pieces{ pieces: pieces, position: 0 }
+    }
+}
+
+impl<'a> Iterator for Pieces<'a> {
+    type Item = &'a [u8];
+    
+    fn next(&mut self) -> Option<&'a [u8]> {
+        if self.position >= self.pieces.len() {
+            None
+        } else {
+            let curr_pos = self.position;
+            
+            self.position += PIECE_HASH_LEN;
+            
+            Some(&self.pieces[curr_pos..curr_pos + PIECE_HASH_LEN])
+        }
+    }
+}
+
+//----------------------------------------------------------------------------//
+
+/// File information for a torrent file.
+pub struct FileInfo<'a> {
+    directory:  Option<&'a str>,
+    file_iter: Files<'a>
+}
+
+impl<'a> FileInfo<'a> {
+    /// The (suggested) base directory for the files to reside in.
     ///
-    /// Not used by bittorrent, provided for compatibility with other applications.
-    pub fn checksum(&self) -> Option<&[u8]> {
+    /// If this method returns None, you are dealing with a single file torrent,
+    /// and if it returns Some, you are dealing with a multi file torrent.
+    pub fn directory(&self) -> Option<&'a str> {
+        self.directory
+    }
+    
+    /// An iterator over all files within this torrent.
+    pub fn files(self) -> Files<'a> {
+        self.file_iter
+    }
+}
+
+/// Iterator over each File within a torrent file.
+pub struct Files<'a> {
+    iter: Box<Iterator<Item=File<'a>> + 'a>
+}
+
+impl<'a> Iterator for Files<'a> {
+    type Item = File<'a>;
+    
+    fn next(&mut self) -> Option<File<'a>> {
+        self.iter.next()
+    }
+}
+
+/// Individual file within a torrent file.
+pub struct File<'a> {
+    length:    i64,
+    checksum:  Option<&'a [u8]>,
+    path_iter: FilePath<'a>
+}
+
+impl<'a> File<'a> {
+    /// Length (in bytes) of the current file.
+    pub fn length(&self) -> i64 {
+        self.length
+    }
+    
+    /// Checksum (Md5Sum) of the current file.
+    pub fn checksum(&self) -> Option<&'a [u8]> {
         self.checksum
     }
-        
-    /// File path of the current file. The last entry will always be the file name.
+    
+    /// Iterator over all parts of the current file's directory location.
     ///
-    /// The name field typically specified in the info dictionary will instead be
-    /// the first entry of each path list regardless of whether or not this is a
-    /// multi file or single file torrent.
-    /// This makes it easier to abstract the different between a multi and single 
-    /// file torrent and provides easier integration with other bittorrent extensions
-    /// such as http (web) seeding.
-    pub fn path(&self) -> &[&str] {
-        &self.path[..]
+    /// The last item produced will be the file name for the current file.
+    pub fn path(self) -> FilePath<'a> {
+        self.path_iter
     }
+}
+
+/// Iterator over each path element for a File.
+pub struct FilePath<'a> {
+    iter: Box<Iterator<Item=&'a str> + 'a>
+}
+
+impl<'a> Iterator for FilePath<'a> {
+    type Item = &'a str;
+    
+    fn next(&mut self) -> Option<&'a str> {
+        self.iter.next()
+    }
+}
+
+//----------------------------------------------------------------------------//
+
+/// Create a new InfoHash.
+pub fn new_info_hash() -> InfoHash {
+    [0u8; INFO_HASH_LEN]
 }

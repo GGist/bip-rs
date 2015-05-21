@@ -1,20 +1,20 @@
-fn main() { }
+extern crate redox;
 
-/*extern crate redox;
-
-use std::fs::File;
-use std::io::Write;
-use redox::torrent::metainfo::Metainfo;
-use redox::torrent::{Torrent, InfoView, FileView};
-use redox::torrent::extension::{TorrentExt};
-use redox::bencode::{Bencode, Bencoded, Bencodable};
+use redox::torrent::{TorrentView};
+use redox::torrent::metainfo::{Metainfo};
 
 fn main() {
-    let torrent = Metainfo::from_file("tests/data/test.torrent").unwrap();
-    let mut announce_list = torrent.announce_list().unwrap();
+    let metainfo = Metainfo::from_file("tests/data/ubuntu-14.10-desktop-amd64.iso.torrent").unwrap();
     
-    for mut i in announce_list.iter() {
-        i.check_tier( |tracker| { println!("{}", tracker); false } );
+    println!("Piece Length: {}", metainfo.piece_info().length());
+    /*
+    for (index, piece) in metainfo.piece_info().pieces().enumerate() {
+        print!("Piece Index {}: ", index);
+        
+        for &byte in piece {
+            print!("{:X}", byte);
+        }
+        print!("\n");
     }
-    println!("{:?}", torrent.is_private_tracker());
-}*/
+    */
+}
