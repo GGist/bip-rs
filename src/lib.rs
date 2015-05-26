@@ -6,6 +6,6 @@ extern crate rand;
 extern crate sha1;
 
 pub mod bencode;
-//pub mod torrent;
-mod error;
+pub mod error;
+pub mod torrent;
 mod util;

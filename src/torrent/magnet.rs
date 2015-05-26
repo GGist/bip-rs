@@ -1,1 +1,0 @@
-//! Read a Torrent from a magnet link.

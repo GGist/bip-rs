@@ -2,12 +2,11 @@
 
 use std::{str};
 
-use bencode::error::{BencodeResult};
+use error::{BencodeResult};
 use util::{Dictionary};
 
 mod decode;
 mod encode;
-mod error;
 
 const BEN_END:    u8 = b'e';
 const DICT_START: u8 = b'd';
@@ -32,18 +31,16 @@ pub enum BencodeKind<'a, T> where T: BencodeView + 'a {
     Dict(&'a Dictionary<String, T>)
 }
 
-/// Trait for converting some type into some BencodeView type.
-pub trait FromBencode<T>: BencodeView {
-    fn from_bencode(T) -> BencodeResult<Self>;
+pub trait DecodeBencode<T> {
+    fn decode(T) -> BencodeResult<Self>;
 }
 
-/// Trait for converting some BencodeView type into some type.
-pub trait ToBencode<T>: BencodeView {
-    fn to_bencode(self) -> T;
+pub trait EncodeBencode<T> {
+    fn encode(self) -> T;
 }
 
-impl<T> ToBencode<Vec<u8>> for T where T: BencodeView {
-    fn to_bencode(self) -> Vec<u8> {
+impl<T> EncodeBencode<Vec<u8>> for T where T: BencodeView {
+    fn encode(self) -> Vec<u8> {
         self::encode::encode(self)
     }
 }
@@ -81,27 +78,27 @@ impl<'a, T> BencodeView for &'a T where T: BencodeView {
     type InnerItem = <T as BencodeView>::InnerItem;
 
     fn str(&self) -> Option<&str> {
-        BencodeView::str(self)
+        BencodeView::str(*self)
     }
     
     fn kind<'b>(&'b self) -> BencodeKind<'b, Self::InnerItem> {
-        BencodeView::kind(self)
+        BencodeView::kind(*self)
     }
     
     fn int(&self) -> Option<i64> {
-        BencodeView::int(self)
+        BencodeView::int(*self)
     }
     
     fn bytes(&self) -> Option<&[u8]> {
-        BencodeView::bytes(self)
+        BencodeView::bytes(*self)
     }
     
     fn list(&self) -> Option<&[Self::InnerItem]> {
-        BencodeView::list(self)
+        BencodeView::list(*self)
     }
 
     fn dict(&self) -> Option<&Dictionary<String, Self::InnerItem>> {
-        BencodeView::dict(self)
+        BencodeView::dict(*self)
     }
 }
 
@@ -109,26 +106,26 @@ impl<'a, T> BencodeView for &'a mut T where T: BencodeView {
     type InnerItem = <T as BencodeView>::InnerItem;
 
     fn str(&self) -> Option<&str> {
-        BencodeView::str(self)
+        BencodeView::str(*self)
     }
     
     fn kind<'b>(&'b self) -> BencodeKind<'b, Self::InnerItem> {
-        BencodeView::kind(self)
+        BencodeView::kind(*self)
     }
     
     fn int(&self) -> Option<i64> {
-        BencodeView::int(self)
+        BencodeView::int(*self)
     }
     
     fn bytes(&self) -> Option<&[u8]> {
-        BencodeView::bytes(self)
+        BencodeView::bytes(*self)
     }
     
     fn list(&self) -> Option<&[Self::InnerItem]> {
-        BencodeView::list(self)
+        BencodeView::list(*self)
     }
 
     fn dict(&self) -> Option<&Dictionary<String, Self::InnerItem>> {
-        BencodeView::dict(self)
+        BencodeView::dict(*self)
     }
 }
