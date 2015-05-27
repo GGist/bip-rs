@@ -1,6 +1,6 @@
 [package]
 name = "redox"
-version = "0.0.0"
+version = "0.0.1"
 description = "A library implementing the bittorrent protocol and a few key extensions."
 
 authors = ["GGist <amiller4421@gmail.com>"]
