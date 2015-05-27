@@ -40,9 +40,10 @@ impl Metainfo {
         where B: AsRef<[u8]> {
         let mut bencode = try!(Bencode::decode(bytes));
     
-        let info = try!(PieceInfoImpl::new(&mut bencode));
+        // Should Be Calculated Before Anything Gets Moved Out
         let info_hash = try!(metainfo::generate_info_hash(&bencode));
-        
+    
+        let info = try!(PieceInfoImpl::new(&mut bencode));
         let file = try!(FileInfoImpl::new(&mut bencode));
         
         let announce = move_announce(&mut bencode);
