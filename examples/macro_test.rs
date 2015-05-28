@@ -16,7 +16,7 @@ fn main() {
             "id" => ben_bytes!("abdjchdjskdleorituah")
         }
     };
-    let udp = UdpSocket::bind("10.122.56.45:0").unwrap();
+    let udp = UdpSocket::bind("0.0.0.0:0").unwrap();
     
     udp.send_to(&dht_msg.encode()[..], ("dht.transmissionbt.com", 6881)).unwrap();
     let (len, addr) = udp.recv_from(&mut recv_buffer[..]).unwrap();
