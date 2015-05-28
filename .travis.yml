@@ -1,6 +1,5 @@
 language: rust
 rust: nightly
-env: FEATURES="--features nightly"
 
 sudo: true
 
