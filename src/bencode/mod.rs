@@ -129,3 +129,64 @@ impl<'a, T> BencodeView for &'a mut T where T: BencodeView {
         BencodeView::dict(*self)
     }
 }
+
+mod macros {
+    /// Construct a Bencode map by supplying a String keys and Bencode values.
+    #[macro_export]
+    macro_rules! ben_map {
+        ( $($key:expr => $val:expr),* ) => {
+            {
+                use std::borrow::{ToOwned};
+                use std::collections::{HashMap};
+                use redox::bencode::{Bencode};
+                
+                let mut map = HashMap::new();
+                $(
+                    map.insert($key.to_owned(), $val);
+                )*
+                Bencode::Dict(map)
+            }
+        }
+    }
+    
+    /// Construct a Bencode list by supplying a list of Bencode values.
+    #[macro_export]
+    macro_rules! ben_list {
+        ( $($ben:expr),* ) => {
+            {
+                use redox::bencode::{Bencode};
+                
+                let mut list = Vec::new();
+                $(
+                    list.push($ben);
+                )*
+                Bencode::List(list)
+            }
+        }
+    }
+    
+    /// Construct Bencode bytes by supplying a type convertible to Vec\<u8\>.
+    #[macro_export]
+    macro_rules! ben_bytes {
+        ( $ben:expr ) => {
+            {
+                use std::convert::{From};
+                use redox::bencode::{Bencode};
+                
+                Bencode::Bytes(Vec::<u8>::from($ben))
+            }
+        }
+    }
+    
+    /// Construct a Bencode integer by supplying an i64.
+    #[macro_export]
+    macro_rules! ben_int {
+        ( $ben:expr ) => {
+            {
+                use redox::bencode::{Bencode};
+                
+                Bencode::Int($ben)
+            }
+        }
+    }
+}
