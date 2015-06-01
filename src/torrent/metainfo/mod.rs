@@ -2,7 +2,8 @@
 
 use bencode::{BencodeView, EncodeBencode};
 use error::{TorrentResult, TorrentErrorKind, TorrentError};
-use torrent::{self, InfoHash};
+use info_hash::{self, InfoHash};
+use torrent::{self};
 use util::{self};
 
 mod metainfo;
@@ -41,6 +42,7 @@ const NODE_LEN:   usize = 2;
 /// Generate an InfoHash from the given BencodeView value.
 fn generate_info_hash<T>(root: &T) -> TorrentResult<InfoHash>
     where T: BencodeView<InnerItem=T> {
+    let mut dest_bytes = [0u8; info_hash::INFO_HASH_LEN];
     let root_dict = try!(lazy_metainfo::slice_root_dict(root));
     
     let info = try!(root_dict.lookup(INFO_KEY).ok_or(
@@ -48,8 +50,7 @@ fn generate_info_hash<T>(root: &T) -> TorrentResult<InfoHash>
     ));
     let info_bytes = info.encode();
     
-    let mut dest_bytes = torrent::new_info_hash();
     util::apply_sha1(&info_bytes[..], &mut dest_bytes[..]);
     
-    Ok(dest_bytes)
+    Ok(dest_bytes.into())
 }

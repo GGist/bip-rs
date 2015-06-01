@@ -1,3 +1,5 @@
+//! Error types used in the library.
+
 use std::borrow::{Cow, ToOwned};
 use std::convert::{From};
 use std::error::{Error};

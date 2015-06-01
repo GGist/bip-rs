@@ -1,13 +1,11 @@
 //! Torrent file parsing and validation.
 
+use info_hash::{InfoHash};
+
 //pub mod extension;
 pub mod metainfo;
 
 const PIECE_HASH_LEN: usize = 20;
-const INFO_HASH_LEN:  usize = 20;
-
-/// Hash of the Info dictionary of a torrent file.
-pub type InfoHash = [u8; INFO_HASH_LEN];
 
 /// Contact information for a remote node.
 pub type Node<'a> = (&'a str, u16);
@@ -251,11 +249,4 @@ impl<'a> Iterator for FilePath<'a> {
     fn next(&mut self) -> Option<&'a str> {
         self.iter.next()
     }
-}
-
-//----------------------------------------------------------------------------//
-
-/// Create a new InfoHash.
-pub fn new_info_hash() -> InfoHash {
-    [0u8; INFO_HASH_LEN]
 }

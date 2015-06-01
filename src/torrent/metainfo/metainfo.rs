@@ -6,7 +6,8 @@ use std::path::{Path};
 
 use bencode::{Bencode, DecodeBencode};
 use error::{TorrentError, TorrentResult, TorrentErrorKind};
-use torrent::{TorrentView, ContactType, InfoHash, PieceInfo, Files, Nodes,
+use info_hash::{InfoHash};
+use torrent::{TorrentView, ContactType, PieceInfo, Files, Nodes,
               FileInfo, File, FilePath};
 use torrent::metainfo::{self};
 use util::{Dictionary, Iter};
