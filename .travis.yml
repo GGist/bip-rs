@@ -16,7 +16,8 @@ script:
   - cargo test
   - cargo doc
 
-after_success: [ $TRAVIS_BRANCH = master ] && [ $TRAVIS_PULL_REQUEST = false ] &&
+after_success: |
+  [ $TRAVIS_BRANCH = master ] && [ $TRAVIS_PULL_REQUEST = false ] &&
   # Generate And Publish Documentation
   git config --global user.email "travis@travis-ci.org" &&
   git config --global user.name "travis-ci" &&
