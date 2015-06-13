@@ -51,7 +51,7 @@ macro_rules! slice_dict_opt {
 }
 
 /// Tries to convert the root BencodeView value to a Dictionary.
-pub fn slice_root_dict<'a, T>(root: &'a T) -> TorrentResult<&'a Dictionary<String, T>>
-    where T: BencodeView<InnerItem=T> {
+pub fn slice_root_dict<'a, T>(root: &T) -> TorrentResult<&Dictionary<'a, T>>
+    where T: BencodeView<'a, InnerView=T> + 'a {
     Ok(slice_ben!(root, metainfo::ROOT_IDENT, BencodeView::dict))
 }

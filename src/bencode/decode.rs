@@ -1,50 +1,49 @@
-use std::collections::{HashMap};
-use std::collections::hash_map::{Entry};
+use std::collections::{BTreeMap};
+use std::collections::btree_map::{Entry};
 use std::convert::{AsRef};
-use std::io::{Read};
-use std::iter::{Peekable};
+use std::str::{self};
 
 use bencode::{self, BencodeView, BencodeKind, DecodeBencode};
 use error::{BencodeError, BencodeErrorKind, BencodeResult};
 use util::{Dictionary};
 
-/// Standard implementation of an object implementing BencodeView.
+/// Ahead of time parser for decoding bencode.
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub enum Bencode {
+pub enum Bencode<'a> {
     #[doc(hidden)]
     /// Bencode Integer.
     Int(i64),
     #[doc(hidden)]
     /// Bencode Bytes.
-    Bytes(Vec<u8>),
+    Bytes(&'a [u8]),
     #[doc(hidden)]
     /// Bencode List.
-    List(Vec<Bencode>),
+    List(Vec<Bencode<'a>>),
     #[doc(hidden)]
     /// Bencode Dictionary.
-    Dict(HashMap<String, Bencode>)
+    Dict(BTreeMap<&'a str, Bencode<'a>>)
 }
 
-impl<'a, T> DecodeBencode<T> for Bencode where T: AsRef<[u8]> {
-    fn decode(bytes: T) -> BencodeResult<Bencode> {
-        let mut bytes_iter = bytes.as_ref().iter().map(|&n| n).enumerate().peekable();
+impl<'a, T: ?Sized> DecodeBencode<&'a T> for Bencode<'a> where T: AsRef<[u8]> {
+    fn decode(bytes: &'a T) -> BencodeResult<Bencode<'a>> {
+        let bytes_ref = bytes.as_ref();
 
         // Apply try so any errors return before the eof check
-        let result = try!(decode(&mut bytes_iter));
+        let (bencode, end_pos) = try!(decode(bytes_ref, 0));
         
-        if bytes_iter.peek().is_some() {
-            return Err(BencodeError::new(BencodeErrorKind::BytesEmpty,
-                "End Portion Of bytes Not Processed", None))
+        if end_pos != bytes_ref.len() {
+            return Err(BencodeError::with_pos(BencodeErrorKind::BytesEmpty,
+                "Some Bytes Were Left Over After Parsing Bencode", Some(end_pos)))
         }
         
-        Ok(result)
+        Ok(bencode)
     }
 }
 
-impl BencodeView for Bencode {
-    type InnerItem = Bencode;
+impl<'a> BencodeView<'a> for Bencode<'a> {
+    type InnerView = Bencode<'a>;
 
-    fn kind<'a>(&'a self) -> BencodeKind<'a, <Self as BencodeView>::InnerItem> {
+    fn kind<'b>(&'b self) -> BencodeKind<'b, 'a, Self::InnerView> {
         match self {
             &Bencode::Int(n)       => BencodeKind::Int(n),
             &Bencode::Bytes(ref n) => BencodeKind::Bytes(n),
@@ -52,7 +51,7 @@ impl BencodeView for Bencode {
             &Bencode::Dict(ref n)  => BencodeKind::Dict(n)
         }
    }
-    
+   
     fn int(&self) -> Option<i64> {
         match self {
             &Bencode::Int(n) => Some(n),
@@ -60,21 +59,21 @@ impl BencodeView for Bencode {
         }
     }
     
-    fn bytes(&self) -> Option<&[u8]> {
+    fn bytes(&self) -> Option<&'a [u8]> {
         match self {
             &Bencode::Bytes(ref n) => Some(&n[0..]),
             _                      => None
         }
     }
     
-    fn list(&self) -> Option<&[<Self as BencodeView>::InnerItem]> {
+    fn list(&self) -> Option<&[Self::InnerView]> {
     match self {
             &Bencode::List(ref n) => Some(n),
             _                     => None
         }
     }
 
-    fn dict(&self) -> Option<&Dictionary<String, <Self as BencodeView>::InnerItem>> {
+    fn dict(&self) -> Option<&Dictionary<'a, Self::InnerView>> {
         match self {
             &Bencode::Dict(ref n) => Some(n),
             _                     => None
@@ -82,154 +81,156 @@ impl BencodeView for Bencode {
     }
 }
 
-pub fn decode<T>(bytes: &mut Peekable<T>) -> BencodeResult<Bencode>
-    where T: Iterator<Item=(usize, u8)> {
-    let &(curr_pos, curr_char) = try!(bytes.peek().ok_or(
-        BencodeError::new(BencodeErrorKind::BytesEmpty, "Stopped At Start Of Decode", None)
-    ));
+pub fn decode<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(Bencode<'a>, usize)> {
+    let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
     
-    match curr_char {
+    match curr_byte {
         bencode::INT_START  => {
-            bytes.next();
-            Ok(Bencode::Int(try!(decode_int(bytes, bencode::BEN_END))))
+            let (bencode, pos) = try!(decode_int(bytes, pos + 1, bencode::BEN_END));
+            Ok((Bencode::Int(bencode), pos))
         },
         bencode::LIST_START => {
-            bytes.next();
-            Ok(Bencode::List(try!(decode_list(bytes))))
+            let (bencode, pos) = try!(decode_list(bytes, pos + 1));
+            Ok((Bencode::List(bencode), pos))
         },
         bencode::DICT_START => {
-            bytes.next();
-            Ok(Bencode::Dict(try!(decode_dict(bytes))))
+            let (bencode, pos) = try!(decode_dict(bytes, pos + 1));
+            Ok((Bencode::Dict(bencode), pos))
         },
         bencode::BYTE_LEN_LOW...bencode::BYTE_LEN_HIGH => {
-            // Include The Length Digit, Don't Consume It
-            Ok(Bencode::Bytes(try!(decode_bytes(bytes))))
+            let (bencode, pos) = try!(decode_bytes(bytes, pos));
+            // Include the length digit, don't increment position
+            Ok((Bencode::Bytes(bencode), pos))
         },
-        _ => Err(BencodeError::new(BencodeErrorKind::InvalidByte, 
-                                   "Unknown Bencode Type Token Found",
-                                   Some(curr_pos)))
+        _ => Err(BencodeError::with_pos(BencodeErrorKind::InvalidByte, 
+                 "Unknown Bencode Type Token Found", Some(pos)))
+    }
+}
+
+fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeResult<(i64, usize)> {
+    let (_, begin_decode) = bytes.split_at(pos);
+    
+    let relative_end_pos = match begin_decode.iter().position(|n| *n == delim) {
+        Some(end_pos) => end_pos,
+        None          => return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+                             "No Delimiter Found For Integer/Length", Some(pos)))
+    };
+    let int_byte_slice = &begin_decode[..relative_end_pos];
+    
+    if int_byte_slice.len() > 1 {
+        // Negative zero is not allowed (this would not be caught when converting)
+        if int_byte_slice[0] == b'-' && int_byte_slice[1] == b'0' {
+            return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+                "Illegal Negative Zero For Integer/Length", Some(pos)))
+        }
+    
+        // Zero padding is illegal, and unspecified for key lengths (we disallow both)
+        if int_byte_slice[0] == b'0' {
+            return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+                "Illegal Zero Padding For Integer/Length", Some(pos)))
+        }
+    }
+    
+    let int_str = match str::from_utf8(int_byte_slice) {
+        Ok(n)  => n,
+        Err(_) => return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+                      "Invalid UTF-8 Found For Integer/Length", Some(pos)))
+    };
+    
+    // Position of end of integer type, next byte is the start of the next value
+    let absolute_end_pos = pos + relative_end_pos;
+    match i64::from_str_radix(int_str, 10) {
+        Ok(n)  => Ok((n, absolute_end_pos + 1)),
+        Err(_) => Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+                      "Could Not Convert Integer/Length To i64", Some(pos)))
     }
 }
     
-fn decode_int<T>(bytes: &mut Peekable<T>, delim: u8) -> BencodeResult<i64>
-    where T: Iterator<Item=(usize, u8)> {
-    let curr_pos = try!(peek_position(bytes, "Stopped At Start Of Integer Decode"));
-    let int_bytes: Vec<u8> = bytes.map(|(_, byte)| byte)
-                                  .take_while(|&byte| byte != delim)
-                                  .collect();
-    
-    // Explicit error checking
-    if int_bytes.len() > 1 {
-        // Zero padding is illegal for integers, and unspecified for lengths (disallow both)
-        if int_bytes[0] == b'0' {
-            return Err(BencodeError::new(BencodeErrorKind::InvalidInt,
-                            "Illegal Zero Padding On Integer/Length", Some(curr_pos)))
-        }
-    
-        // Negative zero is not allowed (but would pass as valid if parsed as an integer)
-        if int_bytes[0] == b'-' && int_bytes[1] == b'0' {
-            return Err(BencodeError::new(BencodeErrorKind::InvalidInt,
-                            "Illegal Negative Zero", Some(curr_pos)))
-        }
-    }
-    
-    let int_str = String::from_utf8_lossy(&int_bytes[..]);
-    match i64::from_str_radix(&*int_str, 10) {
-        Ok(n) => Ok(n),
-        Err(_) => Err(BencodeError::new(BencodeErrorKind::InvalidInt,
-            "Could Not Convert Integer To i64", Some(curr_pos)))
-    }
-}
-    
-fn decode_bytes<T>(bytes: &mut Peekable<T>) -> BencodeResult<Vec<u8>>
-    where T: Iterator<Item=(usize, u8)> {
-    let curr_pos = try!(peek_position(bytes, "Stopped At Start Of Bytes Decode"));
-    let num_bytes = try!(decode_int(bytes, bencode::BYTE_LEN_END));
+fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(&'a [u8], usize)> {
+    let (num_bytes, start_pos) = try!(decode_int(bytes, pos, bencode::BYTE_LEN_END));
 
     if num_bytes < 0 {
-        return Err(BencodeError::new(BencodeErrorKind::InvalidLength, 
-                                     "Negative Length Bytes Found", Some(curr_pos)))
+        return Err(BencodeError::with_pos(BencodeErrorKind::InvalidLength, 
+            "Negative Byte Length Found", Some(pos)))
+    } 
+    
+    // Should be safe to cast to usize (TODO: Check if cast would overflow to provide
+    // a more helpful error message, otherwise, parsing will probably fail with an
+    // unrelated message).
+    let num_bytes = num_bytes as usize;
+    
+    if num_bytes > bytes[start_pos..].len() {
+        return Err(BencodeError::with_pos(BencodeErrorKind::InvalidLength,
+            "Overflow Byte Length Found", Some(pos)))
     }
     
-    let owned_bytes = bytes.take(num_bytes as usize)
-                           .map(|(_, byte)| byte)
-                           .collect::<Vec<u8>>();
-
-    if owned_bytes.len() == num_bytes as usize {
-        Ok(owned_bytes)
-    } else {
-        Err(BencodeError::new(BencodeErrorKind::BytesEmpty,
-                              "Byte Length Ran Past EOF", Some(curr_pos)))
-    }
+    let end_pos = start_pos + num_bytes;
+    Ok((&bytes[start_pos..end_pos], end_pos))
 }
 
-fn decode_list<T>(bytes: &mut Peekable<T>) -> BencodeResult<Vec<Bencode>>
-    where T: Iterator<Item=(usize, u8)> {
-    let mut ben_list: Vec<Bencode> = Vec::new();
+fn decode_list<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(Vec<Bencode<'a>>, usize)> {
+    let mut bencode_list = Vec::new();
     
-    let mut curr_byte = try!(peek_byte(bytes, "Stopped At List Element"));
+    let mut curr_pos = pos;
+    let mut curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In List"));
+    
     while curr_byte != bencode::BEN_END {
-        ben_list.push(try!(decode(bytes)));
+        let (bencode, next_pos) = try!(decode(bytes, curr_pos));
         
-        curr_byte = try!(peek_byte(bytes, "Stopped At List Element"));
+        bencode_list.push(bencode);
+        
+        curr_pos = next_pos;
+        curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In List"));
     }
-    bytes.next();
     
-    Ok(ben_list)
+    Ok((bencode_list, curr_pos + 1))
 }
+
+fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(BTreeMap<&'a str, Bencode<'a>>, usize)> {
+    let mut bencode_dict = BTreeMap::new();
     
-fn decode_dict<T>(bytes: &mut Peekable<T>) -> BencodeResult<HashMap<String, Bencode>>
-    where T: Iterator<Item=(usize, u8)> {
-    let mut ben_dict: HashMap<String, Bencode> = HashMap::new();
-    let curr_pos = try!(peek_position(bytes, "Stopped At Dict Element"));
-    
-    let mut last_key = String::with_capacity(0);
-    let mut curr_byte = try!(peek_byte(bytes, "Stopped At Dict Element"));
+    let mut curr_pos = pos;
+    let mut curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In Dictionary"));
     
     while curr_byte != bencode::BEN_END {
-        let key = match String::from_utf8(try!(decode_bytes(bytes))) {
+        let (key_bytes, next_pos) = try!(decode_bytes(bytes, curr_pos));
+    
+        let key = match str::from_utf8(key_bytes) {
             Ok(n)  => n,
             Err(_) => {
-                return Err(BencodeError::new(BencodeErrorKind::InvalidByte,
-                    "Dictionary Key Is Not Valid UTF-8", Some(curr_pos)))
+                return Err(BencodeError::with_pos(BencodeErrorKind::InvalidByte,
+                    "Invalid UTF-8 Key Found For Dictionar", Some(curr_pos)))
             }
         };
         
         // Spec says that the keys must be in alphabetical order
-        if last_key.len() != 0 && key < last_key {
-            return Err(BencodeError::new(BencodeErrorKind::InvalidKey,
-                "Dictionary Key Not In Alphabetical Order", Some(curr_pos)))
-        }
+        match bencode_dict.keys().last() {
+            Some(last_key) if key < *last_key => {
+                return Err(BencodeError::with_pos(BencodeErrorKind::InvalidKey,
+                "Key Not In Alphabetical Order For Dictionary", Some(curr_pos)))
+            },
+            _ => ()
+        };
+        curr_pos = next_pos;
         
-        let val = try!(decode(bytes));
-        match ben_dict.entry(key.clone()) {
-            Entry::Vacant(n)   => n.insert(val),
+        let (value, next_pos) = try!(decode(bytes, curr_pos));
+        match bencode_dict.entry(key) {
+            Entry::Vacant(n)   => n.insert(value),
             Entry::Occupied(_) => {
-                return Err(BencodeError::new(BencodeErrorKind::InvalidKey,
-                    "Duplicate Key Found", Some(curr_pos)))
+                return Err(BencodeError::with_pos(BencodeErrorKind::InvalidKey,
+                    "Duplicate Key Found For Dictionary", Some(curr_pos)))
             }
         };
 
-        last_key = key;
-        curr_byte = try!(peek_byte(bytes, "Stopped At Dict Element"));
+        curr_pos = next_pos;
+        curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In Dictionary"));
     }
-    bytes.next();
     
-    Ok(ben_dict)
+    Ok((bencode_dict, curr_pos + 1))
 }
 
-fn peek_byte<T>(bytes: &mut Peekable<T>, err_msg: &'static str) -> BencodeResult<u8>
-    where T: Iterator<Item=(usize, u8)> {
-    bytes.peek().map(|&(_, n)| n).ok_or(
-        BencodeError::new(BencodeErrorKind::BytesEmpty, err_msg, None)
-    )
-}
-
-fn peek_position<T>(bytes: &mut Peekable<T>, err_msg: &'static str) -> BencodeResult<usize>
-    where T: Iterator<Item=(usize, u8)> {
-    bytes.peek().map(|&(n, _)| n).ok_or(
-        BencodeError::new(BencodeErrorKind::BytesEmpty, err_msg, None)
-    )
+fn peek_byte(bytes: &[u8], pos: usize, err_msg: &'static str) -> BencodeResult<u8> {
+    bytes.get(pos).map(|n| *n).ok_or( BencodeError::new(BencodeErrorKind::BytesEmpty, err_msg) )
 }
 
 #[cfg(test)]
@@ -284,10 +285,7 @@ mod tests {
    
     #[test]
     fn positive_decode_dict() {
-        let mut buf = DICTIONARY.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        let dict = super::decode_dict(&mut buf).unwrap();
+        let dict = super::decode_dict(DICTIONARY, 1).unwrap().0;
         assert_eq!(dict.get("test_key").unwrap().str().unwrap(), "test_value");
         
         let nested_dict = dict.get("test_dict").unwrap().dict().unwrap();
@@ -301,10 +299,7 @@ mod tests {
    
     #[test]
     fn positive_decode_list() {
-        let mut buf = LIST.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        let list = super::decode_list(&mut buf).unwrap();
+        let list = super::decode_list(LIST, 1).unwrap().0;
         assert_eq!(list[0].str().unwrap(), "test_bytes");
         assert_eq!(list[1].int().unwrap(), 500i64);
         assert_eq!(list[2].int().unwrap(), 0i64);
@@ -319,9 +314,7 @@ mod tests {
    
     #[test]
     fn positive_decode_bytes() {
-        let mut buf = BYTES.iter().map(|&n| n).enumerate().peekable();
-        
-        let bytes = super::decode_bytes(&mut buf).unwrap();
+        let bytes = super::decode_bytes(BYTES, 0).unwrap().0;
         assert_eq!(bytes.len(), 5);
         assert_eq!(bytes[0] as char, 'Å');
         assert_eq!(bytes[1] as char, 'æ');
@@ -332,36 +325,25 @@ mod tests {
     
     #[test]
     fn positive_decode_bytes_zero_len() {
-        let mut buf = BYTES_ZERO_LEN.iter().map(|&n| n).enumerate().peekable();
-        
-        let bytes = super::decode_bytes(&mut buf).unwrap();
+        let bytes = super::decode_bytes(BYTES_ZERO_LEN, 0).unwrap().0;
         assert_eq!(bytes.len(), 0);
     }
    
     #[test]
     fn positive_decode_int() {
-        let mut buf = INT.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        let int_value = super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        let int_value = super::decode_int(INT, 1, bencode::BEN_END).unwrap().0;
         assert_eq!(int_value, 500i64);
     }
    
     #[test]
     fn positive_decode_int_negative() {
-        let mut buf = INT_NEGATIVE.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        let int_value = super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        let int_value = super::decode_int(INT_NEGATIVE, 1, bencode::BEN_END).unwrap().0;
         assert_eq!(int_value, -500i64);
     }
     
     #[test]
     fn positive_decode_int_zero() {
-        let mut buf = INT_ZERO.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        let int_value = super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        let int_value = super::decode_int(INT_ZERO, 1, bencode::BEN_END).unwrap().0;
         assert_eq!(int_value, 0i64);
     }
     
@@ -388,72 +370,48 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_decode_int_nan() {
-        let mut buf = INT_NAN.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        super::decode_int(INT_NAN, 1, bencode::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_leading_zero() {
-        let mut buf = INT_LEADING_ZERO.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        super::decode_int(INT_LEADING_ZERO, 1, bencode::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_double_zero() {
-        let mut buf = INT_DOUBLE_ZERO.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        super::decode_int(INT_DOUBLE_ZERO, 1, bencode::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_negative_zero() {
-        let mut buf = INT_NEGATIVE_ZERO.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        super::decode_int(INT_NEGATIVE_ZERO, 1, bencode::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_double_negative() {
-        let mut buf = INT_DOUBLE_NEGATIVE.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_int(&mut buf, bencode::BEN_END).unwrap();
+        super::decode_int(INT_DOUBLE_NEGATIVE, 1, bencode::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_dict_unordered_keys() {
-        let mut buf = DICT_UNORDERED_KEYS.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_dict(&mut buf).unwrap();
+        super::decode_dict(DICT_UNORDERED_KEYS, 1).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_dict_dup_keys_same_data() {
-        let mut buf = DICT_DUP_KEYS_SAME_DATA.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_dict(&mut buf).unwrap();
+        super::decode_dict(DICT_DUP_KEYS_SAME_DATA, 1).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_dict_dup_keys_diff_data() {
-        let mut buf = DICT_DUP_KEYS_DIFF_DATA.iter().map(|&n| n).enumerate().peekable();
-        buf.next().unwrap();
-        
-        super::decode_dict(&mut buf).unwrap();
+        super::decode_dict(DICT_DUP_KEYS_DIFF_DATA, 1).unwrap().0;
     }
 }

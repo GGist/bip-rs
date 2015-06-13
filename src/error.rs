@@ -3,7 +3,7 @@
 use std::borrow::{Cow, ToOwned};
 use std::convert::{From};
 use std::error::{Error};
-use std::fmt::{self, Display, Formatter, Debug};
+use std::fmt::{self, Display, Formatter};
 use std::io::{self};
 use std::result::{Result};
 
@@ -15,8 +15,6 @@ pub enum BencodeErrorKind {
     /// An Incomplete Number Of Bytes.
     BytesEmpty,
     /// An Invalid Byte Was Found.
-    ///
-    /// Position Of Invalid Byte Has Been Provided.
     InvalidByte,
     /// An Invalid Integer Was Found.
     InvalidInt,
@@ -29,15 +27,26 @@ pub enum BencodeErrorKind {
 /// A type for specifying errors when decoding Bencoded data.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct BencodeError {
-    pub kind: BencodeErrorKind,
-    pub desc: &'static str,
-    pub pos:  Option<usize>
+    kind: BencodeErrorKind,
+    desc: &'static str,
+    pos:  Option<usize>
 }
 
 impl BencodeError {
-    /// Construct a new BencodeError.
-    pub fn new(kind: BencodeErrorKind, desc: &'static str, pos: Option<usize>) -> BencodeError {
+    pub fn new(kind: BencodeErrorKind, desc: &'static str) -> BencodeError {
+        BencodeError::with_pos(kind, desc, None)
+    }
+    
+    pub fn with_pos(kind: BencodeErrorKind, desc: &'static str, pos: Option<usize>) -> BencodeError {
         BencodeError{ kind: kind, desc: desc, pos: pos }
+    }
+    
+    pub fn kind(&self) -> BencodeErrorKind {
+        self.kind
+    }
+    
+    pub fn position(&self) -> Option<usize> {
+        self.pos
     }
 }
 
@@ -45,10 +54,10 @@ impl Display for BencodeError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         try!(f.write_fmt(format_args!("Kind: {:?}", self.kind)));
         
-        try!(f.write_fmt(format_args!(" Description: {}", self.desc)));
+        try!(f.write_fmt(format_args!(", Description: {}", self.desc)));
         
         if let Some(n) = self.pos {
-            try!(f.write_fmt(format_args!("Position: {}", n)));
+            try!(f.write_fmt(format_args!(", Position: {}", n)));
         }
 
         Ok(())
@@ -105,17 +114,13 @@ impl TorrentError {
 
 impl Display for TorrentError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        try!(f.write_str("Kind: "));
-        try!(Debug::fmt(&self.kind, f));
+        try!(f.write_fmt(format_args!("Kind: {:?}", self.kind)));
         
-        try!(f.write_str(" Description: "));
-        try!(f.write_str(self.desc));
+        try!(f.write_fmt(format_args!(", Description: {}", self.desc)));
         
-        try!(f.write_str(" Detail: "));
-        match self.detail {
-            Some(ref n) => try!(f.write_str(n)),
-            None        => ()
-        };
+        if let Some(n) = self.detail.as_ref() {
+            try!(f.write_fmt(format_args!(", Detail: {}", n)));
+        }
         
         Ok(())
     }   

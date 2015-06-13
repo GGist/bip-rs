@@ -39,7 +39,7 @@ impl Metainfo {
     /// Create a new Metainfo object from the given bytes.
     pub fn new<B>(bytes: B) -> TorrentResult<Metainfo> 
         where B: AsRef<[u8]> {
-        let mut bencode = try!(Bencode::decode(bytes));
+        let mut bencode = try!(Bencode::decode(&bytes));
     
         // Should Be Calculated Before Anything Gets Moved Out
         let info_hash = try!(metainfo::generate_info_hash(&bencode));
@@ -282,11 +282,11 @@ macro_rules! ref_mut_dict {
 
 //----------------------------------------------------------------------------//
 
-pub fn slice_root_dict(root: &mut Bencode) -> TorrentResult<&mut Dictionary<String, Bencode>> {
+pub fn slice_root_dict<'a, 'b>(root: &'b mut Bencode<'a>) -> TorrentResult<&'b mut Dictionary<'a, Bencode<'a>>> {
     Ok(ref_mut_ben!(root, metainfo::ROOT_IDENT, Bencode::Dict))
 }
 
-pub fn slice_info_dict(root: &mut Bencode) -> TorrentResult<&mut Dictionary<String, Bencode>> {
+pub fn slice_info_dict<'a, 'b>(root: &'b mut Bencode<'a>) -> TorrentResult<&'b mut Dictionary<'a, Bencode<'a>>> {
     let root_dict = try!(slice_root_dict(root));
     
     Ok(ref_mut_dict!(root_dict, metainfo::INFO_KEY, Bencode::Dict))
@@ -304,7 +304,7 @@ fn move_announce(root: &mut Bencode) -> TorrentResult<String> {
     let root_dict = try!(slice_root_dict(root));
     let bytes = remove_dict!(root_dict, metainfo::ANNOUNCE_KEY, Bencode::Bytes);
     
-    bytes_into_string(bytes, metainfo::ANNOUNCE_KEY)
+    bytes_into_string(bytes.to_vec(), metainfo::ANNOUNCE_KEY)
 }
 
 fn move_nodes(root: &mut Bencode) -> TorrentResult<Vec<(String, u16)>> {
@@ -325,7 +325,7 @@ fn move_nodes(root: &mut Bencode) -> TorrentResult<Vec<(String, u16)>> {
         
         let port = move_ben!(port_ben, metainfo::NODES_KEY, Bencode::Int) as u16;
         let host = try!(bytes_into_string(
-            move_ben!(host_ben, metainfo::NODES_KEY, Bencode::Bytes),
+            move_ben!(host_ben, metainfo::NODES_KEY, Bencode::Bytes).to_vec(),
             metainfo::NODES_KEY
         ));
         
@@ -339,7 +339,7 @@ fn move_comment(root: &mut Bencode) -> TorrentResult<Option<String>> {
     let root_dict = try!(slice_root_dict(root));
     
     match remove_dict_opt!(root_dict, metainfo::COMMENT_KEY, Bencode::Bytes) {
-        Some(n) => bytes_into_string(n, metainfo::COMMENT_KEY).map(Some),
+        Some(n) => bytes_into_string(n.to_vec(), metainfo::COMMENT_KEY).map(Some),
         None    => Ok(None)
     }
 }
@@ -348,7 +348,7 @@ fn move_created_by(root: &mut Bencode) -> TorrentResult<Option<String>> {
     let root_dict = try!(slice_root_dict(root));
     
     match remove_dict_opt!(root_dict, metainfo::CREATED_BY_KEY, Bencode::Bytes) {
-        Some(n) => bytes_into_string(n, metainfo::CREATED_BY_KEY).map(Some),
+        Some(n) => bytes_into_string(n.to_vec(), metainfo::CREATED_BY_KEY).map(Some),
         None    => Ok(None)
     }
 }
@@ -368,20 +368,20 @@ fn move_piece_length(root: &mut Bencode) -> TorrentResult<i64> {
 fn move_pieces(root: &mut Bencode) -> TorrentResult<Vec<u8>> {
     let info_dict = try!(slice_info_dict(root));
     
-    Ok(remove_dict!(info_dict, metainfo::PIECES_KEY, Bencode::Bytes))
+    Ok(remove_dict!(info_dict, metainfo::PIECES_KEY, Bencode::Bytes).to_vec())
 }
 
 /// 
 ///
 /// Returns an error if the checksum is present but of the wrong length.
-fn move_checksum(dict: &mut Dictionary<String, Bencode>) -> TorrentResult<Option<Vec<u8>>> {
+fn move_checksum<'a>(dict: &mut Dictionary<'a, Bencode<'a>>) -> TorrentResult<Option<Vec<u8>>> {
     let checksum = remove_dict_opt!(dict, metainfo::MD5SUM_KEY, Bencode::Bytes);
     
     if checksum.is_some() && checksum.as_ref().unwrap().len() != metainfo::MD5SUM_LEN {
         Err(TorrentError::with_detail(TorrentErrorKind::WrongType, metainfo::MD5SUM_KEY,
             "Checksum Is The Wrong Length"))
     } else {
-        Ok(checksum)
+        Ok(checksum.map(|n| n.to_vec()))
     }
 }
 
@@ -389,7 +389,7 @@ fn move_name(root: &mut Bencode) -> TorrentResult<String> {
     let info_dict = try!(slice_info_dict(root));
     let name_bytes = remove_dict!(info_dict, metainfo::NAME_KEY, Bencode::Bytes);
     
-    bytes_into_string(name_bytes, metainfo::NAME_KEY)
+    bytes_into_string(name_bytes.to_vec(), metainfo::NAME_KEY)
 }
 
 /// 
@@ -432,7 +432,7 @@ fn move_file(file: &mut Bencode) -> TorrentResult<(i64, Option<Vec<u8>>, Vec<Str
     for path in paths {
         let path_entry_bytes = move_ben!(path, metainfo::PATH_KEY, Bencode::Bytes);
         
-        path_list.push(try!(bytes_into_string(path_entry_bytes, metainfo::PATH_KEY)));
+        path_list.push(try!(bytes_into_string(path_entry_bytes.to_vec(), metainfo::PATH_KEY)));
     }
     
     Ok((length, checksum, path_list))

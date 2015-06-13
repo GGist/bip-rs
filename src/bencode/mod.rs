@@ -20,15 +20,15 @@ const BYTE_LEN_END:  u8 = b':';
 pub use self::decode::{Bencode};
 
 /// Represents an abstraction into the contents of a BencodeView.
-pub enum BencodeKind<'a, T> where T: BencodeView + 'a {
+pub enum BencodeKind<'b, 'a: 'b, T> where T: BencodeView<'a> + 'a {
     /// Bencode Integer.
     Int(i64),
     /// Bencode Bytes.
     Bytes(&'a [u8]),
     /// Bencode List.
-    List(&'a [T]),
+    List(&'b [T]),
     /// Bencode Dictionary.
-    Dict(&'a Dictionary<String, T>)
+    Dict(&'b Dictionary<'a, T>)
 }
 
 pub trait DecodeBencode<T> {
@@ -39,19 +39,19 @@ pub trait EncodeBencode<T> {
     fn encode(self) -> T;
 }
 
-impl<T> EncodeBencode<Vec<u8>> for T where T: BencodeView {
+impl<'a, T> EncodeBencode<Vec<u8>> for T where T: BencodeView<'a> {
     fn encode(self) -> Vec<u8> {
         self::encode::encode(self)
     }
 }
 
 /// Trait for viewing the contents of some bencode object.
-pub trait BencodeView {
-    type InnerItem: BencodeView;
+pub trait BencodeView<'a> {
+    type InnerView: BencodeView<'a> + 'a;
 
     /// Tries to convert the current value to a str (only valid UTF-8 byte
     /// sequences are convertible).
-    fn str(&self) -> Option<&str> {
+    fn str(&self) -> Option<&'a str> {
         match self.bytes() {
             Some(n) => str::from_utf8(n).ok(),
             None    => None
@@ -59,29 +59,29 @@ pub trait BencodeView {
     }
     
     /// The underlying type for the current value.
-    fn kind<'a>(&'a self) -> BencodeKind<'a, Self::InnerItem>;
+    fn kind<'b>(&'b self) -> BencodeKind<'b, 'a, Self::InnerView>;
     
     /// Tries to convert the current value to an i64.
     fn int(&self) -> Option<i64>;
     
     /// Tries to convert the current value to a sequence of bytes.
-    fn bytes(&self) -> Option<&[u8]>;
+    fn bytes(&self) -> Option<&'a [u8]>;
     
-    /// Tries to convert the current value to a list of InnerItem values.
-    fn list(&self) -> Option<&[Self::InnerItem]>;
+    /// Tries to convert the current value to a list of InnerView values.
+    fn list(&self) -> Option<&[Self::InnerView]>;
 
-    /// Tries to convert the current value to a dictionary of InnerItem values.
-    fn dict(&self) -> Option<&Dictionary<String, Self::InnerItem>>;
+    /// Tries to convert the current value to a dictionary of InnerView values.
+    fn dict(&self) -> Option<&Dictionary<'a, Self::InnerView>>;
 }
 
-impl<'a, T> BencodeView for &'a T where T: BencodeView {
-    type InnerItem = <T as BencodeView>::InnerItem;
+impl<'a: 'c, 'c, T> BencodeView<'a> for &'c T where T: BencodeView<'a> {
+    type InnerView = <T as BencodeView<'a>>::InnerView;
 
-    fn str(&self) -> Option<&str> {
+    fn str(&self) -> Option<&'a str> {
         BencodeView::str(*self)
     }
     
-    fn kind<'b>(&'b self) -> BencodeKind<'b, Self::InnerItem> {
+    fn kind<'b>(&'b self) -> BencodeKind<'b, 'a, Self::InnerView> {
         BencodeView::kind(*self)
     }
     
@@ -89,27 +89,27 @@ impl<'a, T> BencodeView for &'a T where T: BencodeView {
         BencodeView::int(*self)
     }
     
-    fn bytes(&self) -> Option<&[u8]> {
+    fn bytes(&self) -> Option<&'a [u8]> {
         BencodeView::bytes(*self)
     }
     
-    fn list(&self) -> Option<&[Self::InnerItem]> {
+    fn list(&self) -> Option<&[Self::InnerView]> {
         BencodeView::list(*self)
     }
 
-    fn dict(&self) -> Option<&Dictionary<String, Self::InnerItem>> {
+    fn dict(&self) -> Option<&Dictionary<'a, Self::InnerView>> {
         BencodeView::dict(*self)
     }
 }
 
-impl<'a, T> BencodeView for &'a mut T where T: BencodeView {
-    type InnerItem = <T as BencodeView>::InnerItem;
+impl<'a: 'c, 'c, T> BencodeView<'a> for &'c mut T where T: BencodeView<'a> {
+    type InnerView = <T as BencodeView<'a>>::InnerView;
 
-    fn str(&self) -> Option<&str> {
+    fn str(&self) -> Option<&'a str> {
         BencodeView::str(*self)
     }
     
-    fn kind<'b>(&'b self) -> BencodeKind<'b, Self::InnerItem> {
+    fn kind<'b>(&'b self) -> BencodeKind<'b, 'a, Self::InnerView> {
         BencodeView::kind(*self)
     }
     
@@ -117,15 +117,15 @@ impl<'a, T> BencodeView for &'a mut T where T: BencodeView {
         BencodeView::int(*self)
     }
     
-    fn bytes(&self) -> Option<&[u8]> {
+    fn bytes(&self) -> Option<&'a [u8]> {
         BencodeView::bytes(*self)
     }
     
-    fn list(&self) -> Option<&[Self::InnerItem]> {
+    fn list(&self) -> Option<&[Self::InnerView]> {
         BencodeView::list(*self)
     }
 
-    fn dict(&self) -> Option<&Dictionary<String, Self::InnerItem>> {
+    fn dict(&self) -> Option<&Dictionary<'a, Self::InnerView>> {
         BencodeView::dict(*self)
     }
 }
@@ -136,13 +136,13 @@ mod macros {
     macro_rules! ben_map {
         ( $($key:expr => $val:expr),* ) => {
             {
-                use std::borrow::{ToOwned};
-                use std::collections::{HashMap};
+                use std::convert::{AsRef};
+                use std::collections::{BTreeMap};
                 use redox::bencode::{Bencode};
                 
-                let mut map = HashMap::new();
+                let mut map = BTreeMap::new();
                 $(
-                    map.insert($key.to_owned(), $val);
+                    map.insert(AsRef::as_ref($key), $val);
                 )*
                 Bencode::Dict(map)
             }
@@ -170,10 +170,10 @@ mod macros {
     macro_rules! ben_bytes {
         ( $ben:expr ) => {
             {
-                use std::convert::{From};
+                use std::convert::{AsRef};
                 use redox::bencode::{Bencode};
                 
-                Bencode::Bytes(Vec::<u8>::from($ben))
+                Bencode::Bytes(AsRef::as_ref($ben))
             }
         }
     }

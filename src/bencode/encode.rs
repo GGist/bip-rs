@@ -1,7 +1,7 @@
 use bencode::{self, BencodeView, BencodeKind};
 use util::{Dictionary};
 
-pub fn encode<T>(val: T) -> Vec<u8> where T: BencodeView {
+pub fn encode<'a, T>(val: T) -> Vec<u8> where T: BencodeView<'a> {
     match val.kind() {
         BencodeKind::Int(n)   => encode_int(n),
         BencodeKind::Bytes(n) => encode_bytes(&n),
@@ -30,7 +30,7 @@ fn encode_bytes(list: &[u8]) -> Vec<u8> {
     bytes
 }
     
-fn encode_list<T>(list: &[T]) -> Vec<u8> where T: BencodeView {
+fn encode_list<'a, T>(list: &[T]) -> Vec<u8> where T: BencodeView<'a> {
     let mut bytes: Vec<u8> = Vec::new();
     
     bytes.push(bencode::LIST_START);
@@ -42,8 +42,8 @@ fn encode_list<T>(list: &[T]) -> Vec<u8> where T: BencodeView {
     bytes
 }
     
-fn encode_dict<T>(dict: &Dictionary<String, T>) -> Vec<u8>
-    where T: BencodeView {
+fn encode_dict<'a, T>(dict: &Dictionary<'a, T>) -> Vec<u8>
+    where T: BencodeView<'a> {
     // Need To Sort The Keys In The Map Before Encoding
     let mut bytes: Vec<u8> = Vec::new();
 

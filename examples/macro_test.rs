@@ -18,8 +18,8 @@ fn main() {
     };
     let udp = UdpSocket::bind("0.0.0.0:0").unwrap();
     
-    udp.send_to(&dht_msg.encode()[..], ("dht.transmissionbt.com", 6881)).unwrap();
-    let (len, addr) = udp.recv_from(&mut recv_buffer[..]).unwrap();
+    udp.send_to(&dht_msg.encode()[..], "212.129.33.50:6881").unwrap();
+    let (len, _) = udp.recv_from(&mut recv_buffer[..]).unwrap();
     
     let bencode = Bencode::decode(&recv_buffer[0..len]).unwrap();
     println!("{:?}", bencode);

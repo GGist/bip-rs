@@ -1,8 +1,6 @@
 //! Utilities used throughout the library.
 
-use std::borrow::{Borrow};
-use std::collections::{HashMap, BTreeMap};
-use std::hash::{Hash};
+use std::collections::{BTreeMap};
 
 use rand;
 use sha1::{Sha1};
@@ -35,59 +33,37 @@ impl<'a, T: 'a + ?Sized> Iterator for Iter<'a, T> {
 }
 
 /// Trait for working with generic map data structures.
-pub trait Dictionary<K, V> where K: Borrow<str> {
+pub trait Dictionary<'a, V> {
     /// Convert the dictionary to an unordered list of key/value pairs.
-    fn to_list<'a>(&'a self) -> Vec<(&'a K, &'a V)>;
+    fn to_list(&self) -> Vec<(&&'a str, &V)>;
 
     /// Lookup a value in the dictionary.
-    fn lookup<'a>(&'a self, key: &str) -> Option<&'a V>;
+    fn lookup(&self, key: &str) -> Option<&V>;
     
     /// Lookup a mutable value in the dictionary.
-    fn lookup_mut<'a>(&'a mut self, key: &str) -> Option<&'a mut V>;
+    fn lookup_mut(&mut self, key: &str) -> Option<&mut V>;
 
     /// Insert a key/value pair into the dictionary.
-    fn insert(&mut self, key: K, value: V) -> Option<V>;
+    fn insert(&mut self, key: &'a str, value: V) -> Option<V>;
     
     /// Remove a value from the dictionary and return it.
     fn remove(&mut self, key: &str) -> Option<V>;
 }
 
-impl<K, V> Dictionary<K, V> for HashMap<K, V> where K: Hash + Eq + Borrow<str> {
-    fn to_list<'a>(&'a self) -> Vec<(&'a K, &'a V)> {
+impl<'a, V> Dictionary<'a, V> for BTreeMap<&'a str, V> {
+    fn to_list(&self) -> Vec<(&&'a str, &V)> {
         self.iter().collect()
     }
 
-    fn lookup<'a>(&'a self, key: &str) -> Option<&'a V> {
+    fn lookup(&self, key: &str) -> Option<&V> {
         self.get(key)
     }
     
-    fn lookup_mut<'a>(&'a mut self, key: &str) -> Option<&'a mut V> {
+    fn lookup_mut(&mut self, key: &str) -> Option<&mut V> {
         self.get_mut(key)
     }
 
-    fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.insert(key, value)
-    }
-    
-    fn remove(&mut self, key: &str) -> Option<V> {
-        self.remove(key)
-    }
-}
-
-impl<K, V> Dictionary<K, V> for BTreeMap<K, V> where K: Ord + Borrow<str> {
-    fn to_list<'a>(&'a self) -> Vec<(&'a K, &'a V)> {
-        self.iter().collect()
-    }
-
-    fn lookup<'a>(&'a self, key: &str) -> Option<&'a V> {
-        self.get(key)
-    }
-    
-    fn lookup_mut<'a>(&'a mut self, key: &str) -> Option<&'a mut V> {
-        self.get_mut(key)
-    }
-
-    fn insert(&mut self, key: K, value: V) -> Option<V> {
+    fn insert(&mut self, key: &'a str, value: V) -> Option<V> {
         self.insert(key, value)
     }
     
