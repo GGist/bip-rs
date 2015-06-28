@@ -1,6 +1,6 @@
 //! # Rust Bittorrent Library
 
-#![feature(collections)]
+#![feature(collections, vec_push_all)]
 
 extern crate rand;
 extern crate sha1;
