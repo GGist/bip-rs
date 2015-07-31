@@ -1,7 +1,5 @@
 //! # Rust Bittorrent Library
 
-// #![feature(vec_push_all)]
-
 extern crate rand;
 extern crate sha1;
 
