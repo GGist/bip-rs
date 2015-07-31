@@ -1,7 +1,15 @@
 language: rust
-rust: nightly
+rust:
+  - stable
+  - beta
+  - nightly
 
-sudo: true
+addons:
+  apt:
+    packages:
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
 
 env:
   global:
@@ -9,32 +17,18 @@ env:
 
 branches:
   only:
-    - master 
+    - master
+
+before_script:
+    - |
+        pip install 'travis-cargo<0.2' --user &&
+        export PATH=$HOME/.local/bin:$PATH
 
 script:
-  - cargo build
-  - cargo test
-  - cargo doc
+  - travis-cargo build
+  - travis-cargo test
+  - travis-cargo doc
 
-after_success: |
-  [ $TRAVIS_BRANCH = master ] && [ $TRAVIS_PULL_REQUEST = false ] &&
-  # Generate And Publish Documentation
-  git config --global user.email "travis@travis-ci.org" &&
-  git config --global user.name "travis-ci" &&
-  git clone --quiet --branch=gh-pages https://${GH_TOKEN}@github.com/GGist/redox-rs gh-pages > /dev/null &&
-  cd gh-pages &&
-  mv ./index.html ../target/doc &&
-  rm -rf ./* &&
-  cp -rf ../target/doc/* . &&
-  git add -A &&
-  git commit -m "Latest rustdoc on successful travis build $TRAVIS_BUILD_NUMBER auto-pushed to gh-pages" &&
-  git push -fq origin gh-pages > /dev/null &&
-  cd .. &&
-  # Generate And Publish Test Coverage
-  sudo apt-get install libcurl4-openssl-dev libelf-dev libdw-dev &&
-  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
-  tar xzf master.tar.gz &&
-  mkdir kcov-master/build && cd kcov-master/build &&
-  cmake .. && make &&
-  sudo make install && cd ../.. &&
-  kcov --coveralls-id=$TRAVIS_JOB_ID --exclude-pattern=/.cargo target/kcov target/debug/redox-*
+after_success:
+  - travis-cargo --only stable doc-upload
+  - travis-cargo coveralls --no-sudo
