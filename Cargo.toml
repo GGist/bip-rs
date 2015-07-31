@@ -20,3 +20,6 @@ byteorder = "*"
 time = "*"
 rand = "*"
 sha1 = "*"
+
+[features]
+unstable = []
