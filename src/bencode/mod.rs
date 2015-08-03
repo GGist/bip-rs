@@ -20,7 +20,7 @@ const BYTE_LEN_END:  u8 = b':';
 pub use self::decode::{Bencode};
 
 /// Represents an abstraction into the contents of a BencodeView.
-pub enum BencodeKind<'b, 'a: 'b, T> where T: BencodeView<'a> + 'a {
+pub enum BencodeKind<'b, 'a: 'b, T> where T: BencodeView<'a> + 'b {
     /// Bencode Integer.
     Int(i64),
     /// Bencode Bytes.
