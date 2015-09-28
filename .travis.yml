@@ -4,6 +4,8 @@ rust:
   - beta
   - nightly
 
+sudo: false
+
 addons:
   apt:
     packages:
