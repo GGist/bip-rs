@@ -2,42 +2,42 @@ use std::collections::{BTreeMap};
 use std::collections::btree_map::{Entry};
 use std::str::{self};
 
-use bencode::{self, Bencode};
-use error::{BencodeError, BencodeErrorKind, BencodeResult};
-use util::dictionary::{Dictionary};
+use bencode::{Bencode};
+use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
+use dictionary::{Dictionary};
 
-pub fn decode<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(Bencode<'a>, usize)> {
+pub fn decode<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Bencode<'a>, usize)> {
     let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
     
     match curr_byte {
-        bencode::INT_START  => {
-            let (bencode, pos) = try!(decode_int(bytes, pos + 1, bencode::BEN_END));
+        ::INT_START  => {
+            let (bencode, pos) = try!(decode_int(bytes, pos + 1, ::BEN_END));
             Ok((Bencode::Int(bencode), pos))
         },
-        bencode::LIST_START => {
+        ::LIST_START => {
             let (bencode, pos) = try!(decode_list(bytes, pos + 1));
             Ok((Bencode::List(bencode), pos))
         },
-        bencode::DICT_START => {
+        ::DICT_START => {
             let (bencode, pos) = try!(decode_dict(bytes, pos + 1));
             Ok((Bencode::Dict(bencode), pos))
         },
-        bencode::BYTE_LEN_LOW...bencode::BYTE_LEN_HIGH => {
+        ::BYTE_LEN_LOW...::BYTE_LEN_HIGH => {
             let (bencode, pos) = try!(decode_bytes(bytes, pos));
             // Include the length digit, don't increment position
             Ok((Bencode::Bytes(bencode), pos))
         },
-        _ => Err(BencodeError::with_pos(BencodeErrorKind::InvalidByte, 
+        _ => Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidByte, 
                  "Unknown Bencode Type Token Found", Some(pos)))
     }
 }
 
-fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeResult<(i64, usize)> {
+fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, usize)> {
     let (_, begin_decode) = bytes.split_at(pos);
     
     let relative_end_pos = match begin_decode.iter().position(|n| *n == delim) {
         Some(end_pos) => end_pos,
-        None          => return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+        None          => return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidInt,
                              "No Delimiter Found For Integer/Length", Some(pos)))
     };
     let int_byte_slice = &begin_decode[..relative_end_pos];
@@ -45,20 +45,20 @@ fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeResult<(i64, usize)
     if int_byte_slice.len() > 1 {
         // Negative zero is not allowed (this would not be caught when converting)
         if int_byte_slice[0] == b'-' && int_byte_slice[1] == b'0' {
-            return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+            return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidInt,
                 "Illegal Negative Zero For Integer/Length", Some(pos)))
         }
     
         // Zero padding is illegal, and unspecified for key lengths (we disallow both)
         if int_byte_slice[0] == b'0' {
-            return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+            return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidInt,
                 "Illegal Zero Padding For Integer/Length", Some(pos)))
         }
     }
     
     let int_str = match str::from_utf8(int_byte_slice) {
         Ok(n)  => n,
-        Err(_) => return Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+        Err(_) => return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidInt,
                       "Invalid UTF-8 Found For Integer/Length", Some(pos)))
     };
     
@@ -66,16 +66,16 @@ fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeResult<(i64, usize)
     let absolute_end_pos = pos + relative_end_pos;
     match i64::from_str_radix(int_str, 10) {
         Ok(n)  => Ok((n, absolute_end_pos + 1)),
-        Err(_) => Err(BencodeError::with_pos(BencodeErrorKind::InvalidInt,
+        Err(_) => Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidInt,
                       "Could Not Convert Integer/Length To i64", Some(pos)))
     }
 }
     
-fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(&'a [u8], usize)> {
-    let (num_bytes, start_pos) = try!(decode_int(bytes, pos, bencode::BYTE_LEN_END));
+fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8], usize)> {
+    let (num_bytes, start_pos) = try!(decode_int(bytes, pos, ::BYTE_LEN_END));
 
     if num_bytes < 0 {
-        return Err(BencodeError::with_pos(BencodeErrorKind::InvalidLength, 
+        return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidLength, 
             "Negative Byte Length Found", Some(pos)))
     } 
     
@@ -85,7 +85,7 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(&'a [u8], usi
     let num_bytes = num_bytes as usize;
     
     if num_bytes > bytes[start_pos..].len() {
-        return Err(BencodeError::with_pos(BencodeErrorKind::InvalidLength,
+        return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidLength,
             "Overflow Byte Length Found", Some(pos)))
     }
     
@@ -93,13 +93,13 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(&'a [u8], usi
     Ok((&bytes[start_pos..end_pos], end_pos))
 }
 
-fn decode_list<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(Vec<Bencode<'a>>, usize)> {
+fn decode_list<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Vec<Bencode<'a>>, usize)> {
     let mut bencode_list = Vec::new();
     
     let mut curr_pos = pos;
     let mut curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In List"));
     
-    while curr_byte != bencode::BEN_END {
+    while curr_byte != ::BEN_END {
         let (bencode, next_pos) = try!(decode(bytes, curr_pos));
         
         bencode_list.push(bencode);
@@ -111,19 +111,19 @@ fn decode_list<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(Vec<Bencode<'a
     Ok((bencode_list, curr_pos + 1))
 }
 
-fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(BTreeMap<&'a str, Bencode<'a>>, usize)> {
+fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(BTreeMap<&'a str, Bencode<'a>>, usize)> {
     let mut bencode_dict = BTreeMap::new();
     
     let mut curr_pos = pos;
     let mut curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In Dictionary"));
     
-    while curr_byte != bencode::BEN_END {
+    while curr_byte != ::BEN_END {
         let (key_bytes, next_pos) = try!(decode_bytes(bytes, curr_pos));
     
         let key = match str::from_utf8(key_bytes) {
             Ok(n)  => n,
             Err(_) => {
-                return Err(BencodeError::with_pos(BencodeErrorKind::InvalidByte,
+                return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidByte,
                     "Invalid UTF-8 Key Found For Dictionar", Some(curr_pos)))
             }
         };
@@ -131,7 +131,7 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(BTreeMap<&'a s
         // Spec says that the keys must be in alphabetical order
         match bencode_dict.keys().last() {
             Some(last_key) if key < *last_key => {
-                return Err(BencodeError::with_pos(BencodeErrorKind::InvalidKey,
+                return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
                 "Key Not In Alphabetical Order For Dictionary", Some(curr_pos)))
             },
             _ => ()
@@ -142,7 +142,7 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(BTreeMap<&'a s
         match bencode_dict.entry(key) {
             Entry::Vacant(n)   => n.insert(value),
             Entry::Occupied(_) => {
-                return Err(BencodeError::with_pos(BencodeErrorKind::InvalidKey,
+                return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
                     "Duplicate Key Found For Dictionary", Some(curr_pos)))
             }
         };
@@ -154,8 +154,8 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeResult<(BTreeMap<&'a s
     Ok((bencode_dict, curr_pos + 1))
 }
 
-fn peek_byte(bytes: &[u8], pos: usize, err_msg: &'static str) -> BencodeResult<u8> {
-    bytes.get(pos).map(|n| *n).ok_or( BencodeError::new(BencodeErrorKind::BytesEmpty, err_msg) )
+fn peek_byte(bytes: &[u8], pos: usize, err_msg: &'static str) -> BencodeParseResult<u8> {
+    bytes.get(pos).map(|n| *n).ok_or( BencodeParseError::new(BencodeParseErrorKind::BytesEmpty, err_msg) )
 }
 
 #[cfg(test)]
@@ -255,19 +255,19 @@ mod tests {
    
     #[test]
     fn positive_decode_int() {
-        let int_value = super::decode_int(INT, 1, bencode::BEN_END).unwrap().0;
+        let int_value = super::decode_int(INT, 1, ::BEN_END).unwrap().0;
         assert_eq!(int_value, 500i64);
     }
    
     #[test]
     fn positive_decode_int_negative() {
-        let int_value = super::decode_int(INT_NEGATIVE, 1, bencode::BEN_END).unwrap().0;
+        let int_value = super::decode_int(INT_NEGATIVE, 1, ::BEN_END).unwrap().0;
         assert_eq!(int_value, -500i64);
     }
     
     #[test]
     fn positive_decode_int_zero() {
-        let int_value = super::decode_int(INT_ZERO, 1, bencode::BEN_END).unwrap().0;
+        let int_value = super::decode_int(INT_ZERO, 1, ::BEN_END).unwrap().0;
         assert_eq!(int_value, 0i64);
     }
     
@@ -294,31 +294,31 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_decode_int_nan() {
-        super::decode_int(INT_NAN, 1, bencode::BEN_END).unwrap().0;
+        super::decode_int(INT_NAN, 1, ::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_leading_zero() {
-        super::decode_int(INT_LEADING_ZERO, 1, bencode::BEN_END).unwrap().0;
+        super::decode_int(INT_LEADING_ZERO, 1, ::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_double_zero() {
-        super::decode_int(INT_DOUBLE_ZERO, 1, bencode::BEN_END).unwrap().0;
+        super::decode_int(INT_DOUBLE_ZERO, 1, ::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_negative_zero() {
-        super::decode_int(INT_NEGATIVE_ZERO, 1, bencode::BEN_END).unwrap().0;
+        super::decode_int(INT_NEGATIVE_ZERO, 1, ::BEN_END).unwrap().0;
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_int_double_negative() {
-        super::decode_int(INT_DOUBLE_NEGATIVE, 1, bencode::BEN_END).unwrap().0;
+        super::decode_int(INT_DOUBLE_NEGATIVE, 1, ::BEN_END).unwrap().0;
     }
     
     #[test]

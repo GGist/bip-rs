@@ -1,5 +1,12 @@
+use std::collections::{BTreeMap};
+use std::str::{self};
 
-/// Represents an abstraction into the contents of a BencodeView.
+use decode::{self};
+use dictionary::{Dictionary};
+use error::{BencodeParseResult, BencodeParseError, BencodeParseErrorKind};
+use encode::{self};
+
+/// Abstract representation of a Bencode object.
 pub enum BencodeKind<'b, 'a: 'b> {
     /// Bencode Integer.
     Int(i64),
@@ -11,7 +18,7 @@ pub enum BencodeKind<'b, 'a: 'b> {
     Dict(&'b Dictionary<'a, Bencode<'a>>)
 }
 
-/// Ahead of time parser for decoding bencode.
+/// Bencode object that holds references to the underlying data.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Bencode<'a> {
     /// Bencode Integer.
@@ -25,12 +32,12 @@ pub enum Bencode<'a> {
 }
 
 impl<'a> Bencode<'a> {
-    pub fn decode(bytes: &'a [u8]) -> BencodeResult<Bencode<'a>> {
+    pub fn decode(bytes: &'a [u8]) -> BencodeParseResult<Bencode<'a>> {
         // Apply try so any errors return before the eof check
         let (bencode, end_pos) = try!(decode::decode(bytes, 0));
         
         if end_pos != bytes.len() {
-            return Err(BencodeError::with_pos(BencodeErrorKind::BytesEmpty,
+            return Err(BencodeParseError::with_pos(BencodeParseErrorKind::BytesEmpty,
                 "Some Bytes Were Left Over After Parsing Bencode", Some(end_pos)))
         }
         

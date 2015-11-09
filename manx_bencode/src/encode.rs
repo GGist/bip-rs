@@ -1,5 +1,5 @@
-use bencode::{self, Bencode, BencodeKind};
-use util::dictionary::{Dictionary};
+use bencode::{Bencode, BencodeKind};
+use dictionary::{Dictionary};
 
 use std::iter::Extend;
 
@@ -15,9 +15,9 @@ pub fn encode<'a>(val: &Bencode<'a>) -> Vec<u8> {
 fn encode_int(val: i64) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
 
-    bytes.push(bencode::INT_START);
+    bytes.push(::INT_START);
     bytes.extend(val.to_string().into_bytes());
-    bytes.push(bencode::BEN_END);
+    bytes.push(::BEN_END);
 
     bytes
 }
@@ -26,7 +26,7 @@ fn encode_bytes(list: &[u8]) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
 
     bytes.extend(list.len().to_string().into_bytes());
-    bytes.push(bencode::BYTE_LEN_END);
+    bytes.push(::BYTE_LEN_END);
     bytes.extend(list.iter().map(|n| *n));
 
     bytes
@@ -35,11 +35,11 @@ fn encode_bytes(list: &[u8]) -> Vec<u8> {
 fn encode_list<'a>(list: &[Bencode<'a>]) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
 
-    bytes.push(bencode::LIST_START);
+    bytes.push(::LIST_START);
     for i in list {
         bytes.extend(encode(i));
     }
-    bytes.push(bencode::BEN_END);
+    bytes.push(::BEN_END);
 
     bytes
 }
@@ -51,13 +51,13 @@ fn encode_dict<'a>(dict: &Dictionary<'a, Bencode<'a>>) -> Vec<u8> {
     let mut sort_dict = dict.to_list();
     sort_dict.sort_by(|&(a, _), &(b, _)| a.cmp(b));
 
-    bytes.push(bencode::DICT_START);
+    bytes.push(::DICT_START);
     // Iterate And Dictionary Encode The (String, Bencode) Pairs
     for &(ref key, ref value) in sort_dict.iter() {
         bytes.extend(encode_bytes(key.as_bytes()));
         bytes.extend(encode(*value));
     }
-    bytes.push(bencode::BEN_END);
+    bytes.push(::BEN_END);
 
     bytes
 }

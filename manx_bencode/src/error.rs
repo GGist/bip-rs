@@ -1,8 +1,13 @@
+use std::borrow::{Cow};
+use std::error::{Error};
+use std::fmt::{self, Display, Formatter};
+
 //----------------------------------------------------------------------------//
 
+/// Result of parsing bencoded data.
 pub type BencodeParseResult<T> = Result<T, BencodeParseError>;
 
-/// A list specifying categories of BencodeError types.
+/// Enumerates all bencode parse errors.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum BencodeParseErrorKind {
     /// An Incomplete Number Of Bytes.
@@ -17,10 +22,10 @@ pub enum BencodeParseErrorKind {
     InvalidLength
 }
 
-/// A type for specifying errors when decoding Bencoded data.
+/// Error type generated when parsing bencoded data.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct BencodeParseError {
-    kind: BencodeErrorKind,
+    kind: BencodeParseErrorKind,
     desc: &'static str,
     pos:  Option<usize>
 }
@@ -65,8 +70,10 @@ impl Error for BencodeParseError {
 
 //----------------------------------------------------------------------------//
 
+/// Result of converting a bencode object.
 pub type BencodeConvertResult<T> = Result<T, BencodeConvertError>;
 
+/// Enumerates all bencode conversion errors.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum BencodeConvertErrorKind {
     /// A key is missing in the bencode dictionary.
@@ -75,6 +82,7 @@ pub enum BencodeConvertErrorKind {
     WrongType
 }
 
+/// Error type generated when converting bencode objects.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct BencodeConvertError {
     kind: BencodeConvertErrorKind,
@@ -83,6 +91,10 @@ pub struct BencodeConvertError {
 }
 
 impl BencodeConvertError {
+    pub fn new(kind: BencodeConvertErrorKind, desc: &'static str) -> BencodeConvertError {
+        BencodeConvertError::with_key(kind, desc, "")
+    }
+
     pub fn with_key<T>(kind: BencodeConvertErrorKind, desc: &'static str, key: T)
         -> BencodeConvertError where T: Into<Cow<'static, str>> {
         BencodeConvertError{ kind: kind, desc: desc, key: key.into() }
@@ -118,5 +130,3 @@ impl Error for BencodeConvertError {
     
     fn cause(&self) -> Option<&Error> { None }
 }
-
-//----------------------------------------------------------------------------//
