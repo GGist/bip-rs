@@ -1,4 +1,8 @@
 [package]
-name = "manx"
+name = "bip_util"
 version = "0.1.0"
 authors = ["Andrew <amiller4421@gmail.com>"]
+
+[dependencies]
+sha1 = "0.1.0"
+rand = "0.3.0"

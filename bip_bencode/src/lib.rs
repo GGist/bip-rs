@@ -5,29 +5,34 @@
 //! Decoding bencoded data:
 //!
 //! ```rust
-//!     extern crate manx_bencode;
+//!     extern crate bip_bencode;
 //!
-//!     use manx_bencode::{Bencode};
+//!     use bip_bencode::{Bencode};
 //!
-//!     let data = "d12:lucky_numberi7ee";
-//!     let bencode = Bencode::decode(&data).unwrap();
+//!     fn main() {
+//!         let data = b"d12:lucky_numberi7ee";
+//!         let bencode = Bencode::decode(data).unwrap();
 //!
-//!     assert_eq!(7, bencode.int().unwrap());
+//!         assert_eq!(7, bencode.dict().unwrap().lookup("lucky_number")
+//!             .unwrap().int().unwrap());
+//!     }
 //! ```
 //!
 //! Encoding bencoded data:
 //!
 //! ```rust
 //!     #[macro_use]
-//!     extern crate manx_bencode;
-//!     
-//!     use manx_bencode::{Bencode};
+//!     extern crate bip_bencode;
 //!
-//!     let message = (ben_map!{
-//!         "lucky_number" => ben_int!(7)
-//!     }).encode();
+//!     use bip_bencode::{Bencode};
 //!
-//!     assert_eq!("d12:lucky_numberi7ee", &message[..]);
+//!     fn main() {
+//!         let message = (ben_map!{
+//!             "lucky_number" => ben_int!(7)
+//!         }).encode();
+//!
+//!         assert_eq!(&b"d12:lucky_numberi7ee"[..], &message[..]);
+//!     }
 //! ```
 
 mod bencode;
@@ -39,6 +44,7 @@ mod error;
 
 pub use bencode::{Bencode, BencodeKind};
 pub use convert::{BencodeConvert};
+pub use dictionary::{Dictionary};
 pub use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 pub use error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
 
@@ -58,7 +64,7 @@ macro_rules! ben_map {
         {
             use std::convert::{AsRef};
             use std::collections::{BTreeMap};
-            use redox::bencode::{Bencode};
+            use bip_bencode::{Bencode};
             
             let mut map = BTreeMap::new();
             $(
@@ -74,7 +80,7 @@ macro_rules! ben_map {
 macro_rules! ben_list {
     ( $($ben:expr),* ) => {
         {
-            use redox::bencode::{Bencode};
+            use bip_bencode::{Bencode};
             
             let mut list = Vec::new();
             $(
@@ -91,7 +97,7 @@ macro_rules! ben_bytes {
     ( $ben:expr ) => {
         {
             use std::convert::{AsRef};
-            use redox::bencode::{Bencode};
+            use bip_bencode::{Bencode};
             
             Bencode::Bytes(AsRef::as_ref($ben))
         }
@@ -103,7 +109,7 @@ macro_rules! ben_bytes {
 macro_rules! ben_int {
     ( $ben:expr ) => {
         {
-            use redox::bencode::{Bencode};
+            use bip_bencode::{Bencode};
             
             Bencode::Int($ben)
         }

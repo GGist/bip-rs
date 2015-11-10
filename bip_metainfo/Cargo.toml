@@ -1,4 +1,4 @@
 [package]
-name = "manx"
+name = "bip_metainfo"
 version = "0.1.0"
 authors = ["Andrew <amiller4421@gmail.com>"]

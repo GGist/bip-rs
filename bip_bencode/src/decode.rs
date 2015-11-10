@@ -160,7 +160,7 @@ fn peek_byte(bytes: &[u8], pos: usize, err_msg: &'static str) -> BencodeParseRes
 
 #[cfg(test)]
 mod tests {
-    use bencode::{self, Bencode};
+    use bencode::{Bencode};
 
     // Positive Cases
     const GENERAL: &'static [u8] = b"d0:12:zero_len_key8:location17:udp://test.com:8011:nested dictd4:listli-500500eee6:numberi500500ee";
