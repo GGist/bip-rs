@@ -2,3 +2,9 @@
 name = "bip_handshake"
 version = "0.1.0"
 authors = ["Andrew <amiller4421@gmail.com>"]
+
+[dependencies]
+threadpool = "0.1.0"
+
+[dependencies.bip_util]
+path = "../bip_util"

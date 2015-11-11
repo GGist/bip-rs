@@ -1,8 +1,14 @@
+//! Utilities used by the Bittorrent Infrastructure Project.
+
 extern crate sha1;
 extern crate rand;
+extern crate time;
 
 /// Working with and expressing SHA-1 values.
 pub mod hash;
+
+/// Testing fixtures for dependant crates.
+pub mod test;
 
 mod convert;
 mod error;

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap};
 /// Trait for working with generic map data structures.
 pub trait Dictionary<'a, V> {
     /// Convert the dictionary to an unordered list of key/value pairs.
-    fn to_list(&self) -> Vec<(&&'a str, &V)>;
+    fn to_list(&self) -> Vec<(&'a str, &V)>;
 
     /// Lookup a value in the dictionary.
     fn lookup(&self, key: &str) -> Option<&V>;
@@ -19,8 +19,8 @@ pub trait Dictionary<'a, V> {
 }
 
 impl<'a, V> Dictionary<'a, V> for BTreeMap<&'a str, V> {
-    fn to_list(&self) -> Vec<(&&'a str, &V)> {
-        self.iter().collect()
+    fn to_list(&self) -> Vec<(&'a str, &V)> {
+        self.iter().map(|(k, v)| (*k, v)).collect()
     }
 
     fn lookup(&self, key: &str) -> Option<&V> {
