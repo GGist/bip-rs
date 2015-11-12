@@ -131,7 +131,7 @@ impl DhtBuilder {
         self
     }
     
-    /// Start the dht with the current configuration.
+    /// Start a mainline dht with the current configuration.
     pub fn start_mainline<H>(mut self, handshaker: H) -> DhtResult<MainlineDht>
         where H: Handshaker + 'static {
         MainlineDht::with_builder(self, handshaker)

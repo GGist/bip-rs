@@ -7,6 +7,8 @@ extern crate bip_bencode;
 extern crate bip_handshake;
 extern crate bip_util;
 extern crate crc;
+#[macro_use]
+extern crate log;
 extern crate rand;
 extern crate threadpool;
 extern crate time;
@@ -33,7 +35,9 @@ mod security;
 mod routing;
 mod token;
 mod transaction;
+mod workers;
 
+pub use builder::{DhtBuilder, MainlineDht};
 pub use error::{DhtError, DhtResult};
 
 /*
