@@ -219,8 +219,8 @@ fn write_handshake(protocol: &'static str, id: PeerId, hash: InfoHash, stream: &
     let write_iter = iter::once(&protocol_len)
         .chain(protocol.as_bytes())
         .chain(&extension_bits)
-        .chain(hash.as_bytes())
-        .chain(id.as_bytes());
+        .chain(hash.as_ref())
+        .chain(id.as_ref());
     
     let write_len = write_iter.zip(buffer.iter_mut()).map( |(src, dst)| {
         *dst = *src;
@@ -263,7 +263,7 @@ fn infohash_from_handshake(buffer: &[u8]) -> InfoHash {
     
     let (start, end) = (infohash_offset, infohash_offset + 20);
     
-    InfoHash::from_bytes(&buffer[start..end]).unwrap()
+    InfoHash::from_hash(&buffer[start..end]).unwrap()
 }
 
 /// Pull the peerid from the given handshake buffer.
@@ -273,7 +273,7 @@ fn peerid_from_handshake(buffer: &[u8]) -> PeerId {
     
     let (start, end) = (peerid_offset, peerid_offset + 20);
     
-    PeerId::from_bytes(&buffer[start..end]).unwrap()
+    PeerId::from_hash(&buffer[start..end]).unwrap()
 }
 
 //----------------------------------------------------------------------------//

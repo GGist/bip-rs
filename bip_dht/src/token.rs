@@ -14,13 +14,6 @@ use bip_util::hash::{self};
 /// store the secret and check if the token they gave us is valid for the current or last secret.
 /// This is technically not what we want, but it will have essentially the same result when we
 /// assume that nobody other than us knows the secret.
-///
-/// The only "flaw" with this implementation is if the remote nodes ip address changes within
-/// that time period, they will have their token rejected even though it is valid according to
-/// the specification. However, I am not even sure if that is a flaw since we dont necessarily
-/// want to accept tokens issued for one address to be used from another address as that would
-/// essentially defeat the purpose of the token in the first place which would be allowing people
-/// to announce torrents for other peoples ip addresses so this implementation should be fine :D
 
 /// With this scheme we can guarantee that the minimum amount of time a token can be valid for
 /// is the maximum amount of time a token is valid for in bittorrent in order to provide interop.

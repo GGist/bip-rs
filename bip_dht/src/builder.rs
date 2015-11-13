@@ -2,33 +2,37 @@ use std::collections::{HashSet};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool};
-use std::sync::mpsc::{Sender};
 
 use bip_handshake::{Handshaker};
 use bip_util::{self, InfoHash};
+use mio::{Sender};
 
-use router::{Router};
 use error::{DhtResult};
+use router::{Router};
+use worker::{self, OneshotTask, IntervalTask};
 
 /// Maintains a distributed hash (routing) table.
-pub struct MainlineDht;/* {
-    send: Sender<WorkerMessage>
-}*/
+pub struct MainlineDht {
+    send: Sender<OneshotTask>
+}
 
 // Starting the dht, ping nodes that were added, if they respond add them to the dht
 // If no nodes were added, use the router that was provided
 
 impl MainlineDht {
-    pub fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> DhtResult<MainlineDht>
-        where H: Handshaker + 'static {
-        /*let send_socket = try!(UdpSocket::bind(&builder.src_addr));
+    pub fn with_builder(builder: DhtBuilder) -> DhtResult<MainlineDht> {
+        let send_socket = try!(UdpSocket::bind(&builder.src_addr));
         let recv_socket = try!(send_socket.try_clone());
         
-        let send = worker::start_dht(handshaker, builder.nodes, builder.routers, send_socket,
-            recv_socket, builder.read_only, builder.ext_addr);
+        let send = try!(worker::start_mainline_dht(send_socket, recv_socket, builder.read_only, builder.ext_addr));
         
-        Ok(MainlineDht{ send: send })*/
-        unimplemented!();
+        let nodes: Vec<SocketAddr> = builder.nodes.into_iter().collect();
+        let routers: Vec<Router> = builder.routers.into_iter().collect();
+        
+        send.send(OneshotTask::StartBootstrap(routers, nodes));
+        send.send(OneshotTask::ScheduleTask(1000, IntervalTask::CheckBootstrap(0)));
+        
+        Ok(MainlineDht{ send: send })
     }
     
     pub fn search(hash: InfoHash) -> DhtResult<()> {
@@ -134,6 +138,6 @@ impl DhtBuilder {
     /// Start a mainline dht with the current configuration.
     pub fn start_mainline<H>(mut self, handshaker: H) -> DhtResult<MainlineDht>
         where H: Handshaker + 'static {
-        MainlineDht::with_builder(self, handshaker)
+        MainlineDht::with_builder(self)
     }
 }

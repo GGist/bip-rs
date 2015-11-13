@@ -1,27 +1,29 @@
 use std::default::{Default};
+use std::net::{Ipv4Addr, SocketAddrV4, SocketAddr};
 use std::slice::{Iter};
 
-use time::{PreciseTime, Duration};
+use bip_util::{self, NodeId};
 
 use routing::node::{Node, NodeStatus};
-
-/// Maximum wait period before a bucket should be refreshed.
-const MAX_LAST_REFRESH_MINS: i64 = 15;
 
 /// Maximum number of nodes that should reside in any bucket.
 pub const MAX_BUCKET_SIZE: usize = 8;
 
 /// Bucket containing Nodes with identical bit prefixes.
-#[derive(Copy, Clone)]
 pub struct Bucket {
-    nodes:        [Node; MAX_BUCKET_SIZE],
-    last_changed: PreciseTime
+    nodes: [Node; MAX_BUCKET_SIZE]
 }
 
 impl Bucket {
     /// Create a new Bucket with all Nodes default initialized.
     pub fn new() -> Bucket {
-        Bucket{ nodes: [Default::default(); MAX_BUCKET_SIZE], last_changed: PreciseTime::now() }
+        let id = NodeId::from([0u8; bip_util::NODE_ID_LEN]);
+        
+        let ip = Ipv4Addr::new(127, 0, 0, 1);
+        let addr = SocketAddr::V4(SocketAddrV4::new(ip, 0));
+        
+        Bucket{ nodes: [Node::as_bad(id, addr), Node::as_bad(id, addr), Node::as_bad(id, addr), Node::as_bad(id, addr),
+            Node::as_bad(id, addr), Node::as_bad(id, addr), Node::as_bad(id, addr), Node::as_bad(id, addr)] }
     }
     
     /// Iterator over each node within the bucket.
@@ -33,41 +35,48 @@ impl Bucket {
     
     /// Indicates if the bucket needs to be refreshed.
     pub fn needs_refresh(&self) -> bool {
-        let max_refresh = Duration::minutes(MAX_LAST_REFRESH_MINS);
-        
-        self.last_changed.to(PreciseTime::now()) > max_refresh
+        self.nodes.iter().fold(true, |prev, node| prev && node.status() != NodeStatus::Good )
     }
     
-    /// Manually trigger a bucket refresh, this resets the timer that indicates when
-    /// the bucket needs to be refreshed. This should only be called if a Node in
-    /// the bucket was requested from and responded.
-    pub fn trigger_refresh(&mut self) {
-        self.last_changed = PreciseTime::now();
-    }
-    
-    /// Add the given node to the Bucket if it is in a Good status.
+    /// Attempt to add the given Node to the bucket if it is not in a bad state.
     ///
-    /// Returns false if the Bucket is full otherwise returns true. Note
-    /// that just because it returns true does not mean it was actually added.
-    pub fn add_node(&mut self, node: Node) -> bool {
-        if node.status() != NodeStatus::Good {
+    /// Returns false if the Node could not be placed in the bucket because it is full.
+    pub fn add_node(&mut self, new_node: Node) -> bool {
+        let new_node_status = new_node.status();
+        if new_node_status == NodeStatus::Bad {
             return true
         }
-    
-        match first_bad_node(&self.nodes[..]) {
-            Some(pos) => {
-                self.nodes[pos] = node;
-                self.trigger_refresh();
-                true
-            },
-            None => false
+        
+        // See if this node is already in the table, in that case replace it
+        if let Some(index) = self.nodes.iter().position(|node| *node == new_node) {
+            self.nodes[index] = new_node;
+            
+            return true
+        }
+        
+        // See if any lower priority nodes are present in the table
+        let replace_index = if new_node_status == NodeStatus::Good {
+            self.nodes.iter().position(|node| {
+                let status = node.status();
+                
+                status == NodeStatus::Questionable || status == NodeStatus::Bad
+            })
+        } else {
+            self.nodes.iter().position(|node| {
+                let status = node.status();
+                
+                status == NodeStatus::Bad
+            })
+        };
+        
+        if let Some(index) = replace_index {
+            self.nodes[index] = new_node;
+            
+            true
+        } else {
+            false
         }
     }
-}
-
-/// Returns the position of the first Bad node.
-fn first_bad_node(nodes: &[Node]) -> Option<usize> {
-    nodes.iter().position(|node| node.status() == NodeStatus::Bad)
 }
 
 #[cfg(test)]

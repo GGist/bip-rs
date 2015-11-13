@@ -2,8 +2,11 @@ use std::net::{SocketAddr, UdpSocket};
 use std::sync::mpsc::{self, SyncSender, Receiver};
 use std::thread::{self};
 
-const OUTGOING_MESSAGE_CAPACITY: usize = 10000;
-const INCOMING_MESSAGE_CAPACITY: usize = 10000;
+use mio::{Sender};
+
+use worker::{OneshotTask};
+
+const OUTGOING_MESSAGE_CAPACITY: usize = 4096;
 
 pub fn create_outgoing_messenger(socket: UdpSocket) -> SyncSender<(Vec<u8>, SocketAddr)> {
 	let (send, recv) = mpsc::sync_channel::<(Vec<u8>, SocketAddr)>(OUTGOING_MESSAGE_CAPACITY);
@@ -33,14 +36,12 @@ fn send_bytes(socket: &UdpSocket, bytes: &[u8], addr: SocketAddr) {
 	}
 }
 
-pub fn create_incoming_messenger(socket: UdpSocket) -> Receiver<(Vec<u8>, SocketAddr)> {
-	let (send, recv) = mpsc::sync_channel(INCOMING_MESSAGE_CAPACITY);
-	
+pub fn create_incoming_messenger(socket: UdpSocket, send: Sender<OneshotTask>){
 	thread::spawn(move || {
 		let mut channel_is_open = true;
 		
 		while channel_is_open {
-			let mut buffer = vec![0u8; 1500];
+			let mut buffer = vec![0u8; 1000];
 			
 			if let Ok((size, addr)) = socket.recv_from(&mut buffer) {
 				buffer.truncate(size);
@@ -53,10 +54,8 @@ pub fn create_incoming_messenger(socket: UdpSocket) -> Receiver<(Vec<u8>, Socket
 		
 		info!("bip_dht: Incoming messenger received a channel hangup, exiting thread...");
 	});
-	
-	recv
 }
 
-fn send_message(send: &SyncSender<(Vec<u8>, SocketAddr)>, bytes: Vec<u8>, addr: SocketAddr) -> bool {
-	send.send((bytes, addr)).is_ok()
+fn send_message(send: &Sender<OneshotTask>, bytes: Vec<u8>, addr: SocketAddr) -> bool {
+	send.send(OneshotTask::Incoming(bytes, addr)).is_ok()
 }

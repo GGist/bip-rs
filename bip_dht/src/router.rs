@@ -50,6 +50,12 @@ impl Router {
         )
     }
     
+    pub fn socket_addr(&self) -> io::Result<SocketAddr> {
+        let mut addrs = try!(self.socket_addrs());
+        
+        addrs.next().ok_or(Error::new(ErrorKind::Other, "No SocketAddresses Found For Host"))
+    }
+    
     fn socket_addrs(&self) -> io::Result<IntoIter<SocketAddr>> {
         match self {
             &Router::uTorrent     => UTORRENT_DHT.to_socket_addrs(),

@@ -6,12 +6,13 @@
 extern crate bip_bencode;
 extern crate bip_handshake;
 extern crate bip_util;
+
 extern crate crc;
 #[macro_use]
 extern crate log;
+extern crate mio;
 extern crate rand;
-extern crate threadpool;
-extern crate time;
+extern crate chrono;
 
 // Mainline DHT extensions supported on behalf of libtorrent:
 // - Always send 'nodes' on a get_peers response even if 'values' is present
@@ -33,12 +34,13 @@ mod message;
 mod router;
 mod security;
 mod routing;
-mod token;
+//mod token;
 mod transaction;
-mod workers;
+mod worker;
 
 pub use builder::{DhtBuilder, MainlineDht};
 pub use error::{DhtError, DhtResult};
+pub use router::{Router};
 
 /*
 mod bucket;

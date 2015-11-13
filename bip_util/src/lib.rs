@@ -2,7 +2,7 @@
 
 extern crate sha1;
 extern crate rand;
-extern crate time;
+extern crate chrono;
 
 /// Working with and expressing SHA-1 values.
 pub mod hash;

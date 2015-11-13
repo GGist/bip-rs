@@ -8,14 +8,13 @@ use rand::{self};
 use routing::bucket::{self, Bucket};
 use routing::node::{Node, NodeStatus};
 
-const MAX_BUCKETS: usize = hash::SHA_HASH_LEN * 8;
+pub const MAX_BUCKETS: usize = hash::SHA_HASH_LEN * 8;
 
 // TODO: Node id does not check for duplicates or that someone else has our node id in our table.
 // TODO: Bucket last updated is altered when splitting buckets since we create two new buckets to replace the bucket.
 
 /// Routing table containing a table of routing nodes as well
 /// as the id of the local node participating in the dht.
-#[derive(Clone)]
 pub struct RoutingTable {
     // Important: Our node id will always fall within the range
     // of the last bucket in the buckets array.
@@ -29,6 +28,11 @@ impl RoutingTable {
         let buckets = vec![Bucket::new()];
         
         RoutingTable{ buckets: buckets, node_id: node_id }
+    }
+    
+    /// Return the node id of the RoutingTable.
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
     }
     
     /// Iterator over the closest good nodes to the given node id.
@@ -48,7 +52,7 @@ impl RoutingTable {
     /// Add the node to the RoutingTable if there is space for it.
     pub fn add_node(&mut self, node: Node) {
         // Doing some checks and calculations here, outside of the recursion
-        if node.status() != NodeStatus::Good {
+        if node.status() == NodeStatus::Bad {
             return
         }
         let num_same_bits = leading_bit_count(self.node_id, node.id());
@@ -61,11 +65,11 @@ impl RoutingTable {
         let bucket_index = bucket_placement(num_same_bits, self.buckets.len());
         
         // Try to place in correct bucket
-        if !self.buckets[bucket_index].add_node(node) {
+        if !self.buckets[bucket_index].add_node(node.clone()) {
             // Bucket was full, try to split it
             if self.split_bucket(bucket_index) {
                 // Bucket split successfully, try to add again
-                self.bucket_node(node, num_same_bits);
+                self.bucket_node(node.clone(), num_same_bits);
             }
         }
     }
@@ -90,8 +94,8 @@ impl RoutingTable {
         self.buckets.push(Bucket::new());
         self.buckets.push(Bucket::new());
         
-        for &node in split_bucket.iter() {
-            self.add_node(node);
+        for node in split_bucket.iter() {
+            self.add_node(node.clone());
         }
         
         true
@@ -107,8 +111,12 @@ fn can_split_bucket(num_buckets: usize, bucket_index: usize) -> bool {
 ///
 /// TODO: Shouldnt use this in the future to get an id for the routing table,
 /// generate one from the security module to be compliant with the spec.
-fn random_node_id() -> NodeId {
-    let random_sha_hash = [rand::random::<u8>(); hash::SHA_HASH_LEN];
+pub fn random_node_id() -> NodeId {
+    let mut random_sha_hash = [0u8; hash::SHA_HASH_LEN];
+    
+    for byte in random_sha_hash.iter_mut() {
+        *byte = rand::random::<u8>();
+    }
     
     ShaHash::from(random_sha_hash)
 }
@@ -333,7 +341,9 @@ fn good_node_filter<'a>(iter: Iter<'a, Node>) -> GoodNodes<'a> {
 
 /// Shakes fist at iterator making me take a double reference (could avoid it by mapping, but oh well)
 fn is_good_node(node: &&Node) -> bool {
-    node.status() == NodeStatus::Good
+    let status = node.status();
+    
+    status == NodeStatus::Good || status == NodeStatus::Questionable
 }
 
 /// Computes the next bucket index that should be visited given the number of buckets, the starting index

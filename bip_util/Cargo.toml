@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["Andrew <amiller4421@gmail.com>"]
 
 [dependencies]
-sha1 = "0.1.0"
-rand = "0.3.0"
-time = "0.1.0"
+sha1   = "0.1.0"
+rand   = "0.3.0"
+chrono = "0.2.0"

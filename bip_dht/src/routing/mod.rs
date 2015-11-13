@@ -1,4 +1,4 @@
 
-mod bucket;
-mod node;
-mod table;
+pub mod bucket;
+pub mod node;
+pub mod table;

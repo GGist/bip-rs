@@ -7,8 +7,7 @@ authors = ["Andrew <amiller4421@gmail.com>"]
 crc        = "1.2.0"
 log        = "0.3.0"
 rand       = "0.3.0"
-time       = "0.1.0"
-threadpool = "0.1.0"
+chrono     = "0.2.0"
 
 [dependencies.mio]
 git = "https://github.com/carllerche/mio.git"

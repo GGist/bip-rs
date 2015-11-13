@@ -7,19 +7,6 @@ use error::{GenericError, GenericResult};
 /// Length of a SHA-1 hash.
 pub const SHA_HASH_LEN: usize = 20;
 
-/// Applies a SHA-1 hash to the src and outputs it in dst.
-pub fn apply_sha1(src: &[u8]) -> [u8; SHA_HASH_LEN] {
-    let mut sha = Sha1::new();
-    let mut buffer = [0u8; SHA_HASH_LEN];
-    
-    sha.update(src);
-    sha.output(&mut buffer);
-    
-    buffer
-}
-
-//----------------------------------------------------------------------------//
-
 /// SHA-1 hash wrapper type for performing operations on the hash.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ShaHash {
@@ -27,23 +14,23 @@ pub struct ShaHash {
 }
 
 impl ShaHash {
-    /// Create a ShaHash from the given bytes.
-    ///
-    /// Returns None if the length of the bytes is not equal to SHA_HASH_LEN.
-    pub fn from_bytes(bytes: &[u8]) -> GenericResult<ShaHash> {
-        if bytes.len() != SHA_HASH_LEN {
+/*
+    /// Create a ShaHash by hashing the given bytes.
+    pub fn from_bytes(bytes: &[u8]) -> ShaHash {
+        apply_sha1(bytes).from()
+    }*/
+    
+    /// Create a ShaHash directly from the given hash.
+    pub fn from_hash(hash: &[u8]) -> GenericResult<ShaHash> {
+        if hash.len() != SHA_HASH_LEN {
             Err(GenericError::InvalidLength(SHA_HASH_LEN))
         } else {
-            let mut hash = [0u8; SHA_HASH_LEN];
+            let mut my_hash = [0u8; SHA_HASH_LEN];
             
-            hash.iter_mut().zip(bytes.iter()).map( |(dst,src)| *dst = *src ).count();
+            my_hash.iter_mut().zip(hash.iter()).map( |(dst,src)| *dst = *src ).count();
             
-            Ok(ShaHash{ hash: hash })
+            Ok(ShaHash{ hash: my_hash })
         }
-    }
-    
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.hash
     }
     
     pub fn bits<'a>(&'a self) -> Bits<'a> {
@@ -52,6 +39,12 @@ impl ShaHash {
     
     pub fn len() -> usize {
         SHA_HASH_LEN
+    }
+}
+
+impl AsRef<[u8]> for ShaHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.hash
     }
 }
 
@@ -87,6 +80,19 @@ impl BitXor<ShaHash> for ShaHash {
         
         self
     }
+}
+
+//----------------------------------------------------------------------------//
+
+/// Applies a SHA-1 hash to the src and outputs it in dst.
+fn apply_sha1(src: &[u8]) -> [u8; SHA_HASH_LEN] {
+    let mut sha = Sha1::new();
+    let mut buffer = [0u8; SHA_HASH_LEN];
+    
+    sha.update(src);
+    sha.output(&mut buffer);
+    
+    buffer
 }
 
 //----------------------------------------------------------------------------//
@@ -225,5 +231,21 @@ mod tests {
         
         let leading_zeroes = xor_hash.bits().take_while(|&n| n == XorRep::Same).count();
         assert!(leading_zeroes == 0);
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_from_hash_too_long() {
+        let bits = [0u8; super::SHA_HASH_LEN + 1];
+        
+        ShaHash::from_hash(&bits).unwrap();
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_from_hash_too_short() {
+        let bits = [0u8; super::SHA_HASH_LEN - 1];
+        
+        ShaHash::from_hash(&bits).unwrap();
     }
 }

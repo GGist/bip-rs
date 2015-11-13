@@ -9,5 +9,5 @@ mod bittorrent;
 mod handshaker;
 mod infohash_map;
 
-pub use bittorrent::{BTHandshaker};
+pub use bittorrent::{PeerInfo, BTHandshaker};
 pub use handshaker::{Handshaker};
