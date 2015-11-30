@@ -47,7 +47,7 @@ impl MainlineDht {
 //----------------------------------------------------------------------------//
 
 /// Stores information for initializing a dht.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)] 
 pub struct DhtBuilder {
     nodes:     HashSet<SocketAddr>,
     routers:   HashSet<Router>,

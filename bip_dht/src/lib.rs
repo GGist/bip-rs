@@ -35,7 +35,7 @@ mod router;
 mod security;
 mod routing;
 //mod token;
-mod transaction;
+//mod transaction;
 mod worker;
 
 pub use builder::{DhtBuilder, MainlineDht};

@@ -122,7 +122,7 @@ pub fn random_node_id() -> NodeId {
 }
 
 /// Number of leading bits that are identical between the local and remote node ids.
-fn leading_bit_count(local_node: NodeId, remote_node: NodeId) -> usize {
+pub fn leading_bit_count(local_node: NodeId, remote_node: NodeId) -> usize {
     let diff_id = local_node ^ remote_node;
     
     diff_id.bits().take_while(|&x| x == XorRep::Same).count()
@@ -233,7 +233,7 @@ type GoodNodes<'a> = Filter<Iter<'a, Node>, fn(&&Node) -> bool>;
 // yet (not in the slice), go through the last bucket (assorted nodes) and check if any nodes
 // would have been placed in that bucket. If we find one, return it and mark it in our assorted
 // nodes array.
-struct ClosestNodes<'a> {
+pub struct ClosestNodes<'a> {
     buckets:        &'a [Bucket],
     current_iter:   Option<GoodNodes<'a>>,
     current_index:  usize,

@@ -4,11 +4,10 @@ use bip_util::{GenericError, GenericResult};
 
 // TODO: Redesign this module
 
-pub const TRANSACTION_ID_LEN: usize = 4;
-
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TransactionId {
-    id: [u8; TRANSACTION_ID_LEN]
+    lookup_id:  [u8; 2],
+    message_id: [u8; 3]
 }
 
 impl TransactionId {

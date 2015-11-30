@@ -1,6 +1,8 @@
 use std::cell::{Cell};
-use std::default::{Default};
 use std::convert::{From};
+use std::default::{Default};
+use std::fmt::{self, Debug, Formatter};
+use std::hash::{Hash, Hasher};
 use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -108,10 +110,24 @@ impl PartialEq<Node> for Node {
     }
 }
 
+impl Hash for Node {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        self.id.hash(state);
+        self.addr.hash(state);
+    }
+}
+
 impl Clone for Node {
     fn clone(&self) -> Node {
         Node{ id: self.id, addr: self.addr, last_response: self.last_response.clone(),
             last_request: self.last_request.clone(), refresh_requests: self.refresh_requests.clone() }
+    }
+}
+
+impl Debug for Node {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
+        f.write_fmt(format_args!("Node{{ id: {:?}, addr: {:?}, last_request: {:?}, last_response: {:?}, refresh_requests: {:?} }}",
+            self.id, self.addr, self.last_request.get(), self.last_response.get(), self.refresh_requests.get()))
     }
 }
 

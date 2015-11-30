@@ -49,7 +49,13 @@ impl Bucket {
         
         // See if this node is already in the table, in that case replace it
         if let Some(index) = self.nodes.iter().position(|node| *node == new_node) {
-            self.nodes[index] = new_node;
+            let node_status = self.nodes[index].status();
+            
+            if new_node_status == NodeStatus::Good {
+                self.nodes[index] = new_node;
+            } else if node_status != NodeStatus::Good {
+                self.nodes[index] = new_node;
+            }
             
             return true
         }

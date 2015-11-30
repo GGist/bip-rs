@@ -123,7 +123,7 @@ impl<'a> Iterator for CompactValueInfoIter<'a> {
 /// Panics if the size of compact_info is less than BYTES_PER_COMPACT_NODE_INFO.
 fn parts_from_compact_info(compact_info: &[u8]) -> (NodeId, SocketAddrV4) {
     // Use unwarp here because we know these can never fail, but they arent statically guaranteed
-    let node_id = ShaHash::from_bytes(&compact_info[0..bip_util::NODE_ID_LEN]).unwrap();
+    let node_id = ShaHash::from_hash(&compact_info[0..bip_util::NODE_ID_LEN]).unwrap();
             
     let compact_ip_offset = bip_util::NODE_ID_LEN + BYTES_PER_COMPACT_IP;
     let socket = socket_v4_from_bytes_be(&compact_info[bip_util::NODE_ID_LEN..compact_ip_offset]).unwrap();
