@@ -2,6 +2,7 @@ use std::convert::{AsRef};
 use std::io::{self};
 use std::net::{SocketAddr, UdpSocket};
 
+use bip_util::{InfoHash};
 use mio::{Sender};
 
 use router::{Router};
@@ -19,7 +20,9 @@ pub enum OneshotTask {
     /// Schedule an IntervalTask to occur some time later.
     ScheduleTask(u64, IntervalTask),
     /// Load a new bootstrap operation into worker storage.
-    StartBootstrap(Vec<Router>, Vec<SocketAddr>)
+    StartBootstrap(Vec<Router>, Vec<SocketAddr>),
+    /// Start a lookup for the given InfoHash.
+    StartLookup(InfoHash)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

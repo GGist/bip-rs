@@ -43,12 +43,12 @@ pub fn create_incoming_messenger(socket: UdpSocket, send: Sender<OneshotTask>){
         while channel_is_open {
             let mut buffer = vec![0u8; 1000];
             
-            if let Ok((size, addr)) = socket.recv_from(&mut buffer) {
-                buffer.truncate(size);
-                
-                channel_is_open = send_message(&send, buffer, addr);
-            } else {
-                warn!("bip_dht: Incoming messenger failed to receive bytes...");
+            match socket.recv_from(&mut buffer) {
+                Ok((size, addr)) => {
+                    buffer.truncate(size);
+                    channel_is_open = send_message(&send, buffer, addr);
+                },
+                Err(e) => warn!("bip_dht: Incoming messenger failed to receive bytes... {:?}", e)
             }
         }
         

@@ -74,8 +74,8 @@ impl<'a> CompactValueInfo<'a> {
         for (index, node) in values.iter().enumerate() {
             let compact_value = node.bytes().unwrap();
             
-            if compact_value.len() != BYTES_PER_COMPACT_NODE_INFO {
-                return Err(GenericError::InvalidElementLength(index, BYTES_PER_COMPACT_NODE_INFO))
+            if compact_value.len() != BYTES_PER_COMPACT_IP {
+                return Err(GenericError::InvalidElementLength(index, BYTES_PER_COMPACT_IP))
             }
         }
         
@@ -88,7 +88,7 @@ impl<'a> CompactValueInfo<'a> {
 }
 
 impl<'a> IntoIterator for CompactValueInfo<'a> {
-    type Item = (NodeId, SocketAddrV4);
+    type Item = SocketAddrV4;
     type IntoIter = CompactValueInfoIter<'a>;
     
     fn into_iter(self) -> Self::IntoIter {
@@ -103,9 +103,9 @@ pub struct CompactValueInfoIter<'a> {
 }
 
 impl<'a> Iterator for CompactValueInfoIter<'a> {
-    type Item = (NodeId, SocketAddrV4);
+    type Item = SocketAddrV4;
     
-    fn next(&mut self) -> Option<(NodeId, SocketAddrV4)> {
+    fn next(&mut self) -> Option<SocketAddrV4> {
         if self.pos == self.values.len() {
             None
         } else {
@@ -113,7 +113,7 @@ impl<'a> Iterator for CompactValueInfoIter<'a> {
             
             self.pos += 1;
             
-            Some(parts_from_compact_info(compact_info.bytes().unwrap()))
+            Some(socket_v4_from_bytes_be(compact_info.bytes().unwrap()).unwrap())
         }
     }
 }

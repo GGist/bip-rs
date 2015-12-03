@@ -35,8 +35,12 @@ impl MainlineDht {
         Ok(MainlineDht{ send: send })
     }
     
-    pub fn search(hash: InfoHash) -> DhtResult<()> {
-        unimplemented!();
+    pub fn search(&self, hash: InfoHash) -> DhtResult<()> {
+        if self.send.send(OneshotTask::StartLookup(hash)).is_err() {
+            panic!("Failed to start lookup");
+        }
+        
+        Ok(())
     }
     
     pub fn announce(hash: InfoHash) -> DhtResult<()> {

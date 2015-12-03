@@ -9,7 +9,7 @@ use std::sync::mpsc::{SyncSender};
 use std::thread::{self};
 
 use bip_bencode::{Bencode};
-use bip_util::{self, NodeId};
+use bip_util::{self, NodeId, InfoHash};
 use mio::{EventLoop, Sender, Timeout, Handler};
 
 use message::{MessageType};
@@ -20,6 +20,7 @@ use routing::bucket::{Bucket};
 use routing::node::{Node};
 use routing::table::{self, RoutingTable};
 use worker::{self, OneshotTask, IntervalTask};
+use worker::lookup::{HashLookup, LookupResult};
 
 use routing::table::{BucketContents};
 use routing::node::{NodeStatus};
@@ -42,12 +43,14 @@ pub struct DhtHandler {
     out_channel:      SyncSender<(Vec<u8>, SocketAddr)>,
     routing_table:    RoutingTable,
     current_routers:  HashSet<SocketAddr>,
-    is_bootstrapping: bool
+    is_bootstrapping: bool,
+    active_lookups:   Vec<HashLookup>
 }
 
 impl DhtHandler {
     fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>) -> DhtHandler {
-        DhtHandler{ out_channel: out, routing_table: table, current_routers: HashSet::new(), is_bootstrapping: false }
+        DhtHandler{ out_channel: out, routing_table: table, current_routers: HashSet::new(), is_bootstrapping: false,
+            active_lookups: Vec::new() }
     }
 }
 
@@ -58,13 +61,16 @@ impl Handler for DhtHandler {
     fn notify(&mut self, event_loop: &mut EventLoop<DhtHandler>, task: OneshotTask) {
         match task {
             OneshotTask::Incoming(buffer, addr) => {
-                handle_incoming(self, &buffer[..], addr);
+                handle_incoming(self, event_loop, &buffer[..], addr);
             },
             OneshotTask::ScheduleTask(timeout, task) => {
                 handle_schedule_task(event_loop, timeout, task);
             },
             OneshotTask::StartBootstrap(routers, nodes) => {
                 handle_start_bootstrap(self, &routers[..], &nodes[..]);
+            },
+            OneshotTask::StartLookup(info_hash) => {
+                handle_start_lookup(self, event_loop, info_hash);
             }
         }
     }
@@ -79,14 +85,21 @@ impl Handler for DhtHandler {
             IntervalTask::CheckRefresh(b) => {
                 handle_check_refresh(self, event_loop, b, timeout);
             },
-            _ => ()
+            IntervalTask::CheckNodeLookup(index, node) => {
+                println!("NODE TIMEOUT");
+                handle_check_node_lookup(self, event_loop, index, node);
+            },
+            IntervalTask::CheckBulkLookup(index) => {
+                println!("NODE BULK");
+                handle_check_bulk_lookup(self, event_loop, index);
+            }
         }
     }
 }
 
 //----------------------------------------------------------------------------//
 
-fn handle_incoming(handler: &mut DhtHandler, buffer: &[u8], addr: SocketAddr) {
+fn handle_incoming(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandler>, buffer: &[u8], addr: SocketAddr) {
     let bencode = if let Ok(b) = Bencode::decode(buffer) {
         b
     } else {
@@ -94,7 +107,14 @@ fn handle_incoming(handler: &mut DhtHandler, buffer: &[u8], addr: SocketAddr) {
         return
     };
     
-    match MessageType::new(&bencode, |trans| ExpectedResponse::FindNode) {
+    let message = MessageType::new(&bencode, |trans| {
+        if trans[0] == 48 {
+            ExpectedResponse::FindNode
+        } else {
+            ExpectedResponse::GetPeers
+        }
+    });
+    match message {
         Ok(MessageType::Response(ResponseType::FindNode(f))) => {
             // Add returned nodes as questionable (unpinged in this case)
             for (node_id, v4_addr) in f.nodes() {
@@ -114,9 +134,19 @@ fn handle_incoming(handler: &mut DhtHandler, buffer: &[u8], addr: SocketAddr) {
                 handler.routing_table.add_node(node);
             }
         },
-        _ => warn!("bip_dht: Received unsupported message...")
+        Ok(MessageType::Response(ResponseType::GetPeers(g))) => {
+            // Update our routing table
+            // TODO: ^^^
+            println!("NODE RESPONSE");
+            let id = NodeId::from_hash(g.node_id()).unwrap();
+            let node = Node::as_good(id, addr);
+            println!("{:?}", handler.active_lookups[0].node_response(node, g, &handler.out_channel, event_loop));
+        }
+        _ => warn!("bip_dht: Received unsupported message... {:?}", message)
     };
 }
+
+//----------------------------------------------------------------------------//
 
 fn handle_start_bootstrap(handler: &mut DhtHandler, routers: &[Router], nodes: &[SocketAddr]) {
     let node_id = handler.routing_table.node_id();
@@ -139,12 +169,6 @@ fn handle_start_bootstrap(handler: &mut DhtHandler, routers: &[Router], nodes: &
         if handler.out_channel.send((find_node_message.clone(), *addr)).is_err() {
             warn!("bip_dht: Failed to send outgoing bootstrap message to node...");
         }
-    }
-}
-
-fn handle_schedule_task(event_loop: &mut EventLoop<DhtHandler>, timeout: u64, task: IntervalTask) {
-    if event_loop.timeout_ms((timeout, task.clone()), timeout).is_err() {
-        error!("bip_dht: Received an error when trying to create a timeout for task {:?}...", task);
     }
 }
 
@@ -236,9 +260,47 @@ fn handle_check_bootstrap(handler: &mut DhtHandler, event_loop: &mut EventLoop<D
     }
 }
 
+//----------------------------------------------------------------------------//
+
+fn handle_schedule_task(event_loop: &mut EventLoop<DhtHandler>, timeout: u64, task: IntervalTask) {
+    if event_loop.timeout_ms((timeout, task.clone()), timeout).is_err() {
+        error!("bip_dht: Received an error when trying to create a timeout for task {:?}...", task);
+    }
+}
+
+//----------------------------------------------------------------------------//
+
 fn handle_check_refresh(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandler>, bucket: usize, timeout: u64) {
     
 }
+
+//----------------------------------------------------------------------------//
+
+fn handle_start_lookup(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandler>, info_hash: InfoHash) {
+    let lookup = HashLookup::new(handler.routing_table.node_id(), info_hash, &handler.routing_table, &handler.out_channel, event_loop);
+    
+    if !handler.active_lookups.is_empty() {
+        match lookup {
+            Some(lookup) => handler.active_lookups[0] = lookup,
+            None         => ()
+        }
+    } else {
+        match lookup {
+            Some(lookup) => handler.active_lookups.push(lookup),
+            None         => ()
+        }
+    }
+}
+
+fn handle_check_node_lookup(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandler>, index: usize, node: Node) {
+    println!("{:?}", handler.active_lookups[index].node_timeout(node, &handler.out_channel, event_loop));
+}
+
+fn handle_check_bulk_lookup(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandler>, index: usize) {
+    println!("{:?}", handler.active_lookups[index].bulk_timeout(&handler.out_channel, event_loop));
+}
+
+//----------------------------------------------------------------------------//
 
 fn flip_id_bit_at_index(node_id: NodeId, index: usize) -> Option<NodeId> {
     let mut id_bytes: [u8; bip_util::NODE_ID_LEN]  = node_id.into();
