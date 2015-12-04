@@ -1,7 +1,6 @@
 use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError};
-use bip_util::{NodeId, InfoHash};
+use bip_util::bt::{NodeId};
 
-use message::{self};
 use message::compact_info::{CompactNodeInfo, CompactValueInfo};
 use message::ping::{PingResponse};
 use message::find_node::{FindNodeResponse};
@@ -25,21 +24,15 @@ impl<'a> ResponseValidate<'a> {
     pub fn validate_node_id(&self, node_id: &[u8]) -> DhtResult<NodeId> {
         NodeId::from_hash(node_id).map_err(|_|
             DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found Node ID With Invalid Length",
-                node_id.len().to_string())
-        )
-    }
-    
-    pub fn validate_info_hash(&self, info_hash: &[u8]) -> DhtResult<InfoHash> {
-        InfoHash::from_hash(info_hash).map_err(|_|
-            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found InfoHash With Invalid Length",
-                info_hash.len().to_string())
+                format!("TransactionID: {:?}, NodeID Length: {:?}", self.trans_id, node_id.len()))
         )
     }
     
     /// Validate the given nodes string which should be IPv4 compact 
     pub fn validate_nodes<'b>(&self, nodes: &'b [u8]) -> DhtResult<CompactNodeInfo<'b>> {
         CompactNodeInfo::new(nodes).map_err(|_|
-            DhtError::new(DhtErrorKind::InvalidResponse, "Found Nodes Structure With Wrong Multiple Of Bytes")
+            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found Nodes Structure With Wrong Multiple Of Bytes",
+                format!("TransactionID: {:?}", self.trans_id))
         )
     }
     
@@ -47,13 +40,14 @@ impl<'a> ResponseValidate<'a> {
         for bencode in values.iter() {
             match bencode.bytes() {
                 Some(_) => (),
-                None    => return Err(DhtError::new(DhtErrorKind::InvalidResponse,
-                    "Found Values Structure Element With Wrong Bencode Type"))
+                None    => return Err(DhtError::with_detail(DhtErrorKind::InvalidResponse,
+                    "Found Values Structure Element With Wrong Bencode Type", format!("TransactionID: {:?}", self.trans_id)))
             }
         }
     
         CompactValueInfo::new(values).map_err(|_|
-            DhtError::new(DhtErrorKind::InvalidResponse, "Found values Structure Element With Wrong Number Of Bytes")
+            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found values Structure Element With Wrong Number Of Bytes",
+            format!("TransactionID: {:?}", self.trans_id))
         )
     }
 }
@@ -120,17 +114,6 @@ impl<'a> ResponseType<'a> {
             ExpectedResponse::None => {
                 Err(DhtError::new(DhtErrorKind::UnsolicitedResponse, "Failed To Match Node Response To A Request"))
             }
-        }
-    }
-    
-    pub fn transaction_id(&self) -> &'a [u8] {
-        match self {
-            &ResponseType::Ping(ref n)          => n.transaction_id(),
-            &ResponseType::FindNode(ref n)      => n.transaction_id(),
-            &ResponseType::GetPeers(ref n)      => n.transaction_id(),
-            &ResponseType::AnnouncePeer(ref n)  => n.transaction_id()
-            /*&ResponseType::GetData(ref n)       => n.transaction_id(),
-            &ResponseType::PutData(ref n)       => n.transaction_id()*/
         }
     }
 }

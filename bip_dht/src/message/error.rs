@@ -1,4 +1,7 @@
-use std::borrow::{Cow, IntoCow};
+// TODO: Still trying to decide how we want to use this module.
+#![allow(unused)]
+
+use std::borrow::{Cow};
 
 use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError};
 
@@ -86,7 +89,10 @@ impl<'a> ErrorMessage<'a> {
     // interface in error.rs for the DhtErrorKind object. Most likely our error messages will not
     // need to be dynamically generated (up in the air at this point) so this is a performance loss.
     pub fn new(trans_id: Vec<u8>, code: ErrorCode, message: String) -> ErrorMessage<'static> {
-        ErrorMessage{ trans_id: trans_id.into_cow(), code: code, message: message.into_cow() }
+        let trans_id_cow = Cow::Owned(trans_id);
+        let message_cow = Cow::Owned(message);
+        
+        ErrorMessage{ trans_id: trans_id_cow, code: code, message: message_cow }
     }
 
     pub fn from_parts(root: &Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8]) -> DhtResult<ErrorMessage<'a>> {
@@ -96,7 +102,10 @@ impl<'a> ErrorMessage<'a> {
         let (code, message) = try!(validate.extract_error_args(error_args));
         let error_code = try!(ErrorCode::new(code));
     
-        Ok(ErrorMessage{ trans_id: trans_id.into_cow(), code: error_code, message: message.into_cow() })
+        let trans_id_cow = Cow::Borrowed(trans_id);
+        let message_cow = Cow::Borrowed(message);
+    
+        Ok(ErrorMessage{ trans_id: trans_id_cow, code: error_code, message: message_cow })
     }
     
     pub fn transaction_id<'b>(&'b self) -> &'b [u8] {

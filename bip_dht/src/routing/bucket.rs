@@ -1,9 +1,11 @@
-use std::default::{Default};
+// TODO: Remove when the routing table uses the new bucket iterators.
+#![allow(unused)]
+
 use std::iter::{Filter};
 use std::net::{Ipv4Addr, SocketAddrV4, SocketAddr};
 use std::slice::{Iter};
 
-use bip_util::{self, NodeId};
+use bip_util::bt::{self, NodeId};
 
 use routing::node::{Node, NodeStatus};
 
@@ -18,7 +20,7 @@ pub struct Bucket {
 impl Bucket {
     /// Create a new Bucket with all Nodes default initialized.
     pub fn new() -> Bucket {
-        let id = NodeId::from([0u8; bip_util::NODE_ID_LEN]);
+        let id = NodeId::from([0u8; bt::NODE_ID_LEN]);
         
         let ip = Ipv4Addr::new(127, 0, 0, 1);
         let addr = SocketAddr::V4(SocketAddrV4::new(ip, 0));
@@ -141,7 +143,7 @@ impl<'a> Iterator for PingableNodes<'a> {
 
 #[cfg(test)]
 mod tests {
-    use bip_util::hash::{self, ShaHash};
+    use bip_util::sha::{self, ShaHash};
     use bip_util::test as bip_test;
 
     use routing::bucket::{self, Bucket};

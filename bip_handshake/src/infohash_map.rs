@@ -2,7 +2,7 @@ use std::collections::{HashMap};
 use std::collections::hash_map::{Entry};
 use std::sync::{RwLock, Mutex};
 
-use bip_util::{InfoHash};
+use bip_util::bt::{InfoHash};
 
 /// A concurrent data structure that maps an info hash to many values V.
 ///

@@ -1,7 +1,6 @@
-use std::borrow::{Cow, IntoCow};
 use std::fmt::{self, Display, Formatter};
 use std::io::{self, ErrorKind, Error};
-use std::net::{self, SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
 use std::vec::{IntoIter};
 
 const UTORRENT_DHT:     (&'static str, u16) = ("router.utorrent.com", 6881);
@@ -23,6 +22,7 @@ pub enum Router {
 }
 
 impl Router {
+    /* TODO: USES DEPRECATED FUNCTIONS
     pub fn hostname(&self) -> io::Result<Cow<'static, str>> {
         match self {
             &Router::uTorrent     => Ok(UTORRENT_DHT.0.into_cow()),
@@ -32,7 +32,7 @@ impl Router {
                 net::lookup_addr(&addr.ip()).map(|n| n.into_cow())
             }
         }
-    }
+    }*/
 
     pub fn ipv4_addr(&self) -> io::Result<SocketAddrV4> {
         let addrs = try!(self.socket_addrs());

@@ -1,5 +1,5 @@
 use std::net::{SocketAddr, UdpSocket};
-use std::sync::mpsc::{self, SyncSender, Receiver};
+use std::sync::mpsc::{self, SyncSender};
 use std::thread::{self};
 
 use mio::{Sender};
@@ -29,6 +29,7 @@ fn send_bytes(socket: &UdpSocket, bytes: &[u8], addr: SocketAddr) {
         if let Ok(num_sent) = socket.send_to(&bytes[bytes_sent..], addr) {
             bytes_sent += num_sent;
         } else {
+            // TODO: Maybe shut down in this case, will fail on every write...
             warn!("bip_dht: Outgoing messenger failed to write {} bytes to {}; {} bytes written before error...",
                 bytes.len(), addr, bytes_sent);
             break;
@@ -36,19 +37,19 @@ fn send_bytes(socket: &UdpSocket, bytes: &[u8], addr: SocketAddr) {
     }
 }
 
-pub fn create_incoming_messenger(socket: UdpSocket, send: Sender<OneshotTask>){
+pub fn create_incoming_messenger(socket: UdpSocket, send: Sender<OneshotTask>) {
     thread::spawn(move || {
         let mut channel_is_open = true;
         
         while channel_is_open {
-            let mut buffer = vec![0u8; 1000];
+            let mut buffer = vec![0u8; 1500];
             
             match socket.recv_from(&mut buffer) {
                 Ok((size, addr)) => {
                     buffer.truncate(size);
                     channel_is_open = send_message(&send, buffer, addr);
                 },
-                Err(e) => warn!("bip_dht: Incoming messenger failed to receive bytes...")
+                Err(_) => warn!("bip_dht: Incoming messenger failed to receive bytes...")
             }
         }
         

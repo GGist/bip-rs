@@ -1,5 +1,3 @@
-#![feature(into_cow, ip_addr, lookup_addr, ip)]
-#![allow(unused)]
 //! Interact with the bittorrent Distributed Hash Table.
 
 #[macro_use]
@@ -18,7 +16,7 @@ extern crate chrono;
 // - Always send 'nodes' on a get_peers response even if 'values' is present
 // - Unrecognized requests which contain either an 'info_hash' or 'target' arguments are interpreted as 'find_node'
 // - Client identification will be present in all outgoing messages in the form of the 'v' key TODO
-// const CLIENT_IDENTIFICATION: &'static [u8] = &[b'R', b'D', 0, 1];
+// const CLIENT_IDENTIFICATION: &'static [u8] = &[b'B', b'I', b'P', 0, 1];
 // * IPv6 is currently NOT supported in this implementation
 
 // TODO: The Vuze dht operates over a protocol that is different than the mainline dht.

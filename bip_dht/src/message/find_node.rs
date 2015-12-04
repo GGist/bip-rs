@@ -1,7 +1,5 @@
-use std::borrow::{Cow, IntoCow};
-
 use bip_bencode::{Bencode, BencodeConvert, Dictionary};
-use bip_util::{NodeId, InfoHash};
+use bip_util::bt::{NodeId};
 
 use message::{self};
 use message::compact_info::{CompactNodeInfo};
@@ -40,10 +38,6 @@ impl<'a> FindNodeRequest<'a> {
     
     pub fn transaction_id(&self) -> &'a [u8] {
         self.trans_id
-    }
-    
-    pub fn node_id(&self) -> NodeId {
-        self.node_id
     }
     
     pub fn target_id(&self) -> NodeId {

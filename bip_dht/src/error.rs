@@ -8,7 +8,7 @@ use message::error::{ErrorMessage};
 pub type DhtResult<T> = Result<T, DhtError>;
 
 /// A list specifying the types of DhtErrors that may occur.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Debug)]
 pub enum DhtErrorKind {
     /// Failed To Lookup On Table.
     LookupFailed,
@@ -22,11 +22,11 @@ pub enum DhtErrorKind {
     InvalidResponse,
     /// A Node Sent Us An Unexpected Response.
     UnsolicitedResponse,
-    /// Some Other Error Occurred.
-    Other
+    /// An IO Error Occurred.
+    IoError(io::Error)
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Debug)]
 pub struct DhtError {
     kind: DhtErrorKind,
     desc: &'static str,
@@ -68,10 +68,7 @@ impl Display for DhtError {
 
 impl From<io::Error> for DhtError {
     fn from(error: io::Error) -> DhtError {
-        DhtError::with_detail(DhtErrorKind::Other,
-            "An io::Error Occurred, See detail",
-            error.description().to_owned()
-        )
+        DhtError::new(DhtErrorKind::IoError(error), "An io::Error Occurred.")
     }
 }
 /*

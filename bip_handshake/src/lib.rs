@@ -1,5 +1,3 @@
-#![feature(read_exact)]
-
 //! # DO NOT USE THIS CRATE YET!!!
 
 extern crate bip_util;
@@ -11,3 +9,5 @@ mod infohash_map;
 
 pub use bittorrent::{PeerInfo, BTHandshaker};
 pub use handshaker::{Handshaker};
+
+pub use bip_util::bt::{PeerId, InfoHash};

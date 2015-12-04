@@ -1,6 +1,6 @@
 use std::net::{SocketAddr};
 
-use bip_util::{InfoHash, PeerId};
+use bip_util::bt::{InfoHash, PeerId};
 
 /// Trait for providing a handshaker object with connection information.
 pub trait Handshaker: Send {
@@ -17,7 +17,7 @@ pub trait Handshaker: Send {
     fn port(&self) -> u16;
 
     /// Initiates a handshake with the given socket address.
-    fn connect(&mut self, expected: PeerId, hash: InfoHash, addr: SocketAddr);
+    fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr);
     
     /// Adds a filter that is applied to handshakes before they are initiated or completed.
     fn filter<F>(&mut self, process: Box<F>) where F: Fn(SocketAddr) -> bool + Send;

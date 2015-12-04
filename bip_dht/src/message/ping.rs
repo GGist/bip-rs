@@ -1,7 +1,8 @@
-use std::borrow::{Cow, IntoCow};
+// We don't really use PingRequests for our current algorithms, but that may change in the future!
+#![allow(unused)]
 
 use bip_bencode::{Bencode, BencodeConvert, Dictionary};
-use bip_util::{NodeId, InfoHash};
+use bip_util::bt::{NodeId};
 
 use message::{self};
 use message::request::{self, RequestValidate};

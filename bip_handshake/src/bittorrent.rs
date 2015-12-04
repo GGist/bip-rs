@@ -8,7 +8,7 @@ use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread::{self};
 use std::time::{Duration};
 
-use bip_util::{InfoHash, PeerId};
+use bip_util::bt::{InfoHash, PeerId};
 use threadpool::{ThreadPool};
 
 use handshaker::{Handshaker};
@@ -91,7 +91,7 @@ enum WorkerMessage<T> where T: Send {
     Shutdown,
     AddFilter(Box<Fn(SocketAddr) -> bool + Send>),
     AddRecipient(InfoHash, Sender<PeerInfo<T>>),
-    Initiate(PeerId, InfoHash, SocketAddr),
+    Initiate(Option<PeerId>, InfoHash, SocketAddr),
     Complete(TcpStream)
 }
 
@@ -130,7 +130,7 @@ fn inactive_streams<T>(hash: InfoHash, recipients: &Arc<InfoHashMap<Sender<PeerI
 /// Spawns a handshake initiator in a separate thread if the connection is not being filtered on and
 /// we have active, listening streams for the given info hash associated with that address.
 fn spawn_initiator<T>(thread_pool: &ThreadPool, protocol: &'static str, id: PeerId, filters: &[Box<Fn(SocketAddr) -> bool + Send>],
-    expected_id: PeerId, hash: InfoHash, socket: SocketAddr,
+    expected_id: Option<PeerId>, hash: InfoHash, socket: SocketAddr,
     recipients: &Arc<InfoHashMap<Sender<PeerInfo<T>>>>) where T: Send + 'static + From<TcpStream> {
     
     if should_filter(filters, socket) || inactive_streams(hash, recipients) {
@@ -165,7 +165,7 @@ fn spawn_completor<T>(thread_pool: &ThreadPool, protocol: &'static str, id: Peer
 
 /// Initiate a handshake with the given socket address using the given parameters. The handshake will be
 /// terminated if the expected peer id does not match up with the peer id that we are given from the peer.
-fn initiate_handshake<T>(protocol: &'static str, id: PeerId, expected_id: PeerId, hash: InfoHash, socket: SocketAddr, 
+fn initiate_handshake<T>(protocol: &'static str, id: PeerId, expected_id: Option<PeerId>, hash: InfoHash, socket: SocketAddr, 
     recipients: Arc<InfoHashMap<Sender<PeerInfo<T>>>>) where T: From<TcpStream> {
     let mut stream = TcpStream::connect(socket).unwrap();
     
@@ -177,7 +177,8 @@ fn initiate_handshake<T>(protocol: &'static str, id: PeerId, expected_id: PeerId
     let remote_peerid = peerid_from_handshake(&response_buffer);
     
     // TODO: Check if other clients employ id obfuscation leading us to drop a lot of connections.
-    if remote_protocol == protocol && remote_infohash == hash && remote_peerid == expected_id {
+    
+    if remote_protocol == protocol && remote_infohash == hash && remote_peerid == expected_id.unwrap_or(remote_peerid) {
         recipients.retain(&hash, |sender| {
             let stream_clone = stream.try_clone().unwrap();
             
@@ -309,7 +310,7 @@ impl<T> Handshaker for BTHandshaker<T> where T: Send {
         self.peer_id
     }
 
-    fn connect(&mut self, id: PeerId, hash: InfoHash, addr: SocketAddr) {
+    fn connect(&mut self, id: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
         self.send.send(WorkerMessage::Initiate(id, hash, addr)).unwrap();
     }
     

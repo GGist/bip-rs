@@ -1,7 +1,8 @@
-use std::borrow::{Cow, IntoCow};
+// TODO: Remove this when announces are implemented
+#![allow(unused)]
 
 use bip_bencode::{Bencode, BencodeConvert, Dictionary};
-use bip_util::{NodeId, InfoHash};
+use bip_util::bt::{NodeId, InfoHash};
 
 use message::{self};
 use message::request::{self, RequestValidate};
@@ -9,6 +10,8 @@ use error::{DhtResult};
 
 const PORT_KEY:         &'static str = "port";
 const IMPLIED_PORT_KEY: &'static str = "implied_port";
+
+// TODO: Integrate the Token type into the request message.
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum ResponsePort {
@@ -60,10 +63,6 @@ impl<'a> AnnouncePeerRequest<'a> {
     
     pub fn transaction_id(&self) -> &'a [u8] {
         self.trans_id
-    }
-    
-    pub fn node_id(&self) -> NodeId {
-        self.node_id
     }
     
     pub fn info_hash(&self) -> InfoHash {

@@ -1,5 +1,5 @@
 use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError, BencodeConvertErrorKind};
-use bip_util::{NodeId, InfoHash};
+use bip_util::bt::{NodeId, InfoHash};
 
 use message::{self};
 use message::error::{ErrorMessage, ErrorCode};
@@ -7,8 +7,6 @@ use message::ping::{PingRequest};
 use message::find_node::{FindNodeRequest};
 use message::get_peers::{GetPeersRequest};
 use message::announce_peer::{AnnouncePeerRequest};
-use message::get_data::{GetDataRequest};
-use message::put_data::{PutDataRequest};
 use error::{DhtError, DhtErrorKind, DhtResult};
 
 pub const REQUEST_ARGS_KEY: &'static str = "a";
@@ -18,8 +16,8 @@ pub const PING_TYPE_KEY:          &'static str = "ping";
 pub const FIND_NODE_TYPE_KEY:     &'static str = "find_node";
 pub const GET_PEERS_TYPE_KEY:     &'static str = "get_peers";
 pub const ANNOUNCE_PEER_TYPE_KEY: &'static str = "announce_peer";
-const GET_DATA_TYPE_KEY:          &'static str = "get";
-const PUT_DATA_TYPE_KEY:          &'static str = "put";
+//const GET_DATA_TYPE_KEY:          &'static str = "get";
+//const PUT_DATA_TYPE_KEY:          &'static str = "put";
 
 //----------------------------------------------------------------------------//
 
@@ -75,8 +73,8 @@ pub enum RequestType<'a> {
     FindNode(FindNodeRequest<'a>),
     GetPeers(GetPeersRequest<'a>),
     AnnouncePeer(AnnouncePeerRequest<'a>),
-    GetData(GetDataRequest<'a>),
-    PutData(PutDataRequest<'a>)
+    /*GetData(GetDataRequest<'a>),
+    PutData(PutDataRequest<'a>)*/
 }
 
 impl<'a> RequestType<'a> {
@@ -102,14 +100,14 @@ impl<'a> RequestType<'a> {
                 let announce_peer_rqst = try!(AnnouncePeerRequest::from_parts(rqst_root, trans_id));
                 Ok(RequestType::AnnouncePeer(announce_peer_rqst))
             },
-            GET_DATA_TYPE_KEY => {
+            /*GET_DATA_TYPE_KEY => {
                 let get_data_rqst = try!(GetDataRequest::new(rqst_root, trans_id));
                 Ok(RequestType::GetData(get_data_rqst))
             },
             PUT_DATA_TYPE_KEY => {
                 let put_data_rqst = try!(PutDataRequest::new(rqst_root, trans_id));
                 Ok(RequestType::PutData(put_data_rqst))
-            },
+            },*/
             unknown => {
                 if let Some(target_key) = forward_compatible_find_node(rqst_root) {
                     let find_node_rqst = try!(FindNodeRequest::from_parts(rqst_root, trans_id, target_key));
@@ -122,17 +120,6 @@ impl<'a> RequestType<'a> {
                         "KRPC Message Root Unknown Request Type", unknown.to_owned()))
                 }
             }
-        }
-    }
-    
-    pub fn transaction_id<'b>(&'b self) -> &'b [u8] {
-        match self {
-            &RequestType::Ping(ref n)          => n.transaction_id(),
-            &RequestType::FindNode(ref n)      => n.transaction_id(),
-            &RequestType::GetPeers(ref n)      => n.transaction_id(),
-            &RequestType::AnnouncePeer(ref n)  => n.transaction_id(),
-            &RequestType::GetData(ref n)       => n.transaction_id(),
-            &RequestType::PutData(ref n)       => n.transaction_id()
         }
     }
 }

@@ -1,17 +1,17 @@
+// TODO: Remove when we use find_node,
+#![allow(unused)]
+
 use std::iter::{Filter};
 use std::slice::{Iter};
 
-use bip_util::{NodeId};
-use bip_util::hash::{self, ShaHash, XorRep};
+use bip_util::bt::{NodeId};
+use bip_util::sha::{self, ShaHash, XorRep};
 use rand::{self};
 
 use routing::bucket::{self, Bucket};
 use routing::node::{Node, NodeStatus};
 
-pub const MAX_BUCKETS: usize = hash::SHA_HASH_LEN * 8;
-
-// TODO: Node id does not check for duplicates or that someone else has our node id in our table.
-// TODO: Bucket last updated is altered when splitting buckets since we create two new buckets to replace the bucket.
+pub const MAX_BUCKETS: usize = sha::SHA_HASH_LEN * 8;
 
 /// Routing table containing a table of routing nodes as well
 /// as the id of the local node participating in the dht.
@@ -47,6 +47,33 @@ impl RoutingTable {
     /// Iterator over all buckets in the routing table.
     pub fn buckets<'a>(&'a self) -> Buckets<'a> {
         Buckets::new(&self.buckets)
+    }
+    
+    /// Find an instance if the target node in the RoutingTable, if it exists.
+    pub fn find_node(&self, node: &Node) -> Option<&Node> {
+        let bucket_index = leading_bit_count(self.node_id, node.id());
+        
+        // Check the sorted bucket
+        let opt_bucket_contents = if let Some(c) = self.buckets().skip(bucket_index).next() {
+            // Got the sorted bucket
+            Some(c)
+        } else {
+            // Grab the assorted bucket (if it exists)
+            self.buckets().find(|c| {
+                match c {
+                    &BucketContents::Empty       => false,
+                    &BucketContents::Sorted(_)   => false,
+                    &BucketContents::Assorted(_) => true
+                }
+            })
+        };
+        
+        // Check for our target node in our results
+        match opt_bucket_contents {
+            Some(BucketContents::Sorted(b))   => b.pingable_nodes().find(|n| n == &node),
+            Some(BucketContents::Assorted(b)) => b.pingable_nodes().find(|n| n == &node),
+            _ => None
+        }
     }
     
     /// Add the node to the RoutingTable if there is space for it.
@@ -112,7 +139,7 @@ fn can_split_bucket(num_buckets: usize, bucket_index: usize) -> bool {
 /// TODO: Shouldnt use this in the future to get an id for the routing table,
 /// generate one from the security module to be compliant with the spec.
 pub fn random_node_id() -> NodeId {
-    let mut random_sha_hash = [0u8; hash::SHA_HASH_LEN];
+    let mut random_sha_hash = [0u8; sha::SHA_HASH_LEN];
     
     for byte in random_sha_hash.iter_mut() {
         *byte = rand::random::<u8>();

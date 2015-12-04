@@ -1,8 +1,9 @@
-use std::net::{Ipv4Addr, Ipv6Addr, IpAddr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4};
 
 use chrono::{Duration, UTC, DateTime};
 
-use {NodeId};
+use bt::{self, NodeId};
+use net::{IpAddr};
 
 /// Allows us to time travel into the future.
 pub fn travel_into_future(offset: Duration) -> DateTime<UTC> {
@@ -38,7 +39,7 @@ pub fn dummy_socket_addr_v4() -> SocketAddr {
 
 /// Generates a dummy node id as a NodeId.
 pub fn dummy_node_id() -> NodeId {
-    NodeId::from([0u8; ::NODE_ID_LEN])
+    NodeId::from([0u8; bt::NODE_ID_LEN])
 }
 
 /// Generates a block of unique dummy node ids as Vec<NodeId>
@@ -46,7 +47,7 @@ pub fn dummy_block_node_ids(num_ids: u8) -> Vec<NodeId> {
     let mut id_block = Vec::with_capacity(num_ids as usize);
     
     for repeat in 0..num_ids {
-        let mut id = [0u8; ::NODE_ID_LEN];
+        let mut id = [0u8; bt::NODE_ID_LEN];
         
         for byte in id.iter_mut() {
             *byte = repeat;

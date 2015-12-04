@@ -1,6 +1,10 @@
+// TODO: Remove this when we actually use the security module.
+#![allow(unused)]
+
 use std::net::{Ipv4Addr};
 
-use bip_util::{self, NodeId};
+use bip_util::bt::{self, NodeId};
+use bip_util::convert::{self};
 use crc::crc32::{self};
 use rand::{self};
 
@@ -9,7 +13,7 @@ const IPV6_MASK: u64 = 0x0103070F1F3F7FFF;
 
 const CRC32C_ARG_SLICE_SIZE: usize = 8;
 
-// TODO: Add IPv6 support, only when proper unit tests have been made for that
+// TODO: Add IPv6 support, only when proper unit tests have been constructed
 
 //----------------------------------------------------------------------------//
 
@@ -22,16 +26,16 @@ pub fn generate_compliant_id_ipv4(addr: Ipv4Addr) -> NodeId {
 }
 
 /// Generates an ip address compliant node id.
-fn generate_compliant_id(masked_ip_be: u64, num_octets: usize, rand: u8) -> [u8; bip_util::NODE_ID_LEN] {
+fn generate_compliant_id(masked_ip_be: u64, num_octets: usize, rand: u8) -> [u8; bt::NODE_ID_LEN] {
     let r = rand & 0x07;
     
-    let mut masked_ip_bytes = bip_util::eight_bytes_to_array(masked_ip_be);
+    let mut masked_ip_bytes = convert::eight_bytes_to_array(masked_ip_be);
     let starting_byte = masked_ip_bytes.len() - num_octets;
     masked_ip_bytes[starting_byte] |= r << 5;
     
     let crc32c_result = crc32::checksum_castagnoli(&masked_ip_bytes[starting_byte..]);
     
-    let mut node_id = [0u8; bip_util::NODE_ID_LEN];
+    let mut node_id = [0u8; bt::NODE_ID_LEN];
     node_id[0] = (crc32c_result >> 24) as u8;
     node_id[1] = (crc32c_result >> 16) as u8;
     node_id[2] = (((crc32c_result >> 8) & 0xF8) as u8) | (rand::random::<u8>() & 0x07);
@@ -57,7 +61,10 @@ pub fn is_compliant_ipv4_addr(addr: Ipv4Addr, id: NodeId) -> bool {
 
 /// Checks to see if the given ipv4 address is exempt from a security check.
 fn is_security_compliant_ipv4_exempt(addr: Ipv4Addr) -> bool {
-    addr.is_loopback() || addr.is_private() || addr.is_link_local()
+    // TODO: Since we are not using this module yet, we dont have to use the ip feature gate which is not stable yet.
+    
+    false
+    //addr.is_loopback() || addr.is_private() || addr.is_link_local()
 }
 
 /// Compares the given masked ip (v4 or v6) against the given node id to see if the node if is valid.
@@ -70,7 +77,7 @@ fn is_compliant_addr(masked_ip_be: u64, num_octets: usize, id: NodeId) -> bool {
     if num_octets > CRC32C_ARG_SLICE_SIZE {
         panic!("error in dht::security::is_compliant_addr(), num_octets is greater than buffer size")
     }
-    let id_bytes = Into::<[u8; bip_util::NODE_ID_LEN]>::into(id);
+    let id_bytes = Into::<[u8; bt::NODE_ID_LEN]>::into(id);
     
     let rand = id_bytes[19];
     let r = rand & 0x07;
@@ -79,7 +86,7 @@ fn is_compliant_addr(masked_ip_be: u64, num_octets: usize, id: NodeId) -> bool {
     let rand_masked_ip = masked_ip_be | ((r as u64) << (ip_bits_used - 3));
     
     // Move the rand_masked_ip bytes over to an array for running through crc32c
-    let mut rand_masked_ip_bytes = bip_util::eight_bytes_to_array(rand_masked_ip);
+    let mut rand_masked_ip_bytes = convert::eight_bytes_to_array(rand_masked_ip);
     let starting_byte = rand_masked_ip_bytes.len() - num_octets;
     
     // Official spec says to store the rand_masked_ip in a 64 bit integer (8 byte array) and hash
@@ -98,7 +105,7 @@ fn is_compliant_addr(masked_ip_be: u64, num_octets: usize, id: NodeId) -> bool {
 ///
 /// We dont have to check the last byte of the node id since we used that byte to generate
 /// the crc32c_result.
-fn is_compliant_id(crc32c_result: u32, id_bytes: [u8; bip_util::NODE_ID_LEN]) -> bool {
+fn is_compliant_id(crc32c_result: u32, id_bytes: [u8; bt::NODE_ID_LEN]) -> bool {
     let mut is_compliant = true;
     is_compliant = is_compliant && (id_bytes[0] == ((crc32c_result >> 24) as u8));
     is_compliant = is_compliant && (id_bytes[1] == ((crc32c_result >> 16) as u8));

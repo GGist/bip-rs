@@ -1,63 +1,72 @@
 use std::collections::{HashSet};
+use std::io::{self};
 use std::net::{SocketAddr, UdpSocket};
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool};
-use std::sync::mpsc::{self};
+use std::sync::mpsc::{self, Receiver};
 
 use bip_handshake::{Handshaker};
-use bip_util::{self, InfoHash};
+use bip_util::bt::{InfoHash};
+use bip_util::net::{self};
 use mio::{Sender};
 
-use error::{DhtResult, DhtError, DhtErrorKind};
 use router::{Router};
-use worker::{self, OneshotTask, ScheduledTask};
+use worker::{self, OneshotTask, DhtEvent, ShutdownCause};
 
 /// Maintains a distributed hash (routing) table.
 pub struct MainlineDht {
     send: Sender<OneshotTask>
 }
 
-// Starting the dht, ping nodes that were added, if they respond add them to the dht
-// If no nodes were added, use the router that was provided
-
 impl MainlineDht {
-    pub fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> DhtResult<MainlineDht>
+    pub fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> io::Result<MainlineDht>
         where H: Handshaker + 'static {
-        let send_socket = try!(UdpSocket::bind(&builder.src_addr));
-        let recv_socket = try!(send_socket.try_clone());
+        let send_sock = try!(UdpSocket::bind(&builder.src_addr));
+        let recv_sock = try!(send_sock.try_clone());
         
-        let send = try!(worker::start_mainline_dht(send_socket, recv_socket, builder.read_only, builder.ext_addr, handshaker));
+        let kill_sock = try!(send_sock.try_clone());
+        let kill_addr = try!(send_sock.local_addr());
+        
+        let send = try!(worker::start_mainline_dht(send_sock, recv_sock, builder.read_only,
+            builder.ext_addr, handshaker, kill_sock, kill_addr));
         
         let nodes: Vec<SocketAddr> = builder.nodes.into_iter().collect();
         let routers: Vec<Router> = builder.routers.into_iter().collect();
         
-        send.send(OneshotTask::StartBootstrap(routers, nodes));
-        //send.send(OneshotTask::ScheduleTask(1000, IntervalTask::CheckBootstrap(0)));
+        if send.send(OneshotTask::StartBootstrap(routers, nodes)).is_err() {
+            warn!("bip_dt: MainlineDht failed to send a start bootstrap message...");
+        }
         
         Ok(MainlineDht{ send: send })
     }
     
-    pub fn search(&self, hash: InfoHash) -> DhtResult<()> {
-        let (send, recv) = mpsc::sync_channel(1);
-        
-        if self.send.send(OneshotTask::StartLookup(hash, send)).is_ok() {
-            recv.recv();
-            
-            Ok(())
-        } else {
-            Err(DhtError::new(DhtErrorKind::LookupFailed, "Failed To Send A Message To The DhtHandler..."))
+    pub fn search(&self, hash: InfoHash, announce: bool) {
+        if self.send.send(OneshotTask::StartLookup(hash, announce)).is_err() {
+            warn!("bip_dht: MainlineDht failed to send a start lookup message...");
         }
     }
     
-    pub fn announce(hash: InfoHash) -> DhtResult<()> {
-        unimplemented!();
+    pub fn events(&self) -> Receiver<DhtEvent> {
+        let (send, recv) = mpsc::channel();
+        
+        if self.send.send(OneshotTask::RegisterSender(send)).is_err() {
+            warn!("bip_dht: MainlineDht failed to send a register sender message...");
+        }
+        
+        recv
+    }
+}
+
+impl Drop for MainlineDht {
+    fn drop(&mut self) {
+        if self.send.send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated)).is_err() {
+            warn!("bip_dht: MainlineDht failed to send a shutdown message...");
+        }
     }
 }
 
 //----------------------------------------------------------------------------//
 
 /// Stores information for initializing a dht.
-#[derive(Clone, PartialEq, Eq, Debug)] 
+#[derive(Clone, Debug)] 
 pub struct DhtBuilder {
     nodes:     HashSet<SocketAddr>,
     routers:   HashSet<Router>,
@@ -74,15 +83,15 @@ impl DhtBuilder {
     fn new() -> DhtBuilder {
         DhtBuilder{ nodes: HashSet::new(),
             routers: HashSet::new(),
-            read_only: false,
-            src_addr: bip_util::default_route_v4(),
+            read_only: true,
+            src_addr: net::default_route_v4(),
             ext_addr: None
         }
     }
 
     /// Creates a DhtBuilder with an initial node for our routing table.
     pub fn with_node(node_addr: SocketAddr) -> DhtBuilder {
-        let mut dht = DhtBuilder::new();
+        let dht = DhtBuilder::new();
         
         dht.add_node(node_addr)
     }
@@ -93,7 +102,7 @@ impl DhtBuilder {
     /// Difference between a node and a router is that a router is never put in
     /// our routing table.
     pub fn with_router(router: Router) -> DhtBuilder {
-        let mut dht = DhtBuilder::new();
+        let dht = DhtBuilder::new();
         
         dht.add_router(router)
     }
@@ -118,7 +127,7 @@ impl DhtBuilder {
     /// that remote nodes should not add us to their routing table.
     ///
     /// Used when we are behind a restrictive NAT and/or we want to decrease
-    /// incoming network traffic.
+    /// incoming network traffic. Defaults value is true.
     pub fn set_read_only(mut self, read_only: bool) -> DhtBuilder {
         self.read_only = read_only;
         
@@ -146,7 +155,7 @@ impl DhtBuilder {
     }
     
     /// Start a mainline dht with the current configuration.
-    pub fn start_mainline<H>(self, handshaker: H) -> DhtResult<MainlineDht>
+    pub fn start_mainline<H>(self, handshaker: H) -> io::Result<MainlineDht>
         where H: Handshaker + 'static {
         MainlineDht::with_builder(self, handshaker)
     }

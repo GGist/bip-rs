@@ -1,13 +1,12 @@
+// TODO: Remove when the routing table updates node's state on request/responses.
+#![allow(unused)]
+
 use std::cell::{Cell};
-use std::convert::{From};
-use std::default::{Default};
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::net::{SocketAddr};
 
-use bip_util::{NodeId};
-use bip_util::hash::{self, ShaHash};
+use bip_util::bt::{NodeId};
 use bip_util::test::{self};
 use chrono::{Duration, DateTime, UTC};
 
@@ -18,6 +17,8 @@ use chrono::{Duration, DateTime, UTC};
 // good nodes, instead, questionable nodes should be pinged twice and then become available to be replaced. This reduces
 // GOOD node churn since after 15 minutes, a long lasting node could potentially be replaced by a short lived good node.
 // This strategy is actually what is vaguely specified in the standard?
+
+// TODO: Should we be storing a SocketAddr instead of a SocketAddrV4?
 
 /// Maximum wait period before a node becomes questionable.
 const MAX_LAST_SEEN_MINS: i64 = 15;
@@ -54,6 +55,7 @@ impl Node {
     /// Create a questionable node that has responded to us before but never requested from us.
     pub fn as_questionable(id: NodeId, addr: SocketAddr) -> Node {
         let last_response_offset = Duration::minutes(MAX_LAST_SEEN_MINS);
+        // TODO: Dont use test helpers in actual code!!!
         let last_response = test::travel_into_past(last_response_offset);
         
         Node{ id: id, addr: addr, last_response: Cell::new(Some(last_response)),
@@ -93,6 +95,36 @@ impl Node {
     
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+    
+    pub fn encode(&self) -> [u8; 26] {
+        let mut encoded = [0u8; 26];
+        
+        {
+            let mut encoded_iter = encoded.iter_mut();
+            
+            // Copy the node id over
+            for (src, dst) in self.id.as_ref().iter().zip(encoded_iter.by_ref()) {
+                *dst = *src;
+            }
+            
+            // Copy the ip address over
+            match self.addr {
+                SocketAddr::V4(v4) => {
+                    for (src, dst) in v4.ip().octets().iter().zip(encoded_iter.by_ref()) {
+                        *dst = *src;
+                    }
+                },
+                _ => panic!("bip_dht: Cannot encode a SocketAddrV6...")
+            }
+        }
+        
+        // Copy the port over
+        let port = self.addr.port();
+        encoded[24] = (port >> 8) as u8;
+        encoded[25] = port as u8;
+        
+        encoded
     }
     
     /// Current status of the node.
@@ -189,11 +221,33 @@ fn recently_requested(node: &Node, curr_time: DateTime<UTC>) -> NodeStatus {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::{self};
+    use std::net::{Ipv4Addr, SocketAddrV4, SocketAddr};
+    
     use bip_util::{NodeId};
     use bip_util::test as bip_test;
     use chrono::{Duration};
     
     use routing::node::{Node, NodeStatus};
+
+    #[test]
+    fn positive_encode_node() {
+        let node_id = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+        let ip_addr = [127, 0, 0, 1];
+        let port = 6881;
+        
+        let v4_ip = Ipv4Addr::new(ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
+        let sock_addr = SocketAddr::V4(SocketAddrV4::new(v4_ip, port));
+        
+        let node = Node::as_good(node_id.into(), sock_addr);
+        
+        let encoded_node = node.encode();
+        
+        let port_bytes = [(port >> 8) as u8, port as u8];
+        for (expected, actual) in node_id.iter().chain(ip_addr.iter()).chain(port_bytes.iter()).zip(encoded_node.iter()) {
+            assert_eq!(expected, actual);
+        }
+    }
 
     #[test]
     fn positive_as_bad() {

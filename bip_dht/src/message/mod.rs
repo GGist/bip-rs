@@ -1,5 +1,4 @@
-use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError};
-use bip_util::hash::{self};
+use bip_bencode::{Bencode, BencodeConvert, BencodeConvertError};
 
 use message::request::{RequestType};
 use message::response::{ResponseType, ExpectedResponse};
@@ -16,13 +15,11 @@ pub mod ping;
 pub mod find_node;
 pub mod get_peers;
 pub mod announce_peer;
-pub mod get_data;
-pub mod put_data;
 
 // Top level message keys
 const TRANSACTION_ID_KEY: &'static str = "t";
 const MESSAGE_TYPE_KEY:   &'static str = "y";
-const CLIENT_TYPE_KEY:    &'static str = "v";
+//const CLIENT_TYPE_KEY:    &'static str = "v";
 
 // Top level message type sentinels
 const REQUEST_TYPE_KEY:  &'static str = "q";
@@ -92,17 +89,4 @@ impl<'a> MessageType<'a> {
             }
         }
     }
-    
-    pub fn transaction_id<'b>(&'b self) -> &'b [u8] {
-        match self {
-            &MessageType::Request(ref n)  => n.transaction_id(),
-            &MessageType::Response(ref n) => n.transaction_id(),
-            &MessageType::Error(ref n)    => n.transaction_id()
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
 }

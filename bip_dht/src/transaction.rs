@@ -1,6 +1,5 @@
-use rand::{self};
-
-use bip_util::{self, GenericError, GenericResult};
+use bip_util::{self};
+use bip_util::convert::{self};
 
 // Transaction IDs are going to be vital for both scalability and performance concerns.
 // They allow us to both protect against unsolicited responses as well as dropping those
@@ -183,7 +182,7 @@ pub struct TransactionID {
 
 impl TransactionID {
     fn new(trans_id: u64) -> TransactionID {
-        let trans_id_bytes = bip_util::eight_bytes_to_array(trans_id);
+        let trans_id_bytes = convert::eight_bytes_to_array(trans_id);
         
         TransactionID{ trans_id: trans_id, trans_id_bytes: trans_id_bytes }
     }
@@ -207,6 +206,7 @@ impl TransactionID {
         ActionID::from_transaction_id(self.trans_id)
     }
     
+    #[allow(unused)]
     pub fn message_id(&self) -> MessageID {
         MessageID::from_transaction_id(self.trans_id)
     }
@@ -228,7 +228,7 @@ pub struct ActionID {
 impl ActionID {
     fn from_transaction_id(trans_id: u64) -> ActionID {
         // The ACTUAL action id
-        let shifted_action_id = trans_id >> MESSAGE_ID_BYTES;
+        let shifted_action_id = trans_id >> MESSAGE_ID_SHIFT;
         
         ActionID{ action_id: shifted_action_id }
     }
@@ -236,12 +236,14 @@ impl ActionID {
 
 //----------------------------------------------------------------------------//
 
+#[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct MessageID {
     message_id: u64
 }
 
 impl MessageID {
+    #[allow(unused)]
     fn from_transaction_id(trans_id: u64) -> MessageID {
         let clear_action_id = MAX_MESSAGE_ID - 1;
         // The ACTUAL message id
@@ -262,10 +264,10 @@ mod tests {
     #[test]
     fn positive_tid_from_bytes() {
         let mut aid_generator = AIDGenerator::new();
-        let mut mid_generator = MIDGenerator::new();
+        let mut mid_generator = aid_generator.generate();
         
         let tid = mid_generator.generate();
-        let tid_from_bytes = TransactionID::from_bytes(tid.as_ref());
+        let tid_from_bytes = TransactionID::from_bytes(tid.as_ref()).unwrap();
         
         assert_eq!(tid, tid_from_bytes);
     }
