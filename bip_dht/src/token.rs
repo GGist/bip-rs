@@ -1,10 +1,10 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+use chrono::{DateTime, Duration, UTC};
 use rand::{self};
-use time::{PreciseTime, Duration};
 
 use bip_util::{self, GenericResult, GenericError};
-use bip_util::hash::{self};
+use bip_util::hash::{self, ShaHash};
 
 /// We will partially follow the bittorrent implementation for issuing tokens to nodes, the
 /// secret will change every 10 minutes and tokens up to 10 minutes old will be accepted. This
@@ -20,6 +20,7 @@ use bip_util::hash::{self};
 /// Since we arent storing the tokens we generate (which is awesome) we CANT track how long each
 /// individual token has been checked out from the store and so each token is valid for some time
 /// between 10 and 20 minutes.
+
 const REFRESH_INTERVAL_MINS: i64 = 10;
 
 const IPV4_SECRET_BUFFER_LEN: usize = 4 + 4;
@@ -63,7 +64,7 @@ impl From<[u8; hash::SHA_HASH_LEN]> for Token {
 struct TokenStore {
     curr_secret:  u32,
     last_secret:  u32,
-    last_refresh: PreciseTime
+    last_refresh: DateTime<UTC>
 }
 
 impl TokenStore {
@@ -74,7 +75,7 @@ impl TokenStore {
         // under that secret. We could go the option route but that isnt as clean.
         let curr_secret = rand::random::<u32>();
         let last_secret = rand::random::<u32>();
-        let last_refresh = PreciseTime::now();
+        let last_refresh = UTC::now();
         
         TokenStore{ curr_secret: curr_secret, last_secret: last_secret, last_refresh: last_refresh }
     }
@@ -97,12 +98,12 @@ impl TokenStore {
             1 => {
                 self.last_secret = self.curr_secret;
                 self.curr_secret = rand::random::<u32>();
-                self.last_refresh = PreciseTime::now();
+                self.last_refresh = UTC::now();
             },
             _ => {
                 self.last_secret = rand::random::<u32>();
                 self.curr_secret = rand::random::<u32>();
-                self.last_refresh = PreciseTime::now();
+                self.last_refresh = UTC::now();
             }
         };
     }
@@ -113,11 +114,11 @@ impl TokenStore {
 /// invalid.
 ///
 /// Returns the number of intervals that have passed since the last refresh time.
-fn intervals_passed(last_refresh: PreciseTime) -> i64 {
+fn intervals_passed(last_refresh: DateTime<UTC>) -> i64 {
     let refresh_duration = Duration::minutes(REFRESH_INTERVAL_MINS);
-    let curr_time = PreciseTime::now();
+    let curr_time = UTC::now();
     
-    let diff_time = last_refresh.to(curr_time);
+    let diff_time = curr_time - last_refresh;
     
     diff_time.num_minutes() / refresh_duration.num_minutes()
 }
@@ -141,8 +142,8 @@ fn generate_token_from_addr_v4(v4_addr: Ipv4Addr, secret: u32) -> Token {
         *dst = *src;
     }
     
-    let hash_buffer = hash::apply_sha1(&buffer);
-    hash_buffer.into()
+    let hash_buffer = ShaHash::from_bytes(&buffer);
+    Into::<[u8; hash::SHA_HASH_LEN]>::into(hash_buffer).into()
 }
 
 /// Generate a token from an ipv6 address and a secret.
@@ -156,8 +157,8 @@ fn generate_token_from_addr_v6(v6_addr: Ipv6Addr, secret: u32) -> Token {
         *dst = *src;
     }
     
-    let hash_buffer = hash::apply_sha1(&buffer);
-    hash_buffer.into()
+    let hash_buffer = ShaHash::from_bytes(&buffer);
+    Into::<[u8; hash::SHA_HASH_LEN]>::into(hash_buffer).into()
 }
 
 /// Validate a token given an ip address and the two current secrets.
@@ -184,29 +185,15 @@ fn validate_token_from_addr_v6(v6_addr: Ipv6Addr, token: Token, secret: u32) -> 
 
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
+    use chrono::{Duration};
     use bip_util::test as bip_test;
-    use time::{Duration};
 
     use token::{Token, TokenStore};
-    
-    fn dummy_ipv4_addr() -> IpAddr {
-        let v4_addr = Ipv4Addr::new(127, 0, 0, 1);
-        
-        IpAddr::V4(v4_addr)
-    }
-    
-    fn dummy_ipv6_addr() -> IpAddr {
-        let v6_addr = Ipv6Addr::new(127, 0, 0, 1, 0, 0, 0, 0);
-        
-        IpAddr::V6(v6_addr)
-    }
     
     #[test]
     fn positive_accept_valid_v4_token() {
         let mut store = TokenStore::new();
-        let v4_addr = dummy_ipv4_addr();
+        let v4_addr = bip_test::dummy_ipv4_addr();
         
         let valid_token = store.checkout(v4_addr);
         
@@ -216,7 +203,7 @@ mod tests {
     #[test]
     fn positive_accept_valid_v6_token() {
         let mut store = TokenStore::new();
-        let v6_addr = dummy_ipv6_addr();
+        let v6_addr = bip_test::dummy_ipv6_addr();
         
         let valid_token = store.checkout(v6_addr);
         
@@ -226,7 +213,7 @@ mod tests {
     #[test]
     fn positive_accept_v4_token_from_second_secret() {
         let mut store = TokenStore::new();
-        let v4_addr = dummy_ipv4_addr();
+        let v4_addr = bip_test::dummy_ipv4_addr();
         
         let valid_token = store.checkout(v4_addr);
         
@@ -240,7 +227,7 @@ mod tests {
     #[test]
     fn positive_accept_v6_token_from_second_secret() {
         let mut store = TokenStore::new();
-        let v6_addr = dummy_ipv6_addr();
+        let v6_addr = bip_test::dummy_ipv6_addr();
         
         let valid_token = store.checkout(v6_addr);
         
@@ -255,7 +242,7 @@ mod tests {
     #[should_panic]
     fn negative_reject_expired_v4_token() {
         let mut store = TokenStore::new();
-        let v4_addr = dummy_ipv4_addr();
+        let v4_addr = bip_test::dummy_ipv4_addr();
         
         let valid_token = store.checkout(v4_addr);
         
@@ -270,7 +257,7 @@ mod tests {
     #[should_panic]
     fn negative_reject_expired_v6_token() {
         let mut store = TokenStore::new();
-        let v6_addr = dummy_ipv6_addr();
+        let v6_addr = bip_test::dummy_ipv6_addr();
         
         let valid_token = store.checkout(v6_addr);
         

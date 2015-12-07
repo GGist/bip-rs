@@ -126,8 +126,7 @@ fn handle_incoming(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandl
             
             // Add responding node as good
             if !handler.current_routers.contains(&addr) {
-                let id = NodeId::from_hash(f.node_id()).unwrap();
-                let node = Node::as_good(id, addr);
+                let node = Node::as_good(f.node_id(), addr);
                 
                 println!("Responding Node: {}", addr);
                 
@@ -138,9 +137,10 @@ fn handle_incoming(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandl
             // Update our routing table
             // TODO: ^^^
             println!("NODE RESPONSE");
-            let id = NodeId::from_hash(g.node_id()).unwrap();
-            let node = Node::as_good(id, addr);
-            println!("{:?}", handler.active_lookups[0].node_response(node, g, &handler.out_channel, event_loop));
+            let node = Node::as_good(g.node_id(), addr);
+            if !handler.active_lookups.is_empty() {
+                println!("{:?}", handler.active_lookups[0].node_response(node, g, &handler.out_channel, event_loop));
+            }
         }
         _ => warn!("bip_dht: Received unsupported message... {:?}", message)
     };
@@ -152,7 +152,7 @@ fn handle_start_bootstrap(handler: &mut DhtHandler, routers: &[Router], nodes: &
     let node_id = handler.routing_table.node_id();
     let router_filter = routers.iter().filter_map(|r| r.ipv4_addr().ok().map(|m| SocketAddr::V4(m)) ).collect::<HashSet<SocketAddr>>();
     
-    let find_node = FindNodeRequest::new(&b"0"[..], node_id.as_ref(), node_id.as_ref()).unwrap();
+    let find_node = FindNodeRequest::new(&b"0"[..], node_id, node_id);
     let find_node_message = find_node.encode();
     
     // Send messages to all routers
@@ -184,7 +184,7 @@ fn handle_check_bootstrap(handler: &mut DhtHandler, event_loop: &mut EventLoop<D
         return
     };
     
-    let find_node = FindNodeRequest::new(&b"0"[..], table_id.as_ref(), target_id.as_ref()).unwrap();
+    let find_node = FindNodeRequest::new(&b"0"[..], table_id, table_id);
     let find_node_message = find_node.encode();
     
     let mut sent_requests = false;

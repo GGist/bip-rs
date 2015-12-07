@@ -34,25 +34,10 @@ mod message;
 mod router;
 mod security;
 mod routing;
-//mod token;
-//mod transaction;
+mod token;
+mod transaction;
 mod worker;
 
 pub use builder::{DhtBuilder, MainlineDht};
 pub use error::{DhtError, DhtResult};
 pub use router::{Router};
-
-/*
-mod bucket;
-mod builder;
-mod compact_info;
-pub mod message;
-mod node;
-mod security;
-mod table;
-mod token;
-mod transaction;
-mod worker;
-
-pub use self::builder::{DhtBuilder, MainlineDht};
-pub use self::message::error::{ErrorMessage};*/

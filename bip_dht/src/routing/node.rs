@@ -11,8 +11,8 @@ use bip_util::hash::{self, ShaHash};
 use bip_util::test::{self};
 use chrono::{Duration, DateTime, UTC};
 
-// TODO: Should replace Node::new with Node::new_bad and Node::new_good (default is to create a bad node)
-//   TODO: Remove the default impl for Node since new_bad and new_good would cause it to be ambiguous
+// TODO: Should remove as_* functions and replace them with from_requested, from_responded, etc to hide the logic
+// of the nodes initial status.
 
 /// Maximum wait period before a node becomes questionable.
 const MAX_LAST_SEEN_MINS: i64 = 15;
@@ -21,11 +21,13 @@ const MAX_LAST_SEEN_MINS: i64 = 15;
 const MAX_REFRESH_REQUESTS: usize = 2;
 
 /// Status of the node.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+/// Ordering of the enumerations is important, variants higher
+/// up are considered to be less than those further down.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Ord, PartialOrd)]
 pub enum NodeStatus {
-    Good,
+    Bad,
     Questionable,
-    Bad
+    Good
 }
 
 /// Node participating in the dht.
@@ -131,6 +133,10 @@ impl Debug for Node {
     }
 }
 
+// TODO: Verify the two scenarios follow the specification as some cases seem questionable (pun intended), ie, a node
+// responds to us once, and then requests from us but never responds to us for the duration of the session. This means they
+// could stay marked as a good node even though they could ignore our requests and just sending us periodic requests...
+
 /// First scenario where a node is good is if it has responded to one of our requests recently.
 ///
 /// Returns the status of the node where a Questionable status means the node has responded
@@ -178,49 +184,36 @@ fn recently_requested(node: &Node, curr_time: DateTime<UTC>) -> NodeStatus {
 
 #[cfg(test)]
 mod tests {
-    use std::convert::{From};
-    use std::mem::{self};
-    use std::net::{SocketAddr, Ipv4Addr, IpAddr, SocketAddrV4};
-    
     use bip_util::{NodeId};
-    use bip_util::hash::{self, ShaHash};
     use bip_util::test as bip_test;
     use chrono::{Duration};
     
     use routing::node::{Node, NodeStatus};
 
-    /// Returns a dummy socket address.
-    fn dummy_socket_addr() -> SocketAddr {
-        let ip = Ipv4Addr::new(127, 0, 0, 1);
-        let addr = SocketAddrV4::new(ip, 0);
-        
-        SocketAddr::V4(addr)
-    }
-    
-    /// Returns a dummy node id.
-    fn dummy_node_id() -> NodeId {
-        ShaHash::from([0u8; hash::SHA_HASH_LEN])
-    }
-
     #[test]
-    fn positive_initially_bad() {
-        let node = Node::new(dummy_node_id(), dummy_socket_addr());
+    fn positive_as_bad() {
+        let node = Node::as_bad(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
         
         assert_eq!(node.status(), NodeStatus::Bad);
     }
     
     #[test]
-    fn positive_requested_bad() {
-        let mut node = Node::new(dummy_node_id(), dummy_socket_addr());
+    fn positive_as_questionable() {
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
         
-        node.remote_request();
-        
-        assert_eq!(node.status(), NodeStatus::Bad);
+        assert_eq!(node.status(), NodeStatus::Questionable);
     }
     
     #[test]
-    fn positive_responded_good() {
-        let mut node = Node::new(dummy_node_id(), dummy_socket_addr());
+    fn positive_as_good() {
+        let node = Node::as_good(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
+        
+        assert_eq!(node.status(), NodeStatus::Good);
+    }
+    
+    #[test]
+    fn positive_response_renewal() {
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
         
         node.remote_response();
         
@@ -228,47 +221,55 @@ mod tests {
     }
     
     #[test]
-    fn posititve_responded_requested_good() {
-        let mut node = Node::new(dummy_node_id(), dummy_socket_addr());
+    fn positive_request_renewal() {
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
         
         node.remote_request();
         
-        let time_offset = Duration::nanoseconds(1);
-        let curr_time = bip_test::travel_into_future(time_offset);
-        
-        // Assumes node has responded to us recently
-        let node_status = super::recently_requested(&node, curr_time);
-        
-        assert_eq!(node_status, NodeStatus::Good);
+        assert_eq!(node.status(), NodeStatus::Good);
     }
     
     #[test]
-    fn posititve_responded_requested_questionable() {
-        let node = Node::new(dummy_node_id(), dummy_socket_addr());
+    fn positive_node_idle() {
+        let node = Node::as_good(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
         
         let time_offset = Duration::minutes(super::MAX_LAST_SEEN_MINS);
-        let curr_time = bip_test::travel_into_future(time_offset);
+        let idle_time = bip_test::travel_into_past(time_offset);
         
-        // Assumes node has responded to us recently
-        let node_status = super::recently_requested(&node, curr_time);
+        node.last_response.set(Some(idle_time));
         
-        assert_eq!(node_status, NodeStatus::Questionable);
+        assert_eq!(node.status(), NodeStatus::Questionable);
     }
     
     #[test]
-    fn posititve_responded_requested_bad() {
-        let mut node = Node::new(dummy_node_id(), dummy_socket_addr());
+    fn positive_node_idle_reqeusts() {
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
         
         for _ in 0..super::MAX_REFRESH_REQUESTS {
             node.local_request();
         }
         
-        let time_offset = Duration::minutes(super::MAX_LAST_SEEN_MINS);
-        let curr_time = bip_test::travel_into_future(time_offset);
-        
-        // Assumes node has responded to us recently
-        let node_status = super::recently_requested(&node, curr_time);
-        
-        assert_eq!(node_status, NodeStatus::Bad);
+        assert_eq!(node.status(), NodeStatus::Bad);
+    }
+    
+    #[test]
+    fn positive_good_status_ordering() {
+        assert!(NodeStatus::Good > NodeStatus::Questionable);
+        assert!(NodeStatus::Good > NodeStatus::Bad);
+        assert!(NodeStatus::Good == NodeStatus::Good);
+    }
+    
+    #[test]
+    fn positive_questionable_status_ordering() {
+        assert!(NodeStatus::Questionable > NodeStatus::Bad);
+        assert!(NodeStatus::Questionable < NodeStatus::Good);
+        assert!(NodeStatus::Questionable == NodeStatus::Questionable);
+    }
+    
+    #[test]
+    fn positive_bad_status_ordering() {
+        assert!(NodeStatus::Bad < NodeStatus::Good);
+        assert!(NodeStatus::Bad < NodeStatus::Questionable);
+        assert!(NodeStatus::Bad == NodeStatus::Bad);
     }
 }

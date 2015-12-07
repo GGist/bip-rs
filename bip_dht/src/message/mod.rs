@@ -102,10 +102,6 @@ impl<'a> MessageType<'a> {
     }
 }
 
-fn is_valid_node_id(node_id: &[u8]) -> bool {
-    node_id.len() == hash::SHA_HASH_LEN
-}
-
 #[cfg(test)]
 mod tests {
 

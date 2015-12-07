@@ -1,4 +1,4 @@
 [package]
-name = "bip_tracker"
+name = "bip_utracker"
 version = "0.1.0"
 authors = ["Andrew <amiller4421@gmail.com>"]

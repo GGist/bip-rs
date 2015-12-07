@@ -12,12 +12,15 @@ use routing::table::{self, RoutingTable, ClosestNodes};
 use worker::{IntervalTask};
 use worker::handler::{DhtHandler};
 
-const LOOKUP_TIMEOUT_MS: u64  = 600;
+const LOOKUP_TIMEOUT_MS: u64  = 1500;
 const ENDGAME_TIMEOUT_MS: u64 = 1500;
+
+// Should ideally be greater than MAX_ACTIVE_SEARCHES
+const MAX_TABLE_SEEDS: usize = 16;
 
 // TODO: Values set here correspond to the "Aggressive Lookup" variant
 // Alpha value
-const MAX_ACTIVE_SEARCHES: usize = 4;
+const MAX_ACTIVE_SEARCHES: usize = 8;
 // Beta value
 //const MAX_RESPONSE_SEARCHES: usize = 3;
 
@@ -63,9 +66,9 @@ impl HashLookup {
     pub fn new(self_id: NodeId, target_id: NodeId, table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>,
         event_loop: &mut EventLoop<DhtHandler>) -> Option<HashLookup> {
         println!("TARGET ID {:?}", target_id);
-        // Populate closest nodes with alpha closest nodes from the routing table
-        let mut closest_nodes = Vec::with_capacity(MAX_ACTIVE_SEARCHES);
-        for node in table.closest_nodes(target_id).filter(|n| n.status() == NodeStatus::Good).take(MAX_ACTIVE_SEARCHES) {
+        // Populate closest nodes with some closest nodes from the routing table
+        let mut closest_nodes = Vec::with_capacity(MAX_TABLE_SEEDS);
+        for node in table.closest_nodes(target_id).filter(|n| n.status() == NodeStatus::Good).take(MAX_TABLE_SEEDS) {
             insert_sorted_node(target_id, &mut closest_nodes, node.clone());
         }
         
@@ -205,6 +208,10 @@ impl HashLookup {
         -> LookupResult {
         // Proceed to announce!!! (If we wanted to...)
         //unimplemented!();
+        /*for &(ref dist, _, _) in self.closest_nodes.iter() {
+            println!("{:?}", dist)
+        }*/
+        
         LookupResult::Completed
     }
     
@@ -212,7 +219,7 @@ impl HashLookup {
     ///
     /// Returns true if the round was successfully started or false if it failed to start.
     fn start_request_round(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>) -> RoundResult {
-        let get_peers = GetPeersRequest::new(b"1", self.self_id.as_ref(), self.target_id.as_ref()).unwrap();
+        let get_peers = GetPeersRequest::new(b"1", self.self_id, self.target_id);
         let get_peers_message = get_peers.encode();
         
         // Get the new closest distance
@@ -264,7 +271,7 @@ impl HashLookup {
     }
     
     fn start_endgame_round(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>) -> RoundResult {
-        let get_peers = GetPeersRequest::new(b"1", self.self_id.as_ref(), self.target_id.as_ref()).unwrap();
+        let get_peers = GetPeersRequest::new(b"1", self.self_id, self.target_id);
         let get_peers_message = get_peers.encode();
         
         // Attempt to start a timeout for an endgame
@@ -302,9 +309,9 @@ fn insert_sorted_node(target: NodeId, nodes: &mut Vec<(NodeId, Node, bool)>, nod
         Ok(dup_index) => {
             // Insert only if this node is different (it is ok if they have the same id)
             if nodes[dup_index].1 != node {
-                nodes.insert(dup_index, (node_id, node, false));
+                nodes.insert(dup_index, (node_dist, node, false));
             }
         },
-        Err(ins_index) => nodes.insert(ins_index, (node_id, node, false))
+        Err(ins_index) => nodes.insert(ins_index, (node_dist, node, false))
     };
 }

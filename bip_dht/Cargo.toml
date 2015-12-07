@@ -6,11 +6,9 @@ authors = ["Andrew <amiller4421@gmail.com>"]
 [dependencies]
 crc        = "1.2.0"
 log        = "0.3.0"
+mio        = "0.5.0"
 rand       = "0.3.0"
 chrono     = "0.2.0"
-
-[dependencies.mio]
-git = "https://github.com/carllerche/mio.git"
 
 [dependencies.bip_bencode]
 path = "../bip_bencode"
@@ -20,3 +18,6 @@ path = "../bip_handshake"
 
 [dependencies.bip_util]
 path = "../bip_util"
+
+[profile.test]
+debug = true

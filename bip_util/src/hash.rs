@@ -14,11 +14,10 @@ pub struct ShaHash {
 }
 
 impl ShaHash {
-/*
     /// Create a ShaHash by hashing the given bytes.
     pub fn from_bytes(bytes: &[u8]) -> ShaHash {
-        apply_sha1(bytes).from()
-    }*/
+        apply_sha1(bytes).into()
+    }
     
     /// Create a ShaHash directly from the given hash.
     pub fn from_hash(hash: &[u8]) -> GenericResult<ShaHash> {

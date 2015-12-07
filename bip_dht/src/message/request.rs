@@ -1,4 +1,5 @@
 use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError, BencodeConvertErrorKind};
+use bip_util::{NodeId, InfoHash};
 
 use message::{self};
 use message::error::{ErrorMessage, ErrorCode};
@@ -31,16 +32,24 @@ impl<'a> RequestValidate<'a> {
         RequestValidate{ trans_id: trans_id }
     }
     
-    pub fn validate_node_id(&self, node_id: &[u8]) -> DhtResult<()> {
-        if !message::is_valid_node_id(node_id) {
+    pub fn validate_node_id(&self, node_id: &[u8]) -> DhtResult<NodeId> {
+        NodeId::from_hash(node_id).map_err(|_| {
             let error_msg = ErrorMessage::new(self.trans_id.to_owned(), ErrorCode::ProtocolError,
                 format!("Node ID With Length {} Is Not Valid", node_id.len()));
-        
-            Err(DhtError::with_detail(DhtErrorKind::InvalidRequest(error_msg), "Found Node ID With Invalid Length",
-                node_id.len().to_string()))
-        } else {
-            Ok(())
-        }
+                
+            DhtError::with_detail(DhtErrorKind::InvalidRequest(error_msg), "Found Node ID With Invalid Length",
+                node_id.len().to_string())
+        })
+    }
+    
+    pub fn validate_info_hash(&self, info_hash: &[u8]) -> DhtResult<InfoHash> {
+        InfoHash::from_hash(info_hash).map_err(|_| {
+            let error_msg = ErrorMessage::new(self.trans_id.to_owned(), ErrorCode::ProtocolError,
+                format!("InfoHash With Length {} Is Not Valid", info_hash.len()));
+            
+            DhtError::with_detail(DhtErrorKind::InvalidRequest(error_msg), "Found InfoHash With Invalid Length",
+                info_hash.len().to_string())
+        })
     }
 }
 

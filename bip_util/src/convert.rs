@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Convert a 4 byte value to an array of 4 bytes.
 pub fn four_bytes_to_array(bytes: u32) -> [u8; 4] {
@@ -36,24 +36,3 @@ pub fn ipv6_to_bytes_be(v6_addr: Ipv6Addr) -> [u8; 16] {
     
     bytes
 }
-
-/// Get the default route ipv4 socket.
-pub fn default_route_v4() -> SocketAddr {
-    let v4_addr = Ipv4Addr::new(0, 0, 0, 0);
-    let v4_sock = SocketAddrV4::new(v4_addr, 0);
-    
-    SocketAddr::V4(v4_sock)
-}
-
-/*
-/// Applies a Fisher-Yates shuffle on the given list.
-pub fn fisher_shuffle<T: Copy>(list: &mut [T]) {
-    for i in 0..list.len() {
-        let swap_index = (rand::random::<usize>() % (list.len() - i)) + i;
-        
-        let temp = list[i];
-        list[i] = list[swap_index];
-        list[swap_index] = temp;
-    }
-}
-*/

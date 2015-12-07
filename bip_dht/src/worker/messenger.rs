@@ -48,7 +48,7 @@ pub fn create_incoming_messenger(socket: UdpSocket, send: Sender<OneshotTask>){
                     buffer.truncate(size);
                     channel_is_open = send_message(&send, buffer, addr);
                 },
-                Err(e) => warn!("bip_dht: Incoming messenger failed to receive bytes... {:?}", e)
+                Err(e) => warn!("bip_dht: Incoming messenger failed to receive bytes...")
             }
         }
         

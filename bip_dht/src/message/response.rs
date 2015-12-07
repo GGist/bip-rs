@@ -1,4 +1,5 @@
 use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError};
+use bip_util::{NodeId, InfoHash};
 
 use message::{self};
 use message::compact_info::{CompactNodeInfo, CompactValueInfo};
@@ -21,19 +22,23 @@ impl<'a> ResponseValidate<'a> {
         ResponseValidate{ trans_id: trans_id }
     }
     
-    /// Validate the given node id.
-    pub fn validate_node_id(&self, node_id: &[u8]) -> DhtResult<()> {
-        if !message::is_valid_node_id(node_id) {
-            Err(DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found Node ID With Invalid Length",
-                node_id.len().to_string()))
-        } else {
-            Ok(())
-        }
+    pub fn validate_node_id(&self, node_id: &[u8]) -> DhtResult<NodeId> {
+        NodeId::from_hash(node_id).map_err(|_|
+            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found Node ID With Invalid Length",
+                node_id.len().to_string())
+        )
+    }
+    
+    pub fn validate_info_hash(&self, info_hash: &[u8]) -> DhtResult<InfoHash> {
+        InfoHash::from_hash(info_hash).map_err(|_|
+            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found InfoHash With Invalid Length",
+                info_hash.len().to_string())
+        )
     }
     
     /// Validate the given nodes string which should be IPv4 compact 
     pub fn validate_nodes<'b>(&self, nodes: &'b [u8]) -> DhtResult<CompactNodeInfo<'b>> {
-        CompactNodeInfo::new(nodes).map_err( |_|
+        CompactNodeInfo::new(nodes).map_err(|_|
             DhtError::new(DhtErrorKind::InvalidResponse, "Found Nodes Structure With Wrong Multiple Of Bytes")
         )
     }
@@ -47,7 +52,7 @@ impl<'a> ResponseValidate<'a> {
             }
         }
     
-        CompactValueInfo::new(values).map_err( |_|
+        CompactValueInfo::new(values).map_err(|_|
             DhtError::new(DhtErrorKind::InvalidResponse, "Found values Structure Element With Wrong Number Of Bytes")
         )
     }
