@@ -9,7 +9,7 @@ use mio::{Sender};
 
 use error::{DhtResult};
 use router::{Router};
-use worker::{self, OneshotTask, IntervalTask};
+use worker::{self, OneshotTask, ScheduledTask};
 
 /// Maintains a distributed hash (routing) table.
 pub struct MainlineDht {
@@ -20,17 +20,18 @@ pub struct MainlineDht {
 // If no nodes were added, use the router that was provided
 
 impl MainlineDht {
-    pub fn with_builder(builder: DhtBuilder) -> DhtResult<MainlineDht> {
+    pub fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> DhtResult<MainlineDht>
+        where H: Handshaker + 'static {
         let send_socket = try!(UdpSocket::bind(&builder.src_addr));
         let recv_socket = try!(send_socket.try_clone());
         
-        let send = try!(worker::start_mainline_dht(send_socket, recv_socket, builder.read_only, builder.ext_addr));
+        let send = try!(worker::start_mainline_dht(send_socket, recv_socket, builder.read_only, builder.ext_addr, handshaker));
         
         let nodes: Vec<SocketAddr> = builder.nodes.into_iter().collect();
         let routers: Vec<Router> = builder.routers.into_iter().collect();
         
         send.send(OneshotTask::StartBootstrap(routers, nodes));
-        send.send(OneshotTask::ScheduleTask(1000, IntervalTask::CheckBootstrap(0)));
+        //send.send(OneshotTask::ScheduleTask(1000, IntervalTask::CheckBootstrap(0)));
         
         Ok(MainlineDht{ send: send })
     }
@@ -140,8 +141,8 @@ impl DhtBuilder {
     }
     
     /// Start a mainline dht with the current configuration.
-    pub fn start_mainline<H>(mut self, handshaker: H) -> DhtResult<MainlineDht>
+    pub fn start_mainline<H>(self, handshaker: H) -> DhtResult<MainlineDht>
         where H: Handshaker + 'static {
-        MainlineDht::with_builder(self)
+        MainlineDht::with_builder(self, handshaker)
     }
 }

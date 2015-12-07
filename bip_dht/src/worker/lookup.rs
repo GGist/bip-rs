@@ -12,287 +12,246 @@ use routing::table::{self, RoutingTable, ClosestNodes};
 use worker::{IntervalTask};
 use worker::handler::{DhtHandler};
 
-const LOOKUP_TIMEOUT_MS: u64  = 1500;
+const LOOKUP_TIMEOUT_MS:  u64 = 1500;
 const ENDGAME_TIMEOUT_MS: u64 = 1500;
 
-// Should ideally be greater than MAX_ACTIVE_SEARCHES
-const MAX_TABLE_SEEDS: usize = 16;
+// Currently using the aggressive variant of the standard lookup procedure.
+// https://people.kth.se/~rauljc/p2p11/jimenez2011subsecond.pdf
 
-// TODO: Values set here correspond to the "Aggressive Lookup" variant
-// Alpha value
-const MAX_ACTIVE_SEARCHES: usize = 8;
-// Beta value
-//const MAX_RESPONSE_SEARCHES: usize = 3;
+// TODO: Handle case where a request round fails, should we fail the whole lookup (clear acvite lookups?)
 
-// Number of nodes we store to announce to at the end of a lookup
-const NUM_ANNOUNCE_NODES:  usize = 8;
+const INITIAL_PICK_NUM:   usize = 4; // Alpha
+const ITERATIVE_PICK_NUM: usize = 3; // Beta
+const ANNOUNCE_PICK_NUM:  usize = 8; // # Announces
 
-// Returned by our lookup structure to give information on a per request/timeout basis.
+type Distance = ShaHash;
+
 #[derive(Debug)]
-pub enum LookupResult {
-    Working,
+pub enum LookupStatus {
+    Searching,
     Values(Vec<SocketAddrV4>),
     Completed
 }
 
-// Stored by our lookup structure to track what phase of the lookup we are on.
-enum LookupProgress {
-    // Number of responses received for the current search
-    Searching(usize),
-    EndGame,
-    Completed
-}
-
-// Returned by the internal request dispatcher for the status of the round.
-enum RoundResult {
-    Started,
-    Completed,
-    Failed
-}
-
-pub struct HashLookup {
-    self_id:         NodeId,
+pub struct TableLookup {
+    table_id:        NodeId,
     target_id:       NodeId,
-    progress:        LookupProgress,
-    // Distance that last closest node was
-    last_closest:    NodeId,
-    // (Distance From Target, Node, Pinged Yet)
-    closest_nodes:   Vec<(NodeId, Node, bool)>,
-    active_searches: HashMap<Node, Timeout>,
+    in_endgame:      bool,
+    id_generator:    MIDGenerator,
+    closest_nodes:   Vec<(Distance, Node, bool)>,
+    active_lookups:  HashMap<TransactionID, (Distance, Timeout)>,
     announce_tokens: HashMap<Node, Vec<u8>>
 }
 
-impl HashLookup {
-    pub fn new(self_id: NodeId, target_id: NodeId, table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>,
-        event_loop: &mut EventLoop<DhtHandler>) -> Option<HashLookup> {
-        println!("TARGET ID {:?}", target_id);
-        // Populate closest nodes with some closest nodes from the routing table
-        let mut closest_nodes = Vec::with_capacity(MAX_TABLE_SEEDS);
-        for node in table.closest_nodes(target_id).filter(|n| n.status() == NodeStatus::Good).take(MAX_TABLE_SEEDS) {
+impl TableLookup {
+    pub fn new(table_id: NodeId, target_id: NodeId, id_generator: MIDGenerator, table: &RoutingTable,
+        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
+        -> Option<TableLookup> {
+        let bucket_size = super::MAX_BUCKET_SIZE;
+        
+        // Pick a buckets worth of nodes and sort them
+        let mut closest_nodes = Vec::with_capacity(bucket_size);
+        for node in table.closest_nodes(target_id).filter(|n| n.status() == NodeStatus::Good).take(bucket_size) {
             insert_sorted_node(target_id, &mut closest_nodes, node.clone());
         }
         
-        // Should be as far away as possible, therefore, all of the bits were set as if
-        // all of the bits were different from the result of a xor with the target id
-        let last_closest = [255u8; bip_util::NODE_ID_LEN].into();
-        let mut hash_lookup = HashLookup{ self_id: self_id, target_id: target_id,
-            progress: LookupProgress::Searching(0), last_closest: last_closest, closest_nodes: closest_nodes,
-            active_searches: HashMap::with_capacity(MAX_ACTIVE_SEARCHES), announce_tokens: HashMap::new() };
+        // Construct the lookup table structure
+        let mut table_lookup = TableLookup{ table_id: table_id, target_id: target_id, in_endgame: false,
+            id_generator: id_generator, closest_nodes: closest_nodes, announce_tokens: HashMap::new()
+            active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
-        // Initiate the first round of requests
-        match hash_lookup.start_request_round(out, event_loop) {
-            RoundResult::Started   => Some(hash_lookup),
-            RoundResult::Completed => None,
-            RoundResult::Failed    => None
-        }
-    }
-    
-    pub fn node_timeout(&mut self, node: Node, out: &SyncSender<(Vec<u8>, SocketAddr)>,
-        event_loop: &mut EventLoop<DhtHandler>) -> LookupResult {
-		// Check if we are still in the search phase
-        let responses = if let LookupProgress::Searching(ref mut r) = self.progress {
-            // Increment number of responses received
-            *r += 1;
-            *r
+        // Ping alpha nodes that are closest to the id
+        if table_lookup.start_request_round(INITIAL_PICK_NUM, out, event_loop) {
+            Some(table_lookup)
         } else {
-            return LookupResult::Completed
-        };
-        
-        // Remove the timeout value from the active searches
-        self.active_searches.remove(&node);
-        
-        // Check if we need to start a new round of requests
-        if responses == MAX_ACTIVE_SEARCHES {
-            // Attempt to start a new round of requests
-            self.progress = match self.start_request_round(out, event_loop) {
-                RoundResult::Started   => LookupProgress::Searching(0),
-                RoundResult::Completed => {
-                    // Begin the endgame progress
-                    self.start_endgame_round(out, event_loop);
-                    
-                    LookupProgress::EndGame
-                },
-                RoundResult::Failed => LookupProgress::Completed
-            }
-        }
-        
-        // Map the current progress to the user received progress
-        match self.progress {
-            LookupProgress::Searching(_) => LookupResult::Working,
-            LookupProgress::EndGame      => LookupResult::Working,
-            LookupProgress::Completed    => LookupResult::Completed
+            None
         }
     }
     
-    pub fn node_response<'a>(&mut self, node: Node, msg: GetPeersResponse<'a>, out: &SyncSender<(Vec<u8>, SocketAddr)>,
-        event_loop: &mut EventLoop<DhtHandler>) -> LookupResult {
-        // Check if we are still in the search phase (still process stuff if we are in the end game phase though)
-        let responses = match self.progress {
-            LookupProgress::Searching(ref mut s) => {
-                // Housekeeping unique to a regular search response but doesnt occur in an end game response
-                
-                // Increment the number of responses received
-                *s += 1;
-                
-                // Remove the timeout token for the current search
-                if let Some(timeout) = self.active_searches.remove(&node) {
-                    event_loop.clear_timeout(timeout);
-                }
-                
-                *s
-            },
-            LookupProgress::EndGame   => 0,
-            LookupProgress::Completed => {
-                return LookupResult::Completed
-            }
-        };
-        
-        // Store and associate the announce token with the node
-        if let Some(token) = msg.token() {
-            self.announce_tokens.insert(node.clone(), token.to_vec());
+    pub fn recv_response<'a>(&mut self, node: Node, trans_id: &TransactionID, msg: GetPeersResponse<'a>,
+        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>) -> LookupStatus {
+        // Process the message transaction id
+        let (dist, timeout) = if let Some(lookup) = self.active_lookups.remove(trans_id) {
+            lookup
+        } else {
+            warn!("bip_dht: Received unsolicited node response for an active table lookup...");
+            return self.current_lookup_status()
         }
         
-        // Check if we got peers, values, or both
-        let values = match msg.info_type() {
+        // Cancel the timeout
+        event_loop.clear_timeout(timeout);
+        
+        // Process the contents of the message
+        let (opt_values, got_closer) = match msg.info_type() {
             CompactInfoType::Nodes(n) => {
+                let mut got_closer = false;
+            
                 for (id, v4_addr) in n {
-                    let addr = SocketAddr::V4(v4_addr);
+                    let addr = SocketAddr::V4(v4_addr)
                     let node = Node::as_good(id, addr);
                     
+                    got_closer = got_closer || self.is_closer_node(dist, &node);
                     insert_sorted_node(self.target_id, &mut self.closest_nodes, node);
                 }
-                None
+                
+                (None, got_closer)
             },
             CompactInfoType::Values(v) => {
-                Some(v.into_iter().collect())
+                (Some(v.into_iter().collect()), false)
             },
             CompactInfoType::Both(n, v) => {
+                let mut got_closer = false;
+            
                 for (id, v4_addr) in n {
                     let addr = SocketAddr::V4(v4_addr);
                     let node = Node::as_good(id, addr);
                     
+                    got_closer = got_closer || self.is_closer_node(dist, &node);
                     insert_sorted_node(self.target_id, &mut self.closest_nodes, node);
                 }
-                Some(v.into_iter().collect())
+                
+                (Some(v.into_iter().collect()), got_closer)
             }
         };
         
-        // Check if we need to start a new round of requests
-        if responses == MAX_ACTIVE_SEARCHES {
-            self.progress = match self.start_request_round(out, event_loop) {
-                RoundResult::Started   => LookupProgress::Searching(0),
-                RoundResult::Completed => {
-                    // Start the endgame process
-                    self.start_endgame_round(out, event_loop);
-                    
-                    LookupProgress::EndGame
-                },
-                RoundResult::Failed    => LookupProgress::Completed
-            };
+        // Add the announce token to our list of tokens
+        if let Some(token) = msg.token() {
+            self.announce_tokens.insert(node, token.to_vec());
         }
         
-        // Determine return value
-        if let Some(values) = values {
-            LookupResult::Values(values)
-        } else {
-            // Derive return value from current progress
-            match self.progress {
-                LookupProgress::Searching(_) => LookupResult::Working,
-                LookupProgress::EndGame      => LookupResult::Working,
-                LookupProgress::Completed    => LookupResult::Completed
-            }
-        }
-    }
-    
-    pub fn bulk_timeout(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
-        -> LookupResult {
-        // Proceed to announce!!! (If we wanted to...)
-        //unimplemented!();
-        /*for &(ref dist, _, _) in self.closest_nodes.iter() {
-            println!("{:?}", dist)
-        }*/
-        
-        LookupResult::Completed
-    }
-    
-    /// Start a new round of peer gathering requests.
-    ///
-    /// Returns true if the round was successfully started or false if it failed to start.
-    fn start_request_round(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>) -> RoundResult {
-        let get_peers = GetPeersRequest::new(b"1", self.self_id, self.target_id);
-        let get_peers_message = get_peers.encode();
-        
-        // Get the new closest distance
-        let closest_id = self.closest_nodes[0].0;
-        let closest_id_dist = self.target_id ^ closest_id;
-        
-        // Check if distance is closer since the last round
-        if closest_id_dist < self.last_closest {
-            self.last_closest = closest_id_dist;
-            println!("FOUND CLOSER ID {:?}", self.last_closest);
-            // Send messages to alpha number of closest nodes
-            let mut messages_sent = 0;
-            for &mut (_, ref node, ref mut req) in self.closest_nodes.iter_mut().filter(|&&mut (_, _, req)| !req).take(MAX_ACTIVE_SEARCHES) {
-                // Send a message to the node
-                if out.send((get_peers_message.clone(), node.addr())).is_err() {
-                    error!("bip_dht: Could not send lookup message to node...");
-                }
-                
-                // Mark the node as having been requested from
-                *req = true;
-                
-                // Set a timeout for the request
-                let timeout = event_loop.timeout_ms((LOOKUP_TIMEOUT_MS, IntervalTask::CheckNodeLookup(0, node.clone())), LOOKUP_TIMEOUT_MS);
-                if let Ok(t) = timeout {
-                    // Associated the timeout token with the current node
-                    self.active_searches.insert(node.clone(), t);
-                } else {
-                    error!("bip_dht: Could not set a timeout for info hash lookup...");
-                    return RoundResult::Failed
-                }
-                
-                // Increment the number of messages sent
-                // TODO: THIS IS A LIE
-                messages_sent += 1;
+        // Check if we need to iterate (not in the endgame already)
+        if !self.in_endgame {
+            // If the node gave us a closer id than its own to the target id, continue the search
+            if got_closer {
+                self.start_request_round(ITERATIVE_PICK_NUM, out, event_loop);
             }
             
-            if messages_sent == MAX_ACTIVE_SEARCHES {
-                RoundResult::Started
+            // If there are not more active lookups, start the endgame
+            if self.active_lookups.is_empty() {
+                self.start_endgame_round(out, event_loop);
+            }
+        }
+        
+        match opt_values {
+            Some(values) => LookupStatus::Values(values),
+            None         => LookupStatus::Searching
+        }
+    }
+    
+    pub fn recv_timeout(&mut self, trans_id: &TransactionID, out: &SyncSender<(Vec<u8>, SocketAddr)>,
+        event_loop: &mut EventLoop<DhtHandler>) -> LookupStatus {
+        let (_, timeout) = if let Some(lookup) = self.active_lookups.remove(trans_id) {
+            lookup
+        } else {
+            warn!("bip_dht: Received unsolicited node timeout for an active table lookup...");
+            return self.current_lookup_status()
+        }
+        
+        // Check if we need to iterate (not in the endgame already)
+        if !self.in_endgame {
+            // If there are not more active lookups, start the endgame
+            if self.active_lookups.is_empty() {
+                self.start_endgame_round(out, event_loop);
+            }
+        }
+        
+        LookupStatus::Searching
+    }
+    
+    pub fn recv_finished(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
+        -> LookupStatus {
+        // TODO: Announce to the appropriate nodes
+        
+        // This may not be cleared since we didnt set a timeout for each node,
+        // any nodes that didnt respond would still be in here.
+        self.active_lookups.clear();
+        
+        self.current_lookup_status()
+    }
+    
+    fn current_lookup_status(&self) -> LookupStatus {
+        if self.active_lookups.is_empty() {
+            LookupStatus::Completed
+        } else {
+            LookupStatus::Searching
+        }
+    }
+    
+    fn is_closer_node(&self, prev_dist: &Distance, node: &Node) -> bool {
+        self.target_id ^ node.id() < prev_dist
+    }
+    
+    fn start_request_round(&mut self, conc_reqs: usize, out: &SyncSender<()>, event_loop: &mut EventLoop<DhtHandler>)
+        -> bool {
+        // Loop through nodes, number of concurrent requests desired
+        for node_info in self.closest_nodes.iter_mut().filter(|&&mut (_, _, req)| !req).take(conc_reqs) {
+            let (ref node_dist, ref node, ref mut req) = node_info;
+            
+            // Generate a transaction id for this message
+            let trans_id = self.id_generator.generate();
+            
+            // Try to start a timeout for the node
+            let res_timeout = event_loop.timeout_ms((0, ScheduledTask::CheckLookupTimeout(trans_id)), LOOKUP_TIMEOUT_MS);
+            let timeout = if let Some(t) = res_timeout {
+                t
             } else {
-                // Will hit this if we dont have enough nodes to request from,
-                // in this case, we can start the end game but will realize again
-                // that we dont have any nodes to process, therefore, we will announce
-                RoundResult::Completed
+                error!("bip_dht: Failed to set a timeout for a table lookup...");
+                return false
             }
-        } else {
-            // Should begin the end game process
-            RoundResult::Completed
+            
+            // Associate the transaction id with this node's distance and its timeout token
+            self.active_lookups(trans_id, (*node_dist, timeout));
+            
+            // Send the message to the node
+            let get_peers_msg = GetPeersRequest::new(trans_id.as_ref(), self.table_id, self.target_id).encode();
+            if out.send((get_peers_msg, node.addr())).is_err() {
+                error!("bip_dht: Could not send a lookup message through the channel...");
+            }
+            
+            // Mark that we requested from the node
+            *req = true;
         }
+        
+        true
     }
     
-    fn start_endgame_round(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>) -> RoundResult {
-        let get_peers = GetPeersRequest::new(b"1", self.self_id, self.target_id);
-        let get_peers_message = get_peers.encode();
+    fn start_endgame_round(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
+        -> bool {
+        // Entering the endgame phase
+        self.in_endgame = true;
         
-        // Attempt to start a timeout for an endgame
-        let timeout = event_loop.timeout_ms((ENDGAME_TIMEOUT_MS, IntervalTask::CheckBulkLookup(0)), ENDGAME_TIMEOUT_MS);
-        if timeout.is_err() {
-            error!("bip_dht: Could not set a timeout for the info hash lookup end game...");
-            return RoundResult::Failed
+        // Try to start a global message timeout for the endgame
+        let res_timeout = event_loop.timeout_ms((0, ScheduledTask::CheckLookupTimeout(trans_id)), ENDGAME_TIMEOUT_MS);
+        let timeout = if let Some(t) = res_timeout {
+            t
+        } else {
+            error!("bip_dht: failed to set a timeout for table lookup endgame...");
+            return false
         }
         
-        // Send messages to all unpinged nodes
-        for &mut (_, ref node, ref mut req) in self.closest_nodes.iter_mut().filter(|&&mut (_, _, req)| !req) {
-            // Should really need to update this...
-            *req = true;
+        // Request all unpinged nodes
+        for node_info in self.closest_nodes.iter_mut().filter(|&&mut (_, _, req)| !req) {
+            let (ref node_dist, ref node, ref mut req) = node_info;
             
-            // Send a message to the node
-            if out.send((get_peers_message.clone(), node.addr())).is_err() {
-                error!("bip_dht: Could not send a lookup message to a node...");
+            // Generate a transaction id for this message
+            let trans_id = self.id_generator.generate();
+            
+            // Associate the transaction id with this node's distance and its timeout token
+            // We dont actually need to keep track of this information, but we do still need to
+            // filter out unsolicited responses by using the active_lookups map!!!
+            self.active_lookups(trans_id, (*node_dist, timeout));
+            
+            // Send the message to the node
+            let get_peers_msg = GetPeersRequest::new(trans_id.as_ref(), self.table_id, self.target_id).encode();
+            if out.send((get_peers_msg, node.addr())).is_err() {
+                error!("bip_dht: Could not send an endgame message through the channel...");
             }
+            
+            // Mark that we requested from the node
+            *req = true;
         }
         
-        RoundResult::Started
+        true
     }
 }
 

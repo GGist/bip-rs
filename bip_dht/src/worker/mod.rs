@@ -17,36 +17,36 @@ pub mod messenger;
 pub enum OneshotTask {
     /// Process an incoming message from a remote node.
     Incoming(Vec<u8>, SocketAddr),
-    /// Schedule an IntervalTask to occur some time later.
-    ScheduleTask(u64, IntervalTask),
+    /// Schedule an ScheduledTask to occur some time later.
+    ScheduleTask(u64, ScheduledTask),
     /// Load a new bootstrap operation into worker storage.
     StartBootstrap(Vec<Router>, Vec<SocketAddr>),
     /// Start a lookup for the given InfoHash.
-    StartLookup(InfoHash)
+    StartLookup(InfoHash, SyncSender<()>)
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum IntervalTask {
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum ScheduledTask {
     /// Check the progress of the bucket refresh.
-    CheckRefresh(usize),
+    CheckTableRefresh(TransactionID),
     /// Check the progress of the current bootstrap.
-    CheckBootstrap(usize),
+    CheckBootstrapTimeout(TransactionID),
     /// Check the progress of a current lookup.
-    /// (Index Of Current Lookup, Index Of Message)
-    CheckNodeLookup(usize, Node),
+    CheckLookupTimeout(TransactionID),
     /// Check the progress of the lookup endgame.
-    CheckBulkLookup(usize)
+    CheckLookupEndGame(TransactionID)
 }
 
-pub fn start_mainline_dht(send_socket: UdpSocket, recv_socket: UdpSocket, read_only: bool,
-    ext_addr: Option<SocketAddr>) -> io::Result<Sender<OneshotTask>> {
+pub fn start_mainline_dht<H>(send_socket: UdpSocket, recv_socket: UdpSocket, read_only: bool, ext_addr: Option<SocketAddr>,
+    handshaker: H) -> io::Result<Sender<OneshotTask>> where H: Handshaker + 'static {
     let outgoing = messenger::create_outgoing_messenger(send_socket);
 
     let routing_table = RoutingTable::new(table::random_node_id());
-    println!("TABLE NODE ID IS {:?}", routing_table.node_id());
-    let message_sender = try!(handler::create_dht_handler(routing_table, outgoing));
+    let message_sender = try!(handler::create_dht_handler(routing_table, outgoing, handshaker));
 
     let incoming = messenger::create_incoming_messenger(recv_socket, message_sender.clone());
+
+    println!("TABLE NODE ID IS {:?}", routing_table.node_id());
 
     Ok(message_sender)
 }

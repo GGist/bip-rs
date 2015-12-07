@@ -10,8 +10,8 @@ pub type DhtResult<T> = Result<T, DhtError>;
 /// A list specifying the types of DhtErrors that may occur.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum DhtErrorKind {
-    /// All Nodes Have Gone Stale.
-    StaleNodes,
+    /// Failed To Lookup On Table.
+    LookupFailed,
     /// Failed To Bootstrap Table.
     BootstrapFailed,
     /// A Node Sent Us An Invalid Message.
@@ -19,8 +19,6 @@ pub enum DhtErrorKind {
     /// A Node Sent Us An Invalid Request.
     InvalidRequest(ErrorMessage<'static>),
     /// A Node Sent Us An Invalid Response.
-    ///
-    /// Includes Error Responses.
     InvalidResponse,
     /// A Node Sent Us An Unexpected Response.
     UnsolicitedResponse,

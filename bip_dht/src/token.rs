@@ -19,7 +19,7 @@ use bip_util::hash::{self, ShaHash};
 /// is the maximum amount of time a token is valid for in bittorrent in order to provide interop.
 /// Since we arent storing the tokens we generate (which is awesome) we CANT track how long each
 /// individual token has been checked out from the store and so each token is valid for some time
-/// between 10 and 20 minutes.
+/// between 10 and 20 minutes in contrast with 5 and 10 minutes.
 
 const REFRESH_INTERVAL_MINS: i64 = 10;
 

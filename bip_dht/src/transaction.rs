@@ -188,11 +188,20 @@ impl TransactionID {
         TransactionID{ trans_id: trans_id, trans_id_bytes: trans_id_bytes }
     }
     
-    /*
     /// Construct a transaction id from a series of bytes.
     pub fn from_bytes(bytes: &[u8]) -> Option<TransactionID> {
+        if bytes.len() != TRANSACTION_ID_BYTES {
+            return None
+        }
+        let mut trans_id = 0u64;
         
-    }*/
+        for byte in bytes.iter() {
+            trans_id <<= 8;
+            trans_id |= *byte as u64;
+        }
+        
+        Some(TransactionID::new(trans_id))
+    }
     
     pub fn action_id(&self) -> ActionID {
         ActionID::from_transaction_id(self.trans_id)
@@ -249,6 +258,17 @@ mod tests {
     use std::collections::{HashSet};
     
     use super::{AIDGenerator, MIDGenerator, TransactionID, ActionID, MessageID};
+    
+    #[test]
+    fn positive_tid_from_bytes() {
+        let mut aid_generator = AIDGenerator::new();
+        let mut mid_generator = MIDGenerator::new();
+        
+        let tid = mid_generator.generate();
+        let tid_from_bytes = TransactionID::from_bytes(tid.as_ref());
+        
+        assert_eq!(tid, tid_from_bytes);
+    }
     
     #[test]
     fn positive_unique_aid_blocks() {

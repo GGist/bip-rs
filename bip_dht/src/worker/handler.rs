@@ -19,14 +19,14 @@ use router::{Router};
 use routing::bucket::{Bucket};
 use routing::node::{Node};
 use routing::table::{self, RoutingTable};
-use worker::{self, OneshotTask, IntervalTask};
+use worker::{self, OneshotTask, ScheduledTask};
 use worker::lookup::{HashLookup, LookupResult};
 
 use routing::table::{BucketContents};
 use routing::node::{NodeStatus};
 
-pub fn create_dht_handler(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>)
-    -> io::Result<Sender<OneshotTask>> {
+pub fn create_dht_handler<H>(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, handshaker: H)
+    -> io::Result<Sender<OneshotTask>> where H: Handshaker {
     let mut handler = DhtHandler::new(table, out);
     let mut event_loop = try!(EventLoop::new());
     
@@ -39,22 +39,31 @@ pub fn create_dht_handler(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketA
 
 //----------------------------------------------------------------------------//
 
-pub struct DhtHandler {
-    out_channel:      SyncSender<(Vec<u8>, SocketAddr)>,
-    routing_table:    RoutingTable,
-    current_routers:  HashSet<SocketAddr>,
-    is_bootstrapping: bool,
-    active_lookups:   Vec<HashLookup>
+pub struct DhtHandler<H> where H: Handshaker {
+    handshaker:     H,
+    out_channel:    SyncSender<(Vec<u8>, SocketAddr)>,
+    boostrapper:    (ActionID, TableBootstrap),
+    token_store:    TokenStore,
+    aid_generator:  AIDGenerator,
+    routing_table:  RoutingTable,
+    active_lookups: HashMap<ActionID, (TableLookup, SyncSender<()>)>
 }
 
-impl DhtHandler {
-    fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>) -> DhtHandler {
-        DhtHandler{ out_channel: out, routing_table: table, current_routers: HashSet::new(), is_bootstrapping: false,
-            active_lookups: Vec::new() }
+impl<H> DhtHandler<H> {
+    fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, handshaker: H) -> DhtHandler {
+        
+    
+    
+    
+        DhtHandler{ handshaker: handshaker, out_channel: out, 
+        
+        
+        routing_table: table, current_routers: HashSet::new(),
+            current_activites: HashMap::new() }
     }
 }
 
-impl Handler for DhtHandler {
+impl<H> Handler for DhtHandler<H> {
     type Timeout = (u64, IntervalTask);
     type Message = OneshotTask;
     
@@ -69,8 +78,8 @@ impl Handler for DhtHandler {
             OneshotTask::StartBootstrap(routers, nodes) => {
                 handle_start_bootstrap(self, &routers[..], &nodes[..]);
             },
-            OneshotTask::StartLookup(info_hash) => {
-                handle_start_lookup(self, event_loop, info_hash);
+            OneshotTask::StartLookup(info_hash, sender) => {
+                handle_start_lookup(self, event_loop, info_hash, sender);
             }
         }
     }
@@ -79,19 +88,17 @@ impl Handler for DhtHandler {
         let (timeout, task) = data;
         
         match task {
-            IntervalTask::CheckBootstrap(b) => {
-                handle_check_bootstrap(self, event_loop, b, timeout);
+            ScheduledTask::CheckTableRefresh(bucket_index) => {
+                handle_check_table_refresh(self, bucket_index);
             },
-            IntervalTask::CheckRefresh(b) => {
-                handle_check_refresh(self, event_loop, b, timeout);
+            ScheduledTask::CheckBootstrapTimeout(trans_id, node) => {
+                handle_check_bootstrap_timeout(self, event_loop, trans_id, node);
             },
-            IntervalTask::CheckNodeLookup(index, node) => {
-                println!("NODE TIMEOUT");
-                handle_check_node_lookup(self, event_loop, index, node);
+            ScheduledTask::CheckLookupTimeout(trans_id, Node) => {
+                handle_check_lookup_timeout(self, event_loop, trans_id, node);
             },
-            IntervalTask::CheckBulkLookup(index) => {
-                println!("NODE BULK");
-                handle_check_bulk_lookup(self, event_loop, index);
+            ScheduledTask::CheckLookupEndGame(action_id) => {
+                handle_check_lookup_endgame(self, action_id)
             }
         }
     }

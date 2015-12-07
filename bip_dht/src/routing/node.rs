@@ -14,6 +14,11 @@ use chrono::{Duration, DateTime, UTC};
 // TODO: Should remove as_* functions and replace them with from_requested, from_responded, etc to hide the logic
 // of the nodes initial status.
 
+// TODO: Should address the subsecond lookup paper where questionable nodes should not automatically be replaced with
+// good nodes, instead, questionable nodes should be pinged twice and then become available to be replaced. This reduces
+// GOOD node churn since after 15 minutes, a long lasting node could potentially be replaced by a short lived good node.
+// This strategy is actually what is vaguely specified in the standard?
+
 /// Maximum wait period before a node becomes questionable.
 const MAX_LAST_SEEN_MINS: i64 = 15;
 

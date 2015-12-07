@@ -39,5 +39,5 @@ mod transaction;
 mod worker;
 
 pub use builder::{DhtBuilder, MainlineDht};
-pub use error::{DhtError, DhtResult};
+pub use error::{DhtError, DhtResult, DhtErrorKind};
 pub use router::{Router};
