@@ -2,12 +2,13 @@ use std::collections::{HashSet};
 use std::net::{SocketAddr, UdpSocket};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool};
+use std::sync::mpsc::{self};
 
 use bip_handshake::{Handshaker};
 use bip_util::{self, InfoHash};
 use mio::{Sender};
 
-use error::{DhtResult};
+use error::{DhtResult, DhtError, DhtErrorKind};
 use router::{Router};
 use worker::{self, OneshotTask, ScheduledTask};
 
@@ -37,11 +38,15 @@ impl MainlineDht {
     }
     
     pub fn search(&self, hash: InfoHash) -> DhtResult<()> {
-        if self.send.send(OneshotTask::StartLookup(hash)).is_err() {
-            panic!("Failed to start lookup");
-        }
+        let (send, recv) = mpsc::sync_channel(1);
         
-        Ok(())
+        if self.send.send(OneshotTask::StartLookup(hash, send)).is_ok() {
+            recv.recv();
+            
+            Ok(())
+        } else {
+            Err(DhtError::new(DhtErrorKind::LookupFailed, "Failed To Send A Message To The DhtHandler..."))
+        }
     }
     
     pub fn announce(hash: InfoHash) -> DhtResult<()> {

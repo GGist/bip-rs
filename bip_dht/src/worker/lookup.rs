@@ -3,13 +3,16 @@ use std::net::{SocketAddrV4, SocketAddr};
 use std::sync::mpsc::{SyncSender};
 
 use bip_util::{self, NodeId, InfoHash};
+use bip_util::hash::{ShaHash};
 use mio::{EventLoop, Timeout};
 
 use message::compact_info::{CompactNodeInfo, CompactValueInfo};
 use message::get_peers::{GetPeersRequest, CompactInfoType, GetPeersResponse};
+use routing::bucket::{self};
 use routing::node::{Node, NodeStatus};
 use routing::table::{self, RoutingTable, ClosestNodes};
-use worker::{IntervalTask};
+use transaction::{MIDGenerator, TransactionID};
+use worker::{ScheduledTask};
 use worker::handler::{DhtHandler};
 
 const LOOKUP_TIMEOUT_MS:  u64 = 1500;
@@ -44,10 +47,10 @@ pub struct TableLookup {
 }
 
 impl TableLookup {
-    pub fn new(table_id: NodeId, target_id: NodeId, id_generator: MIDGenerator, table: &RoutingTable,
-        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
+    pub fn new<H>(table_id: NodeId, target_id: NodeId, id_generator: MIDGenerator, table: &RoutingTable,
+        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
         -> Option<TableLookup> {
-        let bucket_size = super::MAX_BUCKET_SIZE;
+        let bucket_size = bucket::MAX_BUCKET_SIZE;
         
         // Pick a buckets worth of nodes and sort them
         let mut closest_nodes = Vec::with_capacity(bucket_size);
@@ -57,7 +60,7 @@ impl TableLookup {
         
         // Construct the lookup table structure
         let mut table_lookup = TableLookup{ table_id: table_id, target_id: target_id, in_endgame: false,
-            id_generator: id_generator, closest_nodes: closest_nodes, announce_tokens: HashMap::new()
+            id_generator: id_generator, closest_nodes: closest_nodes, announce_tokens: HashMap::new(),
             active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
         // Ping alpha nodes that are closest to the id
@@ -68,15 +71,15 @@ impl TableLookup {
         }
     }
     
-    pub fn recv_response<'a>(&mut self, node: Node, trans_id: &TransactionID, msg: GetPeersResponse<'a>,
-        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>) -> LookupStatus {
+    pub fn recv_response<'a, H>(&mut self, node: Node, trans_id: &TransactionID, msg: GetPeersResponse<'a>,
+        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>) -> LookupStatus {
         // Process the message transaction id
         let (dist, timeout) = if let Some(lookup) = self.active_lookups.remove(trans_id) {
             lookup
         } else {
             warn!("bip_dht: Received unsolicited node response for an active table lookup...");
             return self.current_lookup_status()
-        }
+        };
         
         // Cancel the timeout
         event_loop.clear_timeout(timeout);
@@ -87,10 +90,10 @@ impl TableLookup {
                 let mut got_closer = false;
             
                 for (id, v4_addr) in n {
-                    let addr = SocketAddr::V4(v4_addr)
+                    let addr = SocketAddr::V4(v4_addr);
                     let node = Node::as_good(id, addr);
                     
-                    got_closer = got_closer || self.is_closer_node(dist, &node);
+                    got_closer = got_closer || self.is_closer_node(&dist, &node);
                     insert_sorted_node(self.target_id, &mut self.closest_nodes, node);
                 }
                 
@@ -106,7 +109,7 @@ impl TableLookup {
                     let addr = SocketAddr::V4(v4_addr);
                     let node = Node::as_good(id, addr);
                     
-                    got_closer = got_closer || self.is_closer_node(dist, &node);
+                    got_closer = got_closer || self.is_closer_node(&dist, &node);
                     insert_sorted_node(self.target_id, &mut self.closest_nodes, node);
                 }
                 
@@ -138,14 +141,14 @@ impl TableLookup {
         }
     }
     
-    pub fn recv_timeout(&mut self, trans_id: &TransactionID, out: &SyncSender<(Vec<u8>, SocketAddr)>,
-        event_loop: &mut EventLoop<DhtHandler>) -> LookupStatus {
+    pub fn recv_timeout<H>(&mut self, trans_id: &TransactionID, out: &SyncSender<(Vec<u8>, SocketAddr)>,
+        event_loop: &mut EventLoop<DhtHandler<H>>) -> LookupStatus {
         let (_, timeout) = if let Some(lookup) = self.active_lookups.remove(trans_id) {
             lookup
         } else {
             warn!("bip_dht: Received unsolicited node timeout for an active table lookup...");
             return self.current_lookup_status()
-        }
+        };
         
         // Check if we need to iterate (not in the endgame already)
         if !self.in_endgame {
@@ -158,7 +161,7 @@ impl TableLookup {
         LookupStatus::Searching
     }
     
-    pub fn recv_finished(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
+    pub fn recv_finished<H>(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
         -> LookupStatus {
         // TODO: Announce to the appropriate nodes
         
@@ -166,41 +169,43 @@ impl TableLookup {
         // any nodes that didnt respond would still be in here.
         self.active_lookups.clear();
         
+        self.in_endgame = false;
+        
         self.current_lookup_status()
     }
     
     fn current_lookup_status(&self) -> LookupStatus {
-        if self.active_lookups.is_empty() {
-            LookupStatus::Completed
-        } else {
+        if self.in_endgame || !self.active_lookups.is_empty() {
             LookupStatus::Searching
+        } else {
+            LookupStatus::Completed
         }
     }
     
     fn is_closer_node(&self, prev_dist: &Distance, node: &Node) -> bool {
-        self.target_id ^ node.id() < prev_dist
+        &(self.target_id ^ node.id()) < prev_dist
     }
     
-    fn start_request_round(&mut self, conc_reqs: usize, out: &SyncSender<()>, event_loop: &mut EventLoop<DhtHandler>)
+    fn start_request_round<H>(&mut self, conc_reqs: usize, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
         -> bool {
         // Loop through nodes, number of concurrent requests desired
         for node_info in self.closest_nodes.iter_mut().filter(|&&mut (_, _, req)| !req).take(conc_reqs) {
-            let (ref node_dist, ref node, ref mut req) = node_info;
+            let &mut (ref node_dist, ref node, ref mut req) = node_info;
             
             // Generate a transaction id for this message
             let trans_id = self.id_generator.generate();
             
             // Try to start a timeout for the node
             let res_timeout = event_loop.timeout_ms((0, ScheduledTask::CheckLookupTimeout(trans_id)), LOOKUP_TIMEOUT_MS);
-            let timeout = if let Some(t) = res_timeout {
+            let timeout = if let Ok(t) = res_timeout {
                 t
             } else {
                 error!("bip_dht: Failed to set a timeout for a table lookup...");
                 return false
-            }
+            };
             
             // Associate the transaction id with this node's distance and its timeout token
-            self.active_lookups(trans_id, (*node_dist, timeout));
+            self.active_lookups.insert(trans_id, (*node_dist, timeout));
             
             // Send the message to the node
             let get_peers_msg = GetPeersRequest::new(trans_id.as_ref(), self.table_id, self.target_id).encode();
@@ -215,23 +220,23 @@ impl TableLookup {
         true
     }
     
-    fn start_endgame_round(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler>)
+    fn start_endgame_round<H>(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
         -> bool {
         // Entering the endgame phase
         self.in_endgame = true;
         
         // Try to start a global message timeout for the endgame
-        let res_timeout = event_loop.timeout_ms((0, ScheduledTask::CheckLookupTimeout(trans_id)), ENDGAME_TIMEOUT_MS);
-        let timeout = if let Some(t) = res_timeout {
+        let res_timeout = event_loop.timeout_ms((0, ScheduledTask::CheckLookupEndGame(self.id_generator.generate())), ENDGAME_TIMEOUT_MS);
+        let timeout = if let Ok(t) = res_timeout {
             t
         } else {
             error!("bip_dht: failed to set a timeout for table lookup endgame...");
             return false
-        }
+        };
         
         // Request all unpinged nodes
         for node_info in self.closest_nodes.iter_mut().filter(|&&mut (_, _, req)| !req) {
-            let (ref node_dist, ref node, ref mut req) = node_info;
+            let &mut (ref node_dist, ref node, ref mut req) = node_info;
             
             // Generate a transaction id for this message
             let trans_id = self.id_generator.generate();
@@ -239,7 +244,7 @@ impl TableLookup {
             // Associate the transaction id with this node's distance and its timeout token
             // We dont actually need to keep track of this information, but we do still need to
             // filter out unsolicited responses by using the active_lookups map!!!
-            self.active_lookups(trans_id, (*node_dist, timeout));
+            self.active_lookups.insert(trans_id, (*node_dist, timeout));
             
             // Send the message to the node
             let get_peers_msg = GetPeersRequest::new(trans_id.as_ref(), self.table_id, self.target_id).encode();

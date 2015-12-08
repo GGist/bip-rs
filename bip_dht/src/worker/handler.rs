@@ -1,5 +1,5 @@
 use std::cell::{Cell};
-use std::collections::{HashSet};
+use std::collections::{HashSet, HashMap};
 use std::convert::{AsRef};
 use std::io::{self};
 use std::iter::{self};
@@ -9,6 +9,7 @@ use std::sync::mpsc::{SyncSender};
 use std::thread::{self};
 
 use bip_bencode::{Bencode};
+use bip_handshake::{Handshaker};
 use bip_util::{self, NodeId, InfoHash};
 use mio::{EventLoop, Sender, Timeout, Handler};
 
@@ -19,15 +20,20 @@ use router::{Router};
 use routing::bucket::{Bucket};
 use routing::node::{Node};
 use routing::table::{self, RoutingTable};
+use token::{TokenStore};
+use transaction::{AIDGenerator, MIDGenerator, TransactionID, ActionID};
 use worker::{self, OneshotTask, ScheduledTask};
-use worker::lookup::{HashLookup, LookupResult};
+use worker::bootstrap::{TableBootstrap, BootstrapStatus};
+use worker::lookup::{TableLookup, LookupStatus};
 
 use routing::table::{BucketContents};
 use routing::node::{NodeStatus};
 
+// TODO: Update modules to use find_node on the routing table to update the status of a given node.
+
 pub fn create_dht_handler<H>(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, handshaker: H)
-    -> io::Result<Sender<OneshotTask>> where H: Handshaker {
-    let mut handler = DhtHandler::new(table, out);
+    -> io::Result<Sender<OneshotTask>> where H: Handshaker + 'static {
+    let mut handler = DhtHandler::new(table, out, handshaker);
     let mut event_loop = try!(EventLoop::new());
     
     let loop_channel = event_loop.channel();
@@ -39,35 +45,34 @@ pub fn create_dht_handler<H>(table: RoutingTable, out: SyncSender<(Vec<u8>, Sock
 
 //----------------------------------------------------------------------------//
 
-pub struct DhtHandler<H> where H: Handshaker {
+pub struct DhtHandler<H> {
     handshaker:     H,
     out_channel:    SyncSender<(Vec<u8>, SocketAddr)>,
-    boostrapper:    (ActionID, TableBootstrap),
     token_store:    TokenStore,
+    bootstrapper:   (ActionID, TableBootstrap),
     aid_generator:  AIDGenerator,
     routing_table:  RoutingTable,
     active_lookups: HashMap<ActionID, (TableLookup, SyncSender<()>)>
 }
 
-impl<H> DhtHandler<H> {
-    fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, handshaker: H) -> DhtHandler {
+impl<H> DhtHandler<H> where H: Handshaker {
+    fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, handshaker: H) -> DhtHandler<H> {
+        let mut aid_generator = AIDGenerator::new();
+        let mut mid_generator = aid_generator.generate();
         
+        let action_id = mid_generator.action_id();
+        let table_bootstrap = TableBootstrap::new(table.node_id(), mid_generator);
     
-    
-    
-        DhtHandler{ handshaker: handshaker, out_channel: out, 
-        
-        
-        routing_table: table, current_routers: HashSet::new(),
-            current_activites: HashMap::new() }
+        DhtHandler{ handshaker: handshaker, out_channel: out, bootstrapper: (action_id, table_bootstrap), token_store: TokenStore::new(),
+            aid_generator: aid_generator, routing_table: table, active_lookups: HashMap::new() }
     }
 }
 
 impl<H> Handler for DhtHandler<H> {
-    type Timeout = (u64, IntervalTask);
+    type Timeout = (u64, ScheduledTask);
     type Message = OneshotTask;
     
-    fn notify(&mut self, event_loop: &mut EventLoop<DhtHandler>, task: OneshotTask) {
+    fn notify(&mut self, event_loop: &mut EventLoop<DhtHandler<H>>, task: OneshotTask) {
         match task {
             OneshotTask::Incoming(buffer, addr) => {
                 handle_incoming(self, event_loop, &buffer[..], addr);
@@ -76,7 +81,7 @@ impl<H> Handler for DhtHandler<H> {
                 handle_schedule_task(event_loop, timeout, task);
             },
             OneshotTask::StartBootstrap(routers, nodes) => {
-                handle_start_bootstrap(self, &routers[..], &nodes[..]);
+                handle_start_bootstrap(self, routers, nodes);
             },
             OneshotTask::StartLookup(info_hash, sender) => {
                 handle_start_lookup(self, event_loop, info_hash, sender);
@@ -84,21 +89,21 @@ impl<H> Handler for DhtHandler<H> {
         }
     }
     
-    fn timeout(&mut self, event_loop: &mut EventLoop<DhtHandler>, data: (u64, IntervalTask)) {
+    fn timeout(&mut self, event_loop: &mut EventLoop<DhtHandler<H>>, data: (u64, ScheduledTask)) {
         let (timeout, task) = data;
         
         match task {
-            ScheduledTask::CheckTableRefresh(bucket_index) => {
-                handle_check_table_refresh(self, bucket_index);
+            ScheduledTask::CheckTableRefresh(trans_id) => {
+                handle_check_table_refresh(self, trans_id);
             },
-            ScheduledTask::CheckBootstrapTimeout(trans_id, node) => {
-                handle_check_bootstrap_timeout(self, event_loop, trans_id, node);
+            ScheduledTask::CheckBootstrapTimeout(trans_id) => {
+                handle_check_bootstrap_timeout(self, event_loop, trans_id);
             },
-            ScheduledTask::CheckLookupTimeout(trans_id, Node) => {
-                handle_check_lookup_timeout(self, event_loop, trans_id, node);
+            ScheduledTask::CheckLookupTimeout(trans_id) => {
+                handle_check_lookup_timeout(self, event_loop, trans_id);
             },
-            ScheduledTask::CheckLookupEndGame(action_id) => {
-                handle_check_lookup_endgame(self, action_id)
+            ScheduledTask::CheckLookupEndGame(trans_id) => {
+                handle_check_lookup_endgame(self, trans_id)
             }
         }
     }
@@ -106,7 +111,8 @@ impl<H> Handler for DhtHandler<H> {
 
 //----------------------------------------------------------------------------//
 
-fn handle_incoming(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandler>, buffer: &[u8], addr: SocketAddr) {
+fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, buffer: &[u8], addr: SocketAddr) {
+    // Parse the buffer as a bencoded message
     let bencode = if let Ok(b) = Bencode::decode(buffer) {
         b
     } else {
@@ -114,13 +120,37 @@ fn handle_incoming(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandl
         return
     };
     
+    // Parse the bencode as a krpc message, check to make sure we issued the transaction id
     let message = MessageType::new(&bencode, |trans| {
-        if trans[0] == 48 {
-            ExpectedResponse::FindNode
+        let trans_id = if let Some(t) = TransactionID::from_bytes(trans) {
+            t 
         } else {
+            return ExpectedResponse::None
+        };
+        
+        if trans_id.action_id() == handler.bootstrapper.0 {
+            ExpectedResponse::FindNode
+        } else if handler.active_lookups.contains_key(&trans_id.action_id()) {
             ExpectedResponse::GetPeers
+        } else {
+            ExpectedResponse::None
         }
     });
+    unimplemented!();
+    /*
+    match message {
+        Ok(MessageType::Request(RequestType::Ping(_)))         => info!("bip_dht: Unimplemented PING REQUEST..."),
+        Ok(MessageType::Request(RequestType::FindNode(_)))     => info!("bip_dht: Unimplemented FIND_NODE REQUEST..."),
+        Ok(MessageType::Request(RequestType::GetPeers(_)))     => info!("bip_dht: Unimplemented GET_PEERS REQUEST..."),
+        OK(MessageType::Request(RequestType::AnnouncePeer(_))) => info!("bip_dht: Unimplemented ANNOUNCE_PEER REQUEST...")
+        Ok(MessageType::Response(ResponseType::FindNode(f))) => {
+            let trans_id = TransactionID::from_bytes(f.transaction_id()).unwrap();
+            
+            
+        },
+        Ok
+    }
+    
     match message {
         Ok(MessageType::Response(ResponseType::FindNode(f))) => {
             // Add returned nodes as questionable (unpinged in this case)
@@ -150,8 +180,39 @@ fn handle_incoming(handler: &mut DhtHandler, event_loop: &mut EventLoop<DhtHandl
             }
         }
         _ => warn!("bip_dht: Received unsupported message... {:?}", message)
-    };
+    };*/
 }
+
+fn handle_schedule_task<H>(event_loop: &mut EventLoop<DhtHandler<H>>, timeout: u64, task: ScheduledTask) {
+    unimplemented!();
+}
+
+fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>, routers: Vec<Router>, nodes: Vec<SocketAddr>) {
+    unimplemented!();
+}
+
+fn handle_start_lookup<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, info_hash: InfoHash, sender: SyncSender<()>) {
+    unimplemented!();
+}
+
+fn handle_check_table_refresh<H>(handler: &mut DhtHandler<H>, trans_id: TransactionID) {
+    unimplemented!();
+}
+
+fn handle_check_bootstrap_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID) {
+    unimplemented!();
+}
+
+fn handle_check_lookup_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID) {
+    unimplemented!();
+}
+
+fn handle_check_lookup_endgame<H>(handler: &mut DhtHandler<H>, trans_id: TransactionID) {
+    unimplemented!();
+}
+
+/*
+
 
 //----------------------------------------------------------------------------//
 
@@ -321,4 +382,4 @@ fn flip_id_bit_at_index(node_id: NodeId, index: usize) -> Option<NodeId> {
     
         Some(id_bytes.into())
     }
-}
+}*/

@@ -61,7 +61,7 @@ impl From<[u8; hash::SHA_HASH_LEN]> for Token {
 //----------------------------------------------------------------------------//
 
 #[derive(Copy, Clone)]
-struct TokenStore {
+pub struct TokenStore {
     curr_secret:  u32,
     last_secret:  u32,
     last_refresh: DateTime<UTC>

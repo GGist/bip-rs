@@ -1,19 +1,23 @@
 use std::convert::{AsRef};
 use std::io::{self};
 use std::net::{SocketAddr, UdpSocket};
+use std::sync::mpsc::{SyncSender};
 
+use bip_handshake::{Handshaker};
 use bip_util::{InfoHash};
 use mio::{Sender};
 
 use router::{Router};
 use routing::node::{Node};
 use routing::table::{self, RoutingTable};
+use transaction::{TransactionID};
 
+pub mod bootstrap;
 pub mod handler;
 pub mod lookup;
 pub mod messenger;
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone)]
 pub enum OneshotTask {
     /// Process an incoming message from a remote node.
     Incoming(Vec<u8>, SocketAddr),
@@ -25,7 +29,7 @@ pub enum OneshotTask {
     StartLookup(InfoHash, SyncSender<()>)
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone)]
 pub enum ScheduledTask {
     /// Check the progress of the bucket refresh.
     CheckTableRefresh(TransactionID),
@@ -45,8 +49,6 @@ pub fn start_mainline_dht<H>(send_socket: UdpSocket, recv_socket: UdpSocket, rea
     let message_sender = try!(handler::create_dht_handler(routing_table, outgoing, handshaker));
 
     let incoming = messenger::create_incoming_messenger(recv_socket, message_sender.clone());
-
-    println!("TABLE NODE ID IS {:?}", routing_table.node_id());
 
     Ok(message_sender)
 }
