@@ -84,8 +84,8 @@ impl TableLookup {
             id_generator: id_generator, will_announce: will_announce, all_sorted_nodes: all_sorted_nodes, announce_tokens: HashMap::new(),
             active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
-        // Call start_request_round with the list of initial_nodes
-        if table_lookup.start_request_round(initial_pick_nodes_filtered, out, event_loop) == LookupStatus::Searching {
+        // Call start_request_round with the list of initial_nodes (return even if the search completed...for now :D)
+        if table_lookup.start_request_round(initial_pick_nodes_filtered, out, event_loop) != LookupStatus::Failed {
             Some(table_lookup)
         } else {
             None

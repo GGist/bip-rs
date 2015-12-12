@@ -5,7 +5,7 @@ use std::net::{SocketAddr};
 use bip_util::bt::{InfoHash};
 use chrono::{UTC, DateTime, Duration};
 
-const MAX_ITEMS_STORED: usize = 100;
+const MAX_ITEMS_STORED: usize = 500;
 
 /// Manages storage and expiration of contact information for a number of InfoHashs.
 pub struct AnnounceStorage {

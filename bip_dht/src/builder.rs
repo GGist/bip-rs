@@ -41,8 +41,12 @@ impl MainlineDht {
     
     /// Perform a search for the given InfoHash with an optional announce on the closest nodes.
     ///
+    ///
     /// Announcing will place your contact information in the DHT so others performing lookups
     /// for the InfoHash will be able to find your contact information and initiate a handshake.
+    ///
+    /// If the initial bootstrap has not finished, the search will be queued and executed once
+    /// the bootstrap has completed.
     pub fn search(&self, hash: InfoHash, announce: bool) {
         if self.send.send(OneshotTask::StartLookup(hash, announce)).is_err() {
             warn!("bip_dht: MainlineDht failed to send a start lookup message...");

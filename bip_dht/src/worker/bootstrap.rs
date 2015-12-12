@@ -14,7 +14,7 @@ use transaction::{MIDGenerator, TransactionID};
 use worker::{ScheduledTask};
 use worker::handler::{DhtHandler};
 
-const BOOTSTRAP_INITIAL_TIMEOUT: u64 = 2000;
+const BOOTSTRAP_INITIAL_TIMEOUT: u64 = 2500;
 const BOOTSTRAP_NODE_TIMEOUT:    u64 = 500;
 
 const BOOTSTRAP_PINGS_PER_BUCKET: usize = 8;
