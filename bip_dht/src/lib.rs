@@ -1,4 +1,4 @@
-//! Interact with the bittorrent Distributed Hash Table.
+//! Implementation of the Bittorrent Mainline Distributed Hash Table.
 
 #[macro_use]
 extern crate bip_bencode;
@@ -37,5 +37,9 @@ mod transaction;
 mod worker;
 
 pub use builder::{DhtBuilder, MainlineDht};
-pub use error::{DhtError, DhtResult, DhtErrorKind};
 pub use router::{Router};
+pub use worker::{DhtEvent, ShutdownCause};
+
+pub use bip_handshake::{Handshaker};
+/// Test
+pub use bip_util::bt::{InfoHash, PeerId};

@@ -11,12 +11,13 @@ use mio::{Sender};
 use router::{Router};
 use worker::{self, OneshotTask, DhtEvent, ShutdownCause};
 
-/// Maintains a distributed hash (routing) table.
+/// Maintains a Distributed Hash (Routing) Table.
 pub struct MainlineDht {
     send: Sender<OneshotTask>
 }
 
 impl MainlineDht {
+    /// Start the MainlineDht with the given DhtBuilder and Handshaker.
     pub fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> io::Result<MainlineDht>
         where H: Handshaker + 'static {
         let send_sock = try!(UdpSocket::bind(&builder.src_addr));
@@ -38,12 +39,17 @@ impl MainlineDht {
         Ok(MainlineDht{ send: send })
     }
     
+    /// Perform a search for the given InfoHash with an optional announce on the closest nodes.
+    ///
+    /// Announcing will place your contact information in the DHT so others performing lookups
+    /// for the InfoHash will be able to find your contact information and initiate a handshake.
     pub fn search(&self, hash: InfoHash, announce: bool) {
         if self.send.send(OneshotTask::StartLookup(hash, announce)).is_err() {
             warn!("bip_dht: MainlineDht failed to send a start lookup message...");
         }
     }
     
+    /// An event Receiver which will receive events occuring within the DHT.
     pub fn events(&self) -> Receiver<DhtEvent> {
         let (send, recv) = mpsc::channel();
         
@@ -65,7 +71,7 @@ impl Drop for MainlineDht {
 
 //----------------------------------------------------------------------------//
 
-/// Stores information for initializing a dht.
+/// Stores information for initializing a DHT.
 #[derive(Clone, Debug)] 
 pub struct DhtBuilder {
     nodes:     HashSet<SocketAddr>,
@@ -134,10 +140,10 @@ impl DhtBuilder {
         self
     }
     
-    /// Provide the dht with our external address. If this is not supplied we will
+    /// Provide the DHT with our external address. If this is not supplied we will
     /// have to deduce this information from remote nodes.
     ///
-    /// Purpose of the external address is to generate a node id the conforms to
+    /// Purpose of the external address is to generate a NodeId that conforms to
     /// BEP 42 so that nodes can safely store information on our node.
     pub fn set_external_addr(mut self, addr: SocketAddr) -> DhtBuilder {
         self.ext_addr = Some(addr);
@@ -145,7 +151,7 @@ impl DhtBuilder {
         self
     }
     
-    /// Provide the dht with the source address.
+    /// Provide the DHT with the source address.
     ///
     /// If this is not supplied we will use the OS default route.
     pub fn set_source_addr(mut self, addr: SocketAddr) -> DhtBuilder {
@@ -154,7 +160,7 @@ impl DhtBuilder {
         self
     }
     
-    /// Start a mainline dht with the current configuration.
+    /// Start a mainline DHT with the current configuration.
     pub fn start_mainline<H>(self, handshaker: H) -> io::Result<MainlineDht>
         where H: Handshaker + 'static {
         MainlineDht::with_builder(self, handshaker)
