@@ -14,7 +14,7 @@ const IMPLIED_PORT_KEY: &'static str = "implied_port";
 // TODO: Integrate the Token type into the request message.
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum ResponsePort {
+pub enum ConnectPort {
     Implied,
     Explicit(u16)
 }
@@ -25,11 +25,11 @@ pub struct AnnouncePeerRequest<'a> {
     node_id:   NodeId,
     info_hash: InfoHash,
     token:     &'a [u8],
-    port:      ResponsePort
+    port:      ConnectPort
 }
 
 impl<'a> AnnouncePeerRequest<'a> {
-    pub fn new(trans_id: &'a [u8], node_id: NodeId, info_hash: InfoHash, token: &'a [u8], port: ResponsePort)
+    pub fn new(trans_id: &'a [u8], node_id: NodeId, info_hash: InfoHash, token: &'a [u8], port: ConnectPort)
         -> AnnouncePeerRequest<'a> {
         AnnouncePeerRequest{ trans_id: trans_id, node_id: node_id, info_hash: info_hash, token: token, port: port }
     }
@@ -50,11 +50,11 @@ impl<'a> AnnouncePeerRequest<'a> {
         // Technically, the specification says that the value is either 0 or 1 but goes on to say that
         // if it is not zero, then the source port should be used. We will allow values other than 0 or 1.
         let response_port = match rqst_root.lookup(IMPLIED_PORT_KEY).map(|n| n.int()) {
-            Some(Some(n)) if n != 0 => ResponsePort::Implied,
+            Some(Some(n)) if n != 0 => ConnectPort::Implied,
             _ => {
                 // If we hit this, the port either was not provided or it was of the wrong bencode type
                 let port_number = try!(port) as u16;
-                ResponsePort::Explicit(port_number)
+                ConnectPort::Explicit(port_number)
             }
         };
         
@@ -77,12 +77,16 @@ impl<'a> AnnouncePeerRequest<'a> {
         self.token
     }
     
+    pub fn connect_port(&self) -> ConnectPort {
+        self.port
+    }
+    
     pub fn encode(&self) -> Vec<u8> {
         // In case a client errors out when the port key is not present, even when
         // implied port is specified, we will provide a dummy value in that case.
         let (displayed_port, implied_value) = match self.port {
-            ResponsePort::Implied     => (0, 1),
-            ResponsePort::Explicit(n) => (n, 0)
+            ConnectPort::Implied     => (0, 1),
+            ConnectPort::Explicit(n) => (n, 0)
         };
         
         (ben_map!{

@@ -8,7 +8,7 @@ use bip_util::net::{self};
 use bip_util::sha::{ShaHash};
 use mio::{EventLoop, Timeout};
 
-use message::announce_peer::{AnnouncePeerRequest, ResponsePort};
+use message::announce_peer::{AnnouncePeerRequest, ConnectPort};
 use message::get_peers::{GetPeersRequest, CompactInfoType, GetPeersResponse};
 use routing::bucket::{self};
 use routing::node::{Node, NodeStatus};
@@ -227,7 +227,7 @@ impl TableLookup {
                 let trans_id = self.id_generator.generate();
                 let token = announce_tokens.get(node).unwrap();
                 
-                let announce_peer_req = AnnouncePeerRequest::new(trans_id.as_ref(), self.table_id, self.target_id, token.as_ref(), ResponsePort::Explicit(handshake_port));
+                let announce_peer_req = AnnouncePeerRequest::new(trans_id.as_ref(), self.table_id, self.target_id, token.as_ref(), ConnectPort::Explicit(handshake_port));
                 let announce_peer_msg = announce_peer_req.encode();
                 
                 if out.send((announce_peer_msg, node.addr())).is_err() {

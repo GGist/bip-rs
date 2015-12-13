@@ -1,7 +1,7 @@
 use std::collections::{HashMap};
 use std::convert::{AsRef};
 use std::io::{self};
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{SocketAddr, UdpSocket, SocketAddrV4, SocketAddrV6};
 use std::mem::{self};
 use std::sync::mpsc::{self, SyncSender};
 use std::thread::{self};
@@ -18,7 +18,7 @@ use message::{MessageType};
 use message::ping::{PingResponse};
 use message::find_node::{FindNodeResponse};
 use message::get_peers::{GetPeersResponse, CompactInfoType};
-use message::announce_peer::{AnnouncePeerResponse};
+use message::announce_peer::{AnnouncePeerResponse, ConnectPort};
 use message::error::{ErrorCode, ErrorMessage};
 use message::request::{RequestType};
 use message::response::{ResponseType, ExpectedResponse};
@@ -436,12 +436,28 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
                 Err(_) => false
             };
             
+            // Create a socket address based on the implied/explicit port number
+            let connect_addr = match a.connect_port() {
+                ConnectPort::Implied        => addr,
+                ConnectPort::Explicit(port) => {
+                    match addr {
+                        SocketAddr::V4(v4_addr) => {
+                            SocketAddr::V4(SocketAddrV4::new(*v4_addr.ip(), port))
+                        },
+                        SocketAddr::V6(v6_addr) => {
+                            SocketAddr::V6(SocketAddrV6::new(*v6_addr.ip(), port,
+                                v6_addr.flowinfo(), v6_addr.scope_id()))
+                        }
+                    }
+                }
+            };
+            
             // Resolve type of response we are going to send
             let response_msg = if !is_valid {
                 // Node gave us an invalid token
                 warn!("bip_dht: Remote node sent us an invalid token for an AnnounceRequest...");
                 ErrorMessage::new(a.transaction_id().to_vec(), ErrorCode::ProtocolError, "Received An Invalid Token".to_owned()).encode()
-            } else if work_storage.active_stores.add_item(a.info_hash(), addr) { // TODO: Check if they gave us an explicit port or an implicit one
+            } else if work_storage.active_stores.add_item(a.info_hash(), connect_addr) {
                 // Node successfully stored the value with us, send an announce response
                 AnnouncePeerResponse::new(a.transaction_id(), work_storage.routing_table.node_id()).encode()
             } else {
@@ -532,7 +548,7 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
             }
         },
         Ok(MessageType::Response(ResponseType::GetPeers(g))) => {
-           info!("bip_dht: Received a GetPeersResponse...");
+            //info!("bip_dht: Received a GetPeersResponse...");
             let trans_id = TransactionID::from_bytes(g.transaction_id()).unwrap();
             let node = Node::as_good(g.node_id(), addr);
             

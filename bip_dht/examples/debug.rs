@@ -89,15 +89,27 @@ fn main() {
         0x7a, 0xff, 0xfa, 0x55, 0x3a, 0xea, 0xd0, 0xcc];
     
     let address = ("0.0.0.0", 6889).to_socket_addrs().unwrap().next().unwrap();
-    let dht = DhtBuilder::with_router(Router::Transmission).set_source_addr(address).set_read_only(false)
+    let dht = DhtBuilder::with_router(Router::Transmission).set_source_addr(address)
     .start_mainline(SimpleHandshaker{ filter: HashSet::new(), count: 0 }).unwrap();
     
-    let dht_events = dht.events();
+    let stdin = io::stdin();
     
-    dht.search(hash.into(), false);
+    let events = dht.events();
+    thread::spawn(move || {
+        for event in events {
+            println!("RECEIVED DHT EVENT {:?}", event);
+        }
+    });
     
-    // Wait for bootstrap complete
-    for event in dht_events.iter().take(3) {
-        println!("RECEIVED DHT EVENT {:?}", event);
+    let mut count = 0;
+    let mut announce = false;
+    for byte in stdin.bytes() {
+        if count == 0 {
+            count += 1;
+        } else {
+            dht.search(hash.into(), announce);
+            announce = !announce;
+            count = 0;
+        }
     }
 }
