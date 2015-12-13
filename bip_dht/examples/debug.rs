@@ -47,11 +47,16 @@ impl Handshaker for SimpleHandshaker {
     /// It is important that this is the external port that the peer will be sending data
     /// to. This is relevant if the client employs nat traversal via upnp or other means.
     fn port(&self) -> u16 {
-		6882
+		6820
 	}
 
     /// Initiates a handshake with the given socket address.
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
+        let socket_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(104, 236, 141, 221), 6820));
+        if addr == socket_addr {
+            println!("FOUND OUR ADDRESS {:?}", addr);
+        }
+        
         if self.filter.contains(&addr) {
             return
         }
@@ -59,11 +64,6 @@ impl Handshaker for SimpleHandshaker {
         self.filter.insert(addr);
         self.count += 1;
         println!("Received peer {:?}, total {}", addr, self.count);
-        
-        let socket_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(104, 236, 141, 221), 6882));
-        if addr == socket_addr {
-            println!("FOUND OUR ADDRESS {:?}", addr);
-        }
 	}
     
     /// Adds a filter that is applied to handshakes before they are initiated or completed.

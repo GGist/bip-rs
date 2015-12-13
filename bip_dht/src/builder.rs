@@ -69,12 +69,13 @@ impl MainlineDht {
         
         recv
     }
-    
-    /// Send a shutdown the DHT so it will clean up it's resources and stop serving requests.
-    ///
-    /// Returns true if the shutdown succeeded or false if the DHT was already shutdown.
-    pub fn shutdown(self) -> bool {
-        self.send.send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated)).is_ok()
+}
+
+impl Drop for MainlineDht {
+    fn drop(&mut self) {
+        if self.send.send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated)).is_err() {
+            warn!("bip_dht: MainlineDht failed to send a shutdown message (may have already been shutdown)...");
+        }
     }
 }
 
