@@ -47,12 +47,12 @@ impl Handshaker for SimpleHandshaker {
     /// It is important that this is the external port that the peer will be sending data
     /// to. This is relevant if the client employs nat traversal via upnp or other means.
     fn port(&self) -> u16 {
-		6820
+		6830
 	}
 
     /// Initiates a handshake with the given socket address.
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
-        let socket_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(104, 236, 141, 221), 6820));
+        let socket_addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(104, 236, 141, 221), 6830));
         if addr == socket_addr {
             println!("FOUND OUR ADDRESS {:?}", addr);
         }
@@ -85,11 +85,10 @@ fn main() {
 		Box::new(SimpleLogger)
 	}).unwrap();
 	
-	let hash = [0x5e, 0x13, 0x6c, 0xff, 0x06, 0xd4, 0x5f, 0x9f, 0x5f, 0xff, 0x10, 0x7f,
-        0x7a, 0xff, 0xfa, 0x55, 0x3a, 0xea, 0xd0, 0xcc];
+	let hash = InfoHash::from_bytes(b"BipChat: Room - Testing");
     
-    let address = ("0.0.0.0", 6889).to_socket_addrs().unwrap().next().unwrap();
-    let dht = DhtBuilder::with_router(Router::Transmission).set_source_addr(address)
+    let address = ("0.0.0.0", 6810).to_socket_addrs().unwrap().next().unwrap();
+    let dht = DhtBuilder::with_router(Router::Transmission).set_source_addr(address).set_read_only(false)
     .start_mainline(SimpleHandshaker{ filter: HashSet::new(), count: 0 }).unwrap();
     
     let stdin = io::stdin();
