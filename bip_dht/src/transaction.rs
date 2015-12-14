@@ -47,8 +47,16 @@ const MESSAGE_ID_SHIFT: usize = MESSAGE_ID_BYTES * 8;
 const MAX_MESSAGE_ID:   u64   = 1 << MESSAGE_ID_SHIFT;
 
 // Multiple of two so we can wrap around nicely
+#[cfg(not(test))]
 const ACTION_ID_PREALLOC_LEN:  usize = 2048;
+#[cfg(not(test))]
 const MESSAGE_ID_PREALLOC_LEN: usize = 2048;
+
+// Reduce the pre allocation length in tests to speed them up significantly
+#[cfg(test)]
+const ACTION_ID_PREALLOC_LEN:  usize = 16;
+#[cfg(test)]
+const MESSAGE_ID_PREALLOC_LEN: usize = 16;
 
 pub struct AIDGenerator {
     // NOT SHIFTED, so that we can wrap around manually!

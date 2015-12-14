@@ -18,7 +18,7 @@ pub struct MainlineDht {
 
 impl MainlineDht {
     /// Start the MainlineDht with the given DhtBuilder and Handshaker.
-    pub fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> io::Result<MainlineDht>
+    fn with_builder<H>(builder: DhtBuilder, handshaker: H) -> io::Result<MainlineDht>
         where H: Handshaker + 'static {
         let send_sock = try!(UdpSocket::bind(&builder.src_addr));
         let recv_sock = try!(send_sock.try_clone());
@@ -50,11 +50,16 @@ impl MainlineDht {
     }
     
     /// An event Receiver which will receive events occuring within the DHT.
+    ///
+    /// It is important to at least monitor the DHT for shutdown events as any calls
+    /// after that event occurs will not be processed but no indication will be given.
     pub fn events(&self) -> Receiver<DhtEvent> {
         let (send, recv) = mpsc::channel();
         
         if self.send.send(OneshotTask::RegisterSender(send)).is_err() {
             warn!("bip_dht: MainlineDht failed to send a register sender message...");
+            // TODO: Should we push a Shutdown event through the sender here? We would need
+            // to know the cause or create a new cause for this specific scenario.
         }
         
         recv

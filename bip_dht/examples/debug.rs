@@ -82,7 +82,7 @@ fn main() {
 	
 	let hash = [0x52, 0x47, 0x4E, 0x14, 0xC2, 0x58, 0x50, 0x53, 0x44, 0xF9, 0xB2, 0x6E, 0x80, 0x64, 0xA2, 0x0F, 0x47, 0x5F, 0x00, 0x70];
     
-    let address = ("0.0.0.0", 6889).to_socket_addrs().unwrap().next().unwrap();
+    let address = ("10.124.24.130", 6889).to_socket_addrs().unwrap().next().unwrap();
     let dht = DhtBuilder::with_router(Router::Transmission).set_read_only(false)
         .set_source_addr(address).start_mainline(SimpleHandshaker{ filter: HashSet::new(), count: 0 }).unwrap();
     

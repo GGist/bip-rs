@@ -17,6 +17,8 @@ pub mod net;
 pub mod sha;
 
 /// Testing fixtures for dependant crates.
+// TODO: Some non test functions in other crates use this, mark that as cfg test
+// when we migrate away from these functions in non test functions.
 pub mod test;
 
 mod error;

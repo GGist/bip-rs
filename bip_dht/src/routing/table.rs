@@ -84,7 +84,10 @@ impl RoutingTable {
         }
         let num_same_bits = leading_bit_count(self.node_id, node.id());
         
-        self.bucket_node(node, num_same_bits);
+        // Should not add a node that has the same id as us
+        if num_same_bits != MAX_BUCKETS {
+            self.bucket_node(node, num_same_bits);
+        }
     }
     
     /// Recursively tries to place the node into some bucket.
@@ -433,192 +436,172 @@ fn index_is_in_bounds(length: usize, checked_index: Option<usize>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    /*
-    use std::net::{ToSocketAddrs};
+    use bip_util::bt::{self, NodeId};
+    use bip_util::test as bip_test;
 
-    use bip_util::{self, NodeId};
-
-    use routing::table::{RoutingTable, BucketContents};
+    use routing::table::{self, RoutingTable, BucketContents};
     use routing::bucket::{self};
     use routing::node::{Node};
     
-    fn good_node_from_id<T>(node_id: T) -> Node where T: Into<NodeId> {
-        let mut node = Node::new(
-            node_id.into(),
-            "127.0.0.1:0".to_socket_addrs().unwrap().next().unwrap()
-        );
-        node.remote_response();
+    // TODO: Move into bip_util crate
+    fn flip_id_bit_at_index(node_id: NodeId, index: usize) -> NodeId {
+        let mut id_bytes: [u8; bt::NODE_ID_LEN]  = node_id.into();
+        let (byte_index, bit_index) = (index / 8, index % 8);
         
-        node
+        let actual_bit_index = 7 - bit_index;
+        id_bytes[byte_index] ^= 1 << actual_bit_index;
+        
+        id_bytes.into()
     }
     
     #[test]
     fn positive_add_node_max_recursion() {
-        let id = [1u8; bip_util::NODE_ID_LEN];
-    
-        let my_node_id = NodeId::from(id);
-        let mut routing_table = RoutingTable::new(my_node_id);
+        let table_id = [1u8; bt::NODE_ID_LEN];
+        let mut table = RoutingTable::new(table_id.into());
         
-        let mut other_id = id;
-        // Modify last bit of the last byte so it is 1 off
-        other_id[bip_util::NODE_ID_LEN - 1] = 2;
+        let mut node_id = table_id;
+        // Modify the id so it is placed in the last bucket
+        node_id[bt::NODE_ID_LEN - 1] = 0;
         
-        let mut other_node = good_node_from_id(other_id);
-        
-        for _ in 0..(bucket::MAX_BUCKET_SIZE + 1) {
-            routing_table.add_node(other_node);
+        // Trigger a bucket overflow and since the ids are placed in the last bucket, all of
+        // the buckets will be recursively created and inserted into the list of all buckets.
+        let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
+        for index in 0..(bucket::MAX_BUCKET_SIZE + 1) {
+            let node = Node::as_good(node_id.into(), block_addrs[index]);
+            
+            table.add_node(node);
         }
     }
     
     #[test]
-    fn positive_initial_all_empty_buckets() {
-        let id = [0u8; bip_util::NODE_ID_LEN];
-        let my_node_id = NodeId::from(id);
-    
-        let routing_table = RoutingTable::new(my_node_id);
-        let num_empty_buckets = routing_table.buckets().filter(|b|
-            b.is_empty()
-        ).count();
+    fn positive_initial_empty_buckets() {
+        let table_id = [1u8; bt::NODE_ID_LEN];
+        let mut table = RoutingTable::new(table_id.into());
         
-        assert_eq!(num_empty_buckets, super::MAX_BUCKETS);
+        // First buckets should be empty
+        assert_eq!(table.buckets().take(table::MAX_BUCKETS).count(), table::MAX_BUCKETS);
+        assert!(table.buckets().take(table::MAX_BUCKETS).fold(true, |prev, contents| prev && contents.is_empty()));
+        
+        // Last assorted bucket should show up
+        assert_eq!(table.buckets().skip(table::MAX_BUCKETS).count(), 1);
+        for bucket in table.buckets().skip(table::MAX_BUCKETS) {
+            match bucket {
+                BucketContents::Assorted(b) => assert_eq!(b.pingable_nodes().count(), 0),
+                _                           => panic!("Expected BucketContents::Assorted")
+            }
+        }
     }
     
     #[test]
-    fn positive_initial_one_assorted_buckets() {
-        let id = [0u8; bip_util::NODE_ID_LEN];
-        let my_node_id = NodeId::from(id);
-    
-        let routing_table = RoutingTable::new(my_node_id);
-        let num_assorted_buckets = routing_table.buckets().filter(|b|
-            b.is_assorted()
-        ).count();
+    fn positive_first_bucket_sorted() {
+        let table_id = [1u8; bt::NODE_ID_LEN];
+        let mut table = RoutingTable::new(table_id.into());
         
-        assert_eq!(num_assorted_buckets, 1);
+        let mut node_id = table_id;
+        // Flip first bit so we are placed in the first bucket
+        node_id[0] |= 128;
+        
+        let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
+        for index in 0..(bucket::MAX_BUCKET_SIZE + 1) {
+            let node = Node::as_good(node_id.into(), block_addrs[index]);
+            
+            table.add_node(node);
+        }
+        
+        // First bucket should be sorted
+        assert_eq!(table.buckets().take(1).count(), 1);
+        for bucket in table.buckets().take(1) {
+            match bucket {
+                BucketContents::Sorted(b) => assert_eq!(b.pingable_nodes().count(), bucket::MAX_BUCKET_SIZE),
+                _                         => panic!("Expected BucketContents::Sorted")
+            }
+        }
+        
+        // Middle buckets should be empty
+        assert_eq!(table.buckets().skip(1).take(table::MAX_BUCKETS - 1).count(), table::MAX_BUCKETS - 1);
+        assert!(table.buckets().skip(1).take(table::MAX_BUCKETS - 1).fold(true, |prev, contents| prev && contents.is_empty()));
+        
+        // Last assorted bucket should show up
+        assert_eq!(table.buckets().skip(table::MAX_BUCKETS).count(), 1);
+        for bucket in table.buckets().skip(table::MAX_BUCKETS) {
+            match bucket {
+                BucketContents::Assorted(b) => assert_eq!(b.pingable_nodes().count(), 0),
+                _                           => panic!("Expected BucketContents::Assorted")
+            }
+        }
     }
     
     #[test]
-    fn positive_one_sorted_buckets() {
-        let my_id = [0u8; bip_util::NODE_ID_LEN];
-        let my_node_id = NodeId::from(my_id);
-    
-        let mut routing_table = RoutingTable::new(my_node_id);
+    fn positive_last_bucket_sorted() {
+        let table_id = [1u8; bt::NODE_ID_LEN];
+        let mut table = RoutingTable::new(table_id.into());
         
-        // Push same node so that bucket has to split
-        let mut id = [0u8; bip_util::NODE_ID_LEN];
-        // Bucket should be found at the 4th index
-        id[0] = 0x08;
-        let node = good_node_from_id(id);
+        let mut node_id = table_id;
+        // Flip last bit so we are placed in the last bucket
+        node_id[bt::NODE_ID_LEN - 1] = 0;
         
-        // Going to size + 1 so that the bucket overflows and splits
-        for _ in 0..(bucket::MAX_BUCKET_SIZE + 1) {
-            routing_table.add_node(node);
+        let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
+        for index in 0..(bucket::MAX_BUCKET_SIZE + 1) {
+            let node = Node::as_good(node_id.into(), block_addrs[index]);
+            
+            table.add_node(node);
         }
         
-        match routing_table.buckets().nth(4) {
-            Some(BucketContents::Sorted(b)) => {
-                assert!(b.iter().fold(true, |init, node| init && node.id() == id[..] ) &&
-                    b.iter().count() == bucket::MAX_BUCKET_SIZE)
-            },
-            _ => panic!("Expected bucket not found at nth index")
+        // First buckets should be sorted (although they are all empty)
+        assert_eq!(table.buckets().take(table::MAX_BUCKETS - 1).count(), table::MAX_BUCKETS - 1);
+        for bucket in table.buckets().take(table::MAX_BUCKETS - 1) {
+            match bucket {
+                BucketContents::Sorted(b) => assert_eq!(b.pingable_nodes().count(), 0),
+                _                         => panic!("Expected BucketContents::Sorted")
+            }
         }
+        
+        // Last bucket should be sorted
+        assert_eq!(table.buckets().skip(table::MAX_BUCKETS - 1).take(1).count(), 1);
+        for bucket in table.buckets().skip(table::MAX_BUCKETS - 1).take(1) {
+            match bucket {
+                BucketContents::Sorted(b) => assert_eq!(b.pingable_nodes().count(), bucket::MAX_BUCKET_SIZE),
+                _                         => panic!("Expected BucketContents::Sorted")
+            }
+        }
+        
+        // Last assorted bucket should NOT show up
+        assert_eq!(table.buckets().skip(table::MAX_BUCKETS).count(), 0);
     }
     
     #[test]
     fn positive_all_sorted_buckets() {
-        let my_id = [0u8; bip_util::NODE_ID_LEN];
-        let my_node_id = NodeId::from(my_id);
+        let table_id = [1u8; bt::NODE_ID_LEN];
+        let mut table = RoutingTable::new(table_id.into());
         
-        let mut routing_table = RoutingTable::new(my_node_id);
-        
-        let mut id = [0u8; bip_util::NODE_ID_LEN];
-        // Our id is all zero bits, need to rotate a one bit throughout whole table
-        for byte_index in 0..(super::MAX_BUCKETS / 8) {
-            // Start with the high order bit set for the current byte
-            let byte = 0x80;
-            
-            for bit_shift in 0..8 {
-                let shifted_byte = byte >> bit_shift;
+        let block_addrs = bip_test::dummy_block_socket_addrs(bucket::MAX_BUCKET_SIZE as u16);
+        for bit_flip_index in 0..table::MAX_BUCKETS {
+            for addr_index in 0..block_addrs.len() {
+                let bucket_node_id = flip_id_bit_at_index(table_id.into(), bit_flip_index);
                 
-                // Set new byte in id
-                id[byte_index] = shifted_byte;
-                
-                let node = good_node_from_id(id);
-                // Overflow bucket in routing table
-                for _ in 0..(bucket::MAX_BUCKET_SIZE + 1) {
-                    routing_table.add_node(node);
-                }
-            }
-            
-            id[byte_index] = 0;
-        }
-        
-        // Check that all sorted buckets occur
-        for (same_bits, contents) in routing_table.buckets().enumerate().take(super::MAX_BUCKETS) {
-            match contents {
-                BucketContents::Sorted(bucket) => {
-                    // Validate the number of same bits for each node against the routing table id
-                    for node in bucket.iter() {
-                        assert_eq!(same_bits, super::leading_bit_count(my_node_id, node.id()));
-                    }
-                },
-                _ => panic!(format!("BucketContents Not Sorted For First {} Buckets", super::MAX_BUCKETS))
+                table.add_node(Node::as_good(bucket_node_id, block_addrs[addr_index]));
             }
         }
         
-        // Check that assorted bucket does not occur
-        assert!(routing_table.buckets().nth(super::MAX_BUCKETS).is_none());
+        assert_eq!(table.buckets().count(), table::MAX_BUCKETS);
+        for bucket in table.buckets() {
+            match bucket {
+                BucketContents::Sorted(b) => assert_eq!(b.pingable_nodes().count(), bucket::MAX_BUCKET_SIZE),
+                _                         => panic!("Expected BucketContents::Sorted")
+            }
+        }
     }
     
     #[test]
-    fn positive_closest_nodes_some_full_buckets() {
-        let mut id = [0u8; bip_util::NODE_ID_LEN];
-        id[bip_util::NODE_ID_LEN - 1] = 0x01;
+    fn negative_node_id_equal_table_id() {
+        let table_id = [1u8; bt::NODE_ID_LEN];
+        let mut table = RoutingTable::new(table_id.into());
         
-        let my_node_id = NodeId::from(id);
-        let mut routing_table = RoutingTable::new(my_node_id);
+        assert_eq!(table.closest_nodes(table_id.into()).count(), 0);
         
-        let lookup_id_bits = 0x08;
-        let first_id_bits = 0x04;
-        let second_id_bits = 0x20;
-        let third_id_bits = 0x80;
+        let node = Node::as_good(table_id.into(), bip_test::dummy_socket_addr_v4());
+        table.add_node(node);
         
-        // Get the lookup node id
-        let mut lookup_id = [0u8; bip_util::NODE_ID_LEN];
-        lookup_id[0] = lookup_id_bits;
-        let lookup_node_id = NodeId::from(lookup_id);
-        
-        // Create 3 full buckets of good nodes different distances away from the lookup id
-        let mut first_id = [0u8; bip_util::NODE_ID_LEN];
-        first_id[0] = first_id_bits;
-        let first_node = good_node_from_id(first_id);
-        
-        let mut second_id = [0u8; bip_util::NODE_ID_LEN];
-        second_id[0] = second_id_bits;
-        let second_node = good_node_from_id(second_id);
-        
-        let mut third_id = [0u8; bip_util::NODE_ID_LEN];
-        third_id[0] = third_id_bits;
-        let third_node = good_node_from_id(third_id);
-        
-        for _ in 0..bucket::MAX_BUCKET_SIZE {
-            routing_table.add_node(first_node);
-            routing_table.add_node(second_node);
-            routing_table.add_node(third_node);
-        }
-        
-        // Iterator over the closest nodes to the lookup id
-        let mut routing_table_iter = routing_table.closest_nodes(lookup_node_id);
-        
-        for _ in 0..bucket::MAX_BUCKET_SIZE {
-            assert_eq!(routing_table_iter.next().unwrap().id(), first_node.id());
-        }
-        for _ in 0..bucket::MAX_BUCKET_SIZE {
-            assert_eq!(routing_table_iter.next().unwrap().id(), second_node.id());
-        }
-        for _ in 0..bucket::MAX_BUCKET_SIZE {
-            assert_eq!(routing_table_iter.next().unwrap().id(), third_node.id());
-        }
-        
-        assert!(routing_table_iter.next().is_none());
-    }*/
+        assert_eq!(table.closest_nodes(table_id.into()).count(), 0);
+    }
 }

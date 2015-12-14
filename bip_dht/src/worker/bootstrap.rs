@@ -229,6 +229,7 @@ impl TableBootstrap {
 }
 
 /// Panics if index is out of bounds.
+/// TODO: Move into bip_util crate
 fn flip_id_bit_at_index(node_id: NodeId, index: usize) -> NodeId {
     let mut id_bytes: [u8; bt::NODE_ID_LEN]  = node_id.into();
     let (byte_index, bit_index) = (index / 8, index % 8);

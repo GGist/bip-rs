@@ -37,6 +37,20 @@ pub fn dummy_socket_addr_v4() -> SocketAddr {
     SocketAddr::V4(v4_socket)
 }
 
+/// Generates a block of unique ipv4 addresses as Vec<SocketAddr>
+pub fn dummy_block_socket_addrs(num_addrs: u16) -> Vec<SocketAddr> {
+    let mut addr_block = Vec::with_capacity(num_addrs as usize);
+    
+    for port in 0..num_addrs {
+        let ip = Ipv4Addr::new(127, 0, 0, 1);
+        let sock_addr = SocketAddrV4::new(ip, port);
+        
+        addr_block.push(SocketAddr::V4(sock_addr));
+    }
+    
+    addr_block
+}
+
 /// Generates a dummy node id as a NodeId.
 pub fn dummy_node_id() -> NodeId {
     NodeId::from([0u8; bt::NODE_ID_LEN])
