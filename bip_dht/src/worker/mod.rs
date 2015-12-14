@@ -23,8 +23,6 @@ pub enum OneshotTask {
     Incoming(Vec<u8>, SocketAddr),
     /// Register a sender to send DhtEvents to.
     RegisterSender(mpsc::Sender<DhtEvent>),
-    /// Schedule a ScheduledTask to occur some time later.
-    ScheduleTask(u64, ScheduledTask),
     /// Load a new bootstrap operation into worker storage.
     StartBootstrap(Vec<Router>, Vec<SocketAddr>),
     /// Start a lookup for the given InfoHash.

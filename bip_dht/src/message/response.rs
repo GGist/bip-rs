@@ -62,6 +62,7 @@ impl<'a> BencodeConvert for ResponseValidate<'a> {
 
 //----------------------------------------------------------------------------//
 
+#[allow(unused)]
 pub enum ExpectedResponse {
     Ping,
     FindNode,

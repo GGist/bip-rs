@@ -1,5 +1,4 @@
 use std::collections::{HashMap};
-use std::collections::hash_map::{Entry};
 use std::convert::{AsRef};
 use std::io::{self};
 use std::iter::{self};
@@ -11,6 +10,7 @@ use std::thread::{self};
 use bip_bencode::{Bencode};
 use bip_handshake::{Handshaker};
 use bip_util::bt::{InfoHash};
+use bip_util::convert::{self};
 use bip_util::net::{IpAddr};
 use mio::{self, EventLoop, Handler};
 
@@ -19,12 +19,14 @@ use message::ping::{PingResponse};
 use message::find_node::{FindNodeResponse};
 use message::get_peers::{GetPeersResponse, CompactInfoType};
 use message::announce_peer::{AnnouncePeerResponse};
+use message::error::{ErrorCode, ErrorMessage};
 use message::request::{RequestType};
 use message::response::{ResponseType, ExpectedResponse};
-use message::compact_info::{CompactNodeInfo};
+use message::compact_info::{CompactNodeInfo, CompactValueInfo};
 use router::{Router};
 use routing::node::{Node};
 use routing::table::{RoutingTable};
+use storage::{AnnounceStorage};
 use token::{TokenStore, Token};
 use transaction::{AIDGenerator, TransactionID, ActionID};
 use worker::{OneshotTask, ScheduledTask, DhtEvent, ShutdownCause};
@@ -86,7 +88,7 @@ pub struct DhtHandler<H> {
     bootstrapper:    (ActionID, TableBootstrap, usize),
     aid_generator:   AIDGenerator,
     routing_table:   RoutingTable,
-    active_stores:   HashMap<InfoHash, Vec<SocketAddr>>,
+    active_stores:   AnnounceStorage,
     active_lookups:  HashMap<ActionID, TableLookup>,
     event_notifiers: Vec<mpsc::Sender<DhtEvent>>
 }
@@ -106,8 +108,8 @@ impl<H> DhtHandler<H> where H: Handshaker {
     
         DhtHandler{ read_only: read_only, refresher: (refresh_action_id, table_refresh), handshaker: handshaker,
             out_channel: out, bootstrapper: (boot_action_id, table_bootstrap, 0), token_store: TokenStore::new(),
-            aid_generator: aid_generator, routing_table: table, active_stores: HashMap::new(), active_lookups: HashMap::new(),
-            event_notifiers: Vec::new() }
+            aid_generator: aid_generator, routing_table: table, active_stores: AnnounceStorage::new(),
+            active_lookups: HashMap::new(), event_notifiers: Vec::new() }
     }
 }
 
@@ -122,9 +124,6 @@ impl<H> Handler for DhtHandler<H> where H: Handshaker {
             },
             OneshotTask::RegisterSender(send) => {
                 handle_register_sender(self, send);
-            }
-            OneshotTask::ScheduleTask(timeout, task) => {
-                handle_schedule_task(event_loop, timeout, task);
             },
             OneshotTask::StartBootstrap(routers, nodes) => {
                 handle_start_bootstrap(self, event_loop, routers, nodes);
@@ -304,17 +303,55 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
         },
         Ok(MessageType::Request(RequestType::GetPeers(g))) => {
             info!("bip_dht: Received a GetPeersRequest...");
-            // TODO: Check if we have values for the given info hash
+            // TODO: Check what the maximum number of values we can give without overflowing a udp packet
+            // Also, if we arent going to give all of the contacts, we may want to shuffle which ones we give
+            let mut contact_info_bytes = Vec::with_capacity(6 * 15);
+            handler.active_stores.find_items(&g.info_hash(), |addr| {
+                let mut bytes = [0u8; 6];
+                let port = addr.port();
+                
+                match addr {
+                    SocketAddr::V4(v4_addr) => {
+                        for (src, dst) in convert::ipv4_to_bytes_be(*v4_addr.ip()).iter().zip(bytes.iter_mut()) {
+                            *dst = *src;
+                        }
+                    },
+                    SocketAddr::V6(_) => {
+                        error!("AnnounceStorage contained an IPv6 Address...");
+                        return
+                    }
+                };
+                
+                bytes[4] = (port >> 8) as u8;
+                bytes[5] = (port & 0x00FF) as u8;
+                
+                contact_info_bytes.extend_from_slice(&bytes);
+            });
+            // Grab the bencoded list (ugh, we really have to do this...)
+            let mut contact_info_bencode = Vec::with_capacity(contact_info_bytes.len() / 6);
+            for chunk_index in 0..(contact_info_bytes.len() / 6) {
+                let (start, end) = (chunk_index * 6, chunk_index * 6 + 6);
+                
+                contact_info_bencode.push(ben_bytes!(&contact_info_bytes[start..end]));
+            }
             
-            // Otherwise return closest nodes
+            // Grab the closest nodes
             let mut closest_nodes_bytes = Vec::with_capacity(26 * 8);
             for node in handler.routing_table.closest_nodes(g.info_hash()).take(8) {
                 closest_nodes_bytes.extend_from_slice(&node.encode());
             }
             
+            // Wrap up the nodes/values we are going to be giving them
             let token = handler.token_store.checkout(IpAddr::from_socket_addr(addr));
+            let comapct_info_type = if !contact_info_bencode.is_empty() {
+                CompactInfoType::Both( CompactNodeInfo::new(&closest_nodes_bytes).unwrap(),
+                    CompactValueInfo::new(&contact_info_bencode).unwrap() )
+            } else {
+                CompactInfoType::Nodes(CompactNodeInfo::new(&closest_nodes_bytes).unwrap())
+            };
+            
             let get_peers_rsp = GetPeersResponse::new(g.transaction_id(), handler.routing_table.node_id(),
-                Some(token.as_ref()), CompactInfoType::Nodes(CompactNodeInfo::new(&closest_nodes_bytes).unwrap()));
+                Some(token.as_ref()), comapct_info_type);
             let get_peers_msg = get_peers_rsp.encode();
             
             if handler.out_channel.send((get_peers_msg, addr)).is_err() {
@@ -333,26 +370,22 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
                 Err(_) => false
             };
             
-            if !is_valid {
-                warn!("bip_dht: Node sent us an invalid announce token...");
-                return
-            }
+            // Resolve type of response we are going to send
+            let response_msg = if !is_valid {
+                // Node gave us an invalid token
+                warn!("bip_dht: Remote node sent us an invalid token for an AnnounceRequest...");
+                ErrorMessage::new(a.transaction_id().to_vec(), ErrorCode::ProtocolError, "Received An Invalid Token".to_owned()).encode()
+            } else if handler.active_stores.add_item(a.info_hash(), addr) { // TODO: Check if they gave us an explicit port or an implicit one
+                // Node successfully stored the value with us, send an announce response
+                AnnouncePeerResponse::new(a.transaction_id(), handler.routing_table.node_id()).encode()
+            } else {
+                // Node unsuccessfully stored the value with us, send them an error message
+                // TODO: Spec doesnt actually say what error message to send, or even if we should send one...
+                warn!("bip_dht: AnnounceStorage failed to store contact information because it is full...");
+                ErrorMessage::new(a.transaction_id().to_vec(), ErrorCode::ServerError, "Announce Storage Is Full".to_owned()).encode()
+            };
             
-            // Store the value
-            // TODO: Add a cap and an expire time for stored values
-            match handler.active_stores.entry(a.info_hash()) {
-                Entry::Occupied(mut occ) => {
-                    occ.get_mut().push(addr);
-                },
-                Entry::Vacant(vac) => {
-                    vac.insert(vec![addr]);
-                }
-            }
-            
-            let announce_peer_rsp = AnnouncePeerResponse::new(a.transaction_id(), handler.routing_table.node_id());
-            let announce_peer_msg = announce_peer_rsp.encode();
-            
-            if handler.out_channel.send((announce_peer_msg, addr)).is_err() {
+            if handler.out_channel.send((response_msg, addr)).is_err() {
                 error!("bip_dht: Failed to send an announce peer response on the out channel...");
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
             }
@@ -464,13 +497,6 @@ fn handle_register_sender<H>(handler: &mut DhtHandler<H>, sender: mpsc::Sender<D
     handler.event_notifiers.push(sender);
 }
 
-fn handle_schedule_task<H>(event_loop: &mut EventLoop<DhtHandler<H>>, timeout: u64, task: ScheduledTask)
-    where H: Handshaker {
-    if event_loop.timeout_ms((timeout, task), timeout).is_err() {
-        shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
-    }
-}
-
 fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, routers: Vec<Router>, nodes: Vec<SocketAddr>)
     where H: Handshaker {
     let router_iter = routers.into_iter().filter_map(|r| r.ipv4_addr().ok().map(|v4| SocketAddr::V4(v4)) );
@@ -505,7 +531,7 @@ fn handle_start_lookup<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoo
     let mid_generator = handler.aid_generator.generate();
     let action_id = mid_generator.action_id();
     
-    match TableLookup::new(handler.routing_table.node_id(), info_hash, mid_generator, &handler.routing_table, &handler.out_channel, event_loop) {
+    match TableLookup::new(handler.routing_table.node_id(), info_hash, mid_generator, should_announce, &handler.routing_table, &handler.out_channel, event_loop) {
         Some(lookup) => { handler.active_lookups.insert(action_id, lookup); },
         None         => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
     }
@@ -569,7 +595,7 @@ fn handle_check_lookup_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut 
 fn handle_check_lookup_endgame<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID)
     where H: Handshaker {
     if let Some(mut lookup) = handler.active_lookups.remove(&trans_id.action_id()) {
-        match lookup.recv_finished(&handler.out_channel) {
+        match lookup.recv_finished(handler.handshaker.port(), &handler.out_channel) {
             LookupStatus::Searching => (),
             LookupStatus::Values(v) => {
                 // Add values to handshaker

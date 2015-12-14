@@ -8,6 +8,7 @@ use bip_util::net::{self};
 use bip_util::sha::{ShaHash};
 use mio::{EventLoop, Timeout};
 
+use message::announce_peer::{AnnouncePeerRequest, ResponsePort};
 use message::get_peers::{GetPeersRequest, CompactInfoType, GetPeersResponse};
 use routing::bucket::{self};
 use routing::node::{Node, NodeStatus};
@@ -27,7 +28,7 @@ const ENDGAME_TIMEOUT_MS: u64 = 1500;
 
 const INITIAL_PICK_NUM:   usize = 4; // Alpha
 const ITERATIVE_PICK_NUM: usize = 3; // Beta
-//const ANNOUNCE_PICK_NUM:  usize = 8; // # Announces
+const ANNOUNCE_PICK_NUM:  usize = 8; // # Announces
 
 type Distance       = ShaHash;
 type DistanceToBeat = ShaHash;
@@ -47,6 +48,7 @@ pub struct TableLookup {
     // If we have received any values in the lookup.
     recv_values:      bool,
     id_generator:     MIDGenerator,
+    will_announce:    bool,
     // DistanceToBeat is the distance that the responses of the current lookup needs to beat,
     // interestingly enough (and super important), this distance may not be eqaul to the
     // requested node's distance
@@ -60,7 +62,7 @@ pub struct TableLookup {
 // Gather nodes 
 
 impl TableLookup {
-    pub fn new<H>(table_id: NodeId, target_id: InfoHash, id_generator: MIDGenerator, table: &RoutingTable,
+    pub fn new<H>(table_id: NodeId, target_id: InfoHash, id_generator: MIDGenerator, will_announce: bool, table: &RoutingTable,
         out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
         -> Option<TableLookup> where H: Handshaker {
         // Pick a buckets worth of nodes and put them into the all_sorted_nodes list
@@ -79,7 +81,7 @@ impl TableLookup {
         
         // Construct the lookup table structure
         let mut table_lookup = TableLookup{ table_id: table_id, target_id: target_id, in_endgame: false, recv_values: false,
-            id_generator: id_generator, all_sorted_nodes: all_sorted_nodes, announce_tokens: HashMap::new(),
+            id_generator: id_generator, will_announce: will_announce, all_sorted_nodes: all_sorted_nodes, announce_tokens: HashMap::new(),
             active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
         // Call start_request_round with the list of initial_nodes
@@ -212,16 +214,37 @@ impl TableLookup {
         self.current_lookup_status()
     }
     
-    pub fn recv_finished(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>) -> LookupStatus {
-        // TODO: Announce to the appropriate nodes
+    pub fn recv_finished(&mut self, handshake_port: u16, out: &SyncSender<(Vec<u8>, SocketAddr)>) -> LookupStatus {
+        let mut fatal_error = false;
         
-        // This may not be cleared since we didnt set a timeout for each node,
-        // any nodes that didnt respond would still be in here.
+        // Announce if we were told to
+        if self.will_announce {
+            // Partial borrow so the filter function doesnt capture all of self
+            let announce_tokens = &self.announce_tokens;
+            
+            for &(_, ref node, _) in self.all_sorted_nodes.iter().filter(|&&(_, ref node, _)| announce_tokens.contains_key(node)).take(ANNOUNCE_PICK_NUM) {
+                let trans_id = self.id_generator.generate();
+                let token = announce_tokens.get(node).unwrap();
+                
+                let announce_peer_req = AnnouncePeerRequest::new(trans_id.as_ref(), self.table_id, self.target_id, token.as_ref(), ResponsePort::Explicit(handshake_port));
+                let announce_peer_msg = announce_peer_req.encode();
+                
+                if out.send((announce_peer_msg, node.addr())).is_err() {
+                    error!("bip_dht: TableLookup announce request failed to send through the out channel...");
+                    fatal_error = true;
+                }
+            }
+        }
+        
+        // This may not be cleared since we didnt set a timeout for each node, any nodes that didnt respond would still be in here.
         self.active_lookups.clear();
-        
         self.in_endgame = false;
         
-        self.current_lookup_status()
+        if fatal_error {
+            LookupStatus::Failed
+        } else {
+            self.current_lookup_status()
+        }
     }
     
     fn current_lookup_status(&self) -> LookupStatus {

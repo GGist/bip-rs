@@ -31,6 +31,7 @@ mod error;
 mod message;
 mod router;
 mod security;
+mod storage;
 mod routing;
 mod token;
 mod transaction;
