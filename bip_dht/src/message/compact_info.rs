@@ -158,13 +158,12 @@ fn socket_v4_from_bytes_be(bytes: &[u8]) -> GenericResult<SocketAddrV4> {
 
 #[cfg(test)]
 mod tests {
-    /*
     use std::net::{SocketAddrV4, Ipv4Addr};
 
-    use bip_util::{NodeId};
-    use bip_util::hash::{ShaHash};
+    use bip_util::bt::{NodeId};
+    use bip_util::sha::{ShaHash};
 
-    use message::compact_info::{CompactNodeInfo};
+    use message::compact_info::{CompactNodeInfo, CompactValueInfo};
     
     #[test]
     fn positive_compact_nodes_empty() {
@@ -183,7 +182,7 @@ mod tests {
         let collected_info: Vec<(NodeId, SocketAddrV4)> = compact_node.into_iter().collect();
         assert_eq!(collected_info.len(), 1);
         
-        assert_eq!(collected_info[0].0, ShaHash::from_bytes(&bytes[0..20]).unwrap());
+        assert_eq!(collected_info[0].0, ShaHash::from_hash(&bytes[0..20]).unwrap());
         assert_eq!(collected_info[0].1, SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 43689));
     }
     
@@ -198,10 +197,46 @@ mod tests {
         let collected_info: Vec<(NodeId, SocketAddrV4)> = compact_node.into_iter().collect();
         assert_eq!(collected_info.len(), 2);
         
-        assert_eq!(collected_info[0].0, ShaHash::from_bytes(&bytes[0..20]).unwrap());
+        assert_eq!(collected_info[0].0, ShaHash::from_hash(&bytes[0..20]).unwrap());
         assert_eq!(collected_info[0].1, SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 240));
         
-        assert_eq!(collected_info[1].0, ShaHash::from_bytes(&bytes[0..20]).unwrap());
+        assert_eq!(collected_info[1].0, ShaHash::from_hash(&bytes[0..20]).unwrap());
         assert_eq!(collected_info[1].1, SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 2), 240));
-    }*/
+    }
+    
+    #[test]
+    fn positive_compact_values_empty() {
+        let bencode_values = Vec::new();
+        let compact_value = CompactValueInfo::new(&bencode_values[..]).unwrap();
+        
+        let collected_info: Vec<SocketAddrV4> = compact_value.into_iter().collect();
+        
+        assert!(collected_info.is_empty());
+    }
+    
+    #[test]
+    fn positive_compact_values_one() {
+        let bytes = [127, 0, 0, 1, (6881 >> 8) as u8, (6881 & 0x00FF) as u8];
+        let bencode_values = ben_list!(ben_bytes!(&bytes));
+        let compact_value = CompactValueInfo::new(bencode_values.list().unwrap()).unwrap();
+        
+        let collected_info: Vec<SocketAddrV4> = compact_value.into_iter().collect();
+        assert_eq!(collected_info.len(), 1);
+        
+        assert_eq!(collected_info[0], SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 6881));
+    }
+    
+    #[test]
+    fn positive_compact_values_many() {
+        let bytes_one = [127, 0, 0, 1, (6881 >> 8) as u8, (6881 & 0x00FF) as u8];
+        let bytes_two = [10, 0, 0, 1, (6889 >> 8) as u8, (6889 & 0x00FF) as u8];
+        let bencode_values = ben_list!(ben_bytes!(&bytes_one), ben_bytes!(&bytes_two));
+        let compact_value = CompactValueInfo::new(bencode_values.list().unwrap()).unwrap();
+        
+        let collected_info: Vec<SocketAddrV4> = compact_value.into_iter().collect();
+        assert_eq!(collected_info.len(), 2);
+        
+        assert_eq!(collected_info[0], SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 6881));
+        assert_eq!(collected_info[1], SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6889));
+    }
 }

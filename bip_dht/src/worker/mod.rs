@@ -14,6 +14,7 @@ pub mod bootstrap;
 pub mod handler;
 pub mod lookup;
 pub mod messenger;
+pub mod refresh;
 
 /// Task that our DHT will execute immediately.
 #[derive(Clone)]
@@ -70,7 +71,7 @@ pub enum ShutdownCause {
 /// Spawns the necessary workers that make up our local DHT node and connects them via channels
 /// so that they can send and receive DHT messages.
 pub fn start_mainline_dht<H>(send_socket: UdpSocket, recv_socket: UdpSocket, read_only: bool,
-    ext_addr: Option<SocketAddr>, handshaker: H, kill_sock: UdpSocket, kill_addr: SocketAddr)
+    _: Option<SocketAddr>, handshaker: H, kill_sock: UdpSocket, kill_addr: SocketAddr)
     -> io::Result<mio::Sender<OneshotTask>> where H: Handshaker + 'static {
     let outgoing = messenger::create_outgoing_messenger(send_socket);
 

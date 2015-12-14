@@ -14,8 +14,6 @@ use transaction::{MIDGenerator, TransactionID};
 use worker::{ScheduledTask};
 use worker::handler::{DhtHandler};
 
-const REFRESH_INTERVAL_TIMEOUT: u64 = 6000;
-
 const BOOTSTRAP_INITIAL_TIMEOUT: u64 = 2000;
 const BOOTSTRAP_NODE_TIMEOUT:    u64 = 500;
 
@@ -39,7 +37,6 @@ pub struct TableBootstrap {
     starting_nodes:        Vec<SocketAddr>,
     active_messages:       HashMap<TransactionID, Timeout>,
     starting_routers:      HashSet<SocketAddr>,
-    curr_refresh_bucket:   usize,
     curr_bootstrap_bucket: usize
 }
 
@@ -49,8 +46,7 @@ impl TableBootstrap {
         let router_filter: HashSet<SocketAddr> = routers.collect();
         
         TableBootstrap{ table_id: table_id, id_generator: id_generator, starting_nodes: nodes,
-            starting_routers: router_filter, active_messages: HashMap::new(), curr_refresh_bucket: 0,
-            curr_bootstrap_bucket: 0 }
+            starting_routers: router_filter, active_messages: HashMap::new(), curr_bootstrap_bucket: 0 }
     }
     
     pub fn start_bootstrap<H>(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
@@ -132,10 +128,6 @@ impl TableBootstrap {
         }
         
         self.current_bootstrap_status()
-    }
-    
-    pub fn continue_refresh(&mut self, ) -> bool {
-        unimplemented!();
     }
     
     // Returns true if there are more buckets to bootstrap, false otherwise

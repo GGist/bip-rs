@@ -259,7 +259,7 @@ impl MessageID {
 mod tests {
     use std::collections::{HashSet};
     
-    use super::{AIDGenerator, MIDGenerator, TransactionID, ActionID, MessageID};
+    use super::{AIDGenerator, TransactionID};
     
     #[test]
     fn positive_tid_from_bytes() {

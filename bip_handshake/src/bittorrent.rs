@@ -169,6 +169,8 @@ fn initiate_handshake<T>(protocol: &'static str, id: PeerId, expected_id: Option
     recipients: Arc<InfoHashMap<Sender<PeerInfo<T>>>>) where T: From<TcpStream> {
     let mut stream = TcpStream::connect(socket).unwrap();
     
+    println!("CONNECTED TO {:?}\n\n", socket);
+    
     write_handshake(protocol, id, hash, &mut stream);
     let response_buffer = read_handshake(&mut stream);
     

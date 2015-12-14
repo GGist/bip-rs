@@ -44,6 +44,8 @@ pub struct TableLookup {
     table_id:         NodeId,
     target_id:        InfoHash,
     in_endgame:       bool,
+    // If we have received any values in the lookup.
+    recv_values:      bool,
     id_generator:     MIDGenerator,
     // DistanceToBeat is the distance that the responses of the current lookup needs to beat,
     // interestingly enough (and super important), this distance may not be eqaul to the
@@ -76,7 +78,7 @@ impl TableLookup {
         });
         
         // Construct the lookup table structure
-        let mut table_lookup = TableLookup{ table_id: table_id, target_id: target_id, in_endgame: false,
+        let mut table_lookup = TableLookup{ table_id: table_id, target_id: target_id, in_endgame: false, recv_values: false,
             id_generator: id_generator, all_sorted_nodes: all_sorted_nodes, announce_tokens: HashMap::new(),
             active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
@@ -103,8 +105,10 @@ impl TableLookup {
             return self.current_lookup_status()
         };
         
-        // Cancel the timeout
-        event_loop.clear_timeout(timeout);
+        // Cancel the timeout (if this is not an endgame response)
+        if !self.in_endgame {
+            event_loop.clear_timeout(timeout);
+        }
         
         // Add the announce token to our list of tokens
         if let Some(token) = msg.token() {
@@ -114,7 +118,10 @@ impl TableLookup {
         // Pull out the contact information from the message
         let (opt_values, opt_nodes) = match msg.info_type() {
             CompactInfoType::Nodes(n)   => (None, Some(n)),
-            CompactInfoType::Values(v)  => (Some(v.into_iter().collect()), None),
+            CompactInfoType::Values(v)  => {
+                self.recv_values = true;
+                (Some(v.into_iter().collect()), None)
+            },
             CompactInfoType::Both(n, v) => (Some(v.into_iter().collect()), Some(n))
         };
         
@@ -233,7 +240,7 @@ impl TableLookup {
             // Generate a transaction id for this message
             let trans_id = self.id_generator.generate();
             
-            // Try to start a timeout fro the node
+            // Try to start a timeout for the node
             let res_timeout = event_loop.timeout_ms((0, ScheduledTask::CheckLookupTimeout(trans_id)), LOOKUP_TIMEOUT_MS);
             let timeout = if let Ok(t) = res_timeout {
                 t
@@ -273,31 +280,34 @@ impl TableLookup {
         let timeout = if let Ok(t) = res_timeout {
             t
         } else {
-            error!("bip_dht: failed to set a timeout for table lookup endgame...");
+            error!("bip_dht: Failed to set a timeout for table lookup endgame...");
             return LookupStatus::Failed
         };
-        /*
-        // Request all unpinged nodes
-        for node_info in self.all_sorted_nodes.iter_mut().filter(|&&mut (_, _, req)| !req) {
-            let &mut (ref node_dist, ref node, ref mut req) = node_info;
-            
-            // Generate a transaction id for this message
-            let trans_id = self.id_generator.generate();
-            
-            // Associate the transaction id with this node's distance and its timeout token
-            // We dont actually need to keep track of this information, but we do still need to
-            // filter out unsolicited responses by using the active_lookups map!!!
-            self.active_lookups.insert(trans_id, (*node_dist, timeout));
-            
-            // Send the message to the node
-            let get_peers_msg = GetPeersRequest::new(trans_id.as_ref(), self.table_id, self.target_id).encode();
-            if out.send((get_peers_msg, node.addr())).is_err() {
-                error!("bip_dht: Could not send an endgame message through the channel...");
+        
+        // Request all unpinged nodes if we didnt receive any values
+        if !self.recv_values {
+            for node_info in self.all_sorted_nodes.iter_mut().filter(|&&mut (_, _, req)| !req) {
+                let &mut (ref node_dist, ref node, ref mut req) = node_info;
+                
+                // Generate a transaction id for this message
+                let trans_id = self.id_generator.generate();
+                
+                // Associate the transaction id with this node's distance and its timeout token
+                // We dont actually need to keep track of this information, but we do still need to
+                // filter out unsolicited responses by using the active_lookups map!!!
+                self.active_lookups.insert(trans_id, (*node_dist, timeout));
+                
+                // Send the message to the node
+                let get_peers_msg = GetPeersRequest::new(trans_id.as_ref(), self.table_id, self.target_id).encode();
+                if out.send((get_peers_msg, node.addr())).is_err() {
+                    error!("bip_dht: Could not send an endgame message through the channel...");
+                    return LookupStatus::Failed
+                }
+                
+                // Mark that we requested from the node
+                *req = true;
             }
-            
-            // Mark that we requested from the node
-            *req = true;
-        }*/
+        }
         
         LookupStatus::Searching
     }

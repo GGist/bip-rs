@@ -30,13 +30,14 @@ use transaction::{AIDGenerator, TransactionID, ActionID};
 use worker::{OneshotTask, ScheduledTask, DhtEvent, ShutdownCause};
 use worker::bootstrap::{TableBootstrap, BootstrapStatus};
 use worker::lookup::{TableLookup, LookupStatus};
+use worker::refresh::{TableRefresh, RefreshStatus};
 
 use routing::table::{BucketContents};
 use routing::node::{NodeStatus};
 
 // TODO: Update modules to use find_node on the routing table to update the status of a given node.
 
-const MAX_BOOTSTRAP_ATTEMPTS:         usize = 2;
+const MAX_BOOTSTRAP_ATTEMPTS:         usize = 3;
 const BOOTSTRAP_GOOD_NODE_THRESHOLD:  usize = 10;
 
 /// Spawns a DHT handler that maintains our routing table and executes our actions on the DHT.
@@ -53,13 +54,16 @@ pub fn create_dht_handler<H>(table: RoutingTable, out: SyncSender<(Vec<u8>, Sock
             error!("bip_dht: EventLoop shut down with an error...");
         }
         
-        // Make sure the event loop is dropped before sending our incoming messenger kill message
-        // so that the incoming messenger can not send anything through their event loop channel.
+        // Make sure the handler and event loop are dropped before sending our incoming messenger kill
+        // message so that the incoming messenger can not send anything through their event loop channel.
         mem::drop(event_loop);
+        mem::drop(handler);
         
         // When event loop stops, we need to "wake" the incoming messenger with a socket message,
         // when it processes the message and tries to pass it to us, it will see that our channel
         // is closed and know that it should shut down. The outgoing messenger will shut itself down.
+        // TODO: This will not work if kill_addr is set to a default route 0.0.0.0, need to find another
+        // work around (potentially findind out the actual addresses for the current machine beforehand?)
         if kill_sock.send_to(&b"0"[..], kill_addr).is_err() {
             error!("bip_dht: Failed to send a wake up message to the incoming channel...");
         }
@@ -74,10 +78,11 @@ pub fn create_dht_handler<H>(table: RoutingTable, out: SyncSender<(Vec<u8>, Sock
 
 pub struct DhtHandler<H> {
     read_only:       bool,
+    refresher:       (ActionID, TableRefresh),
     handshaker:      H,
     out_channel:     SyncSender<(Vec<u8>, SocketAddr)>,
     token_store:     TokenStore,
-    // Storing the number of bootstrap attempts
+    // Storing the number of bootstrap attempts.
     bootstrapper:    (ActionID, TableBootstrap, usize),
     aid_generator:   AIDGenerator,
     routing_table:   RoutingTable,
@@ -90,15 +95,19 @@ impl<H> DhtHandler<H> where H: Handshaker {
     fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, read_only: bool, handshaker: H)
         -> DhtHandler<H> {
         let mut aid_generator = AIDGenerator::new();
-        let mid_generator = aid_generator.generate();
         
-        let action_id = mid_generator.action_id();
-        let table_bootstrap = TableBootstrap::new(table.node_id(), mid_generator, Vec::new(), iter::empty());
+        let boot_mid_generator = aid_generator.generate();
+        let boot_action_id = boot_mid_generator.action_id();
+        let table_bootstrap = TableBootstrap::new(table.node_id(), boot_mid_generator, Vec::new(), iter::empty());
     
-        DhtHandler{ read_only: read_only, handshaker: handshaker, out_channel: out,
-            bootstrapper: (action_id, table_bootstrap, 0), token_store: TokenStore::new(),
-            aid_generator: aid_generator, routing_table: table, active_stores: HashMap::new(),
-            active_lookups: HashMap::new(), event_notifiers: Vec::new() }
+        let refresh_mid_generator = aid_generator.generate();
+        let refresh_action_id = refresh_mid_generator.action_id();
+        let table_refresh = TableRefresh::new(refresh_mid_generator);
+    
+        DhtHandler{ read_only: read_only, refresher: (refresh_action_id, table_refresh), handshaker: handshaker,
+            out_channel: out, bootstrapper: (boot_action_id, table_bootstrap, 0), token_store: TokenStore::new(),
+            aid_generator: aid_generator, routing_table: table, active_stores: HashMap::new(), active_lookups: HashMap::new(),
+            event_notifiers: Vec::new() }
     }
 }
 
@@ -134,7 +143,7 @@ impl<H> Handler for DhtHandler<H> where H: Handshaker {
         
         match task {
             ScheduledTask::CheckTableRefresh(trans_id) => {
-                handle_check_table_refresh(self, trans_id);
+                handle_check_table_refresh(self, event_loop, trans_id);
             },
             ScheduledTask::CheckBootstrapTimeout(trans_id) => {
                 handle_check_bootstrap_timeout(self, event_loop, trans_id);
@@ -174,6 +183,21 @@ fn should_rebootstrap(table: &RoutingTable) -> bool {
     num_good_nodes(table) <= BOOTSTRAP_GOOD_NODE_THRESHOLD
 }
 
+/// Broadcast that the bootstrap has completed.
+/// IMPORTANT: Should call this instead of broadcast_dht_event()!
+fn broadcast_bootstrap_completed<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>)
+    where H: Handshaker {
+    // Send notification that the bootstrap has completed.
+    broadcast_dht_event(&mut handler.event_notifiers, DhtEvent::BootstrapCompleted);
+    
+    // Start the refresh process.
+    let refresh_status = handler.refresher.1.continue_refresh(&handler.routing_table, &handler.out_channel, event_loop);
+    match refresh_status {
+        RefreshStatus::Refreshing => (),
+        RefreshStatus::Failed     => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
+    };
+}
+
 /// Attempt to rebootstrap or shutdown the dht if we have no nodes after rebootstrapping multiple time.
 fn attempt_rebootstrap<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>)
     where H: Handshaker {
@@ -202,7 +226,7 @@ fn attempt_rebootstrap<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoo
             if should_rebootstrap(&handler.routing_table) {
                 attempt_rebootstrap(handler, event_loop);
             } else {
-                broadcast_dht_event(&mut handler.event_notifiers, DhtEvent::BootstrapCompleted);
+                broadcast_bootstrap_completed(handler, event_loop);
             }
         },
         BootstrapStatus::Failed => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
@@ -230,7 +254,7 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
             return ExpectedResponse::None
         };
         
-        if trans_id.action_id() == handler.bootstrapper.0 {
+        if trans_id.action_id() == handler.bootstrapper.0 || trans_id.action_id() == handler.refresher.0 {
             ExpectedResponse::FindNode
         } else if handler.active_lookups.contains_key(&trans_id.action_id()) {
             ExpectedResponse::GetPeers
@@ -280,7 +304,6 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
         },
         Ok(MessageType::Request(RequestType::GetPeers(g))) => {
             info!("bip_dht: Received a GetPeersRequest...");
-            
             // TODO: Check if we have values for the given info hash
             
             // Otherwise return closest nodes
@@ -351,21 +374,7 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
                 handler.routing_table.add_node(Node::as_questionable(id, sock_addr));
             }
             
-            // Let the bootstrapper know of the message response
-            let bootstrap_status = handler.bootstrapper.1.recv_response(&trans_id, &handler.routing_table, &handler.out_channel, event_loop);
-            match bootstrap_status {
-                BootstrapStatus::Idle          => (),
-                BootstrapStatus::Bootstrapping => (),
-                BootstrapStatus::Completed     => {
-                    // Check if our bootstrap was actually good
-                    if should_rebootstrap(&handler.routing_table) {
-                        attempt_rebootstrap(handler, event_loop);
-                    } else {
-                        broadcast_dht_event(&mut handler.event_notifiers, DhtEvent::BootstrapCompleted);
-                    }
-                },
-                BootstrapStatus::Failed => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
-            };
+            
             
             // Print Routing Table
             let mut total = 0;
@@ -382,10 +391,39 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
                 }
             }
             print!("\nTotal: {}\n\n\n", total);
+            
+            
+            // If this was a refresh response, dont do anything else
+            if trans_id.action_id() == handler.refresher.0 {
+                return
+            }
+            // Was a bootstrap response
+            
+            // Let the bootstrapper know of the message response
+            let bootstrap_status = handler.bootstrapper.1.recv_response(&trans_id, &handler.routing_table, &handler.out_channel, event_loop);
+            match bootstrap_status {
+                BootstrapStatus::Idle          => (),
+                BootstrapStatus::Bootstrapping => (),
+                BootstrapStatus::Completed     => {
+                    // Check if our bootstrap was actually good
+                    if should_rebootstrap(&handler.routing_table) {
+                        attempt_rebootstrap(handler, event_loop);
+                    } else {
+                        broadcast_bootstrap_completed(handler, event_loop);
+                    }
+                },
+                BootstrapStatus::Failed => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
+            };
         },
         Ok(MessageType::Response(ResponseType::GetPeers(g))) => {
+           info!("bip_dht: Received a GetPeersResponse...");
             let trans_id = TransactionID::from_bytes(g.transaction_id()).unwrap();
             let node = Node::as_good(g.node_id(), addr);
+            
+            // Add the responding node if it is not a router
+            if !handler.bootstrapper.1.is_router(&node.addr()) {
+                handler.routing_table.add_node(node.clone());
+            }
             
             if let Some(mut lookup) = handler.active_lookups.get_mut(&trans_id.action_id()) {
                 match lookup.recv_response(node, &trans_id, g, &handler.out_channel, event_loop) {
@@ -455,7 +493,7 @@ fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>, event_loop: &mut Event
             if should_rebootstrap(&handler.routing_table) {
                 attempt_rebootstrap(handler, event_loop);
             } else {
-                broadcast_dht_event(&mut handler.event_notifiers, DhtEvent::BootstrapCompleted);
+                broadcast_bootstrap_completed(handler, event_loop);
             }
         },
         BootstrapStatus::Failed => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
@@ -480,8 +518,14 @@ fn handle_shutdown<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
     event_loop.shutdown();
 }
 
-fn handle_check_table_refresh<H>(handler: &mut DhtHandler<H>, trans_id: TransactionID) {
-    unimplemented!();
+fn handle_check_table_refresh<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, _: TransactionID)
+    where H: Handshaker {
+    let refresh_status = handler.refresher.1.continue_refresh(&handler.routing_table, &handler.out_channel, event_loop);
+    
+    match refresh_status {
+        RefreshStatus::Refreshing => (),
+        RefreshStatus::Failed     => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
+    };
 }
 
 fn handle_check_bootstrap_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID)
@@ -496,7 +540,7 @@ fn handle_check_bootstrap_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &m
             if should_rebootstrap(&handler.routing_table) {
                 attempt_rebootstrap(handler, event_loop);
             } else {
-                broadcast_dht_event(&mut handler.event_notifiers, DhtEvent::BootstrapCompleted);
+                broadcast_bootstrap_completed(handler, event_loop);
             }
         },
         BootstrapStatus::Failed => shutdown_event_loop(event_loop, ShutdownCause::Unspecified)

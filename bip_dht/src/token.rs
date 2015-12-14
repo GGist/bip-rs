@@ -196,7 +196,7 @@ mod tests {
     use chrono::{Duration};
     use bip_util::test as bip_test;
 
-    use token::{Token, TokenStore};
+    use token::{TokenStore};
     
     #[test]
     fn positive_accept_valid_v4_token() {

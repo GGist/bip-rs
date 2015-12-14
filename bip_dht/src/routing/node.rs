@@ -224,7 +224,7 @@ mod tests {
     use std::iter::{self};
     use std::net::{Ipv4Addr, SocketAddrV4, SocketAddr};
     
-    use bip_util::{NodeId};
+    use bip_util::bt::{NodeId};
     use bip_util::test as bip_test;
     use chrono::{Duration};
     

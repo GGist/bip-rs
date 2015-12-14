@@ -10,10 +10,6 @@ pub type DhtResult<T> = Result<T, DhtError>;
 /// A list specifying the types of DhtErrors that may occur.
 #[derive(Debug)]
 pub enum DhtErrorKind {
-    /// Failed To Lookup On Table.
-    LookupFailed,
-    /// Failed To Bootstrap Table.
-    BootstrapFailed,
     /// A Node Sent Us An Invalid Message.
     InvalidMessage,
     /// A Node Sent Us An Invalid Request.
@@ -43,10 +39,12 @@ impl DhtError {
         DhtError{ kind: kind, desc: desc, detail: Some(detail.into()) }
     }
     
+    #[allow(unused)]
     pub fn kind(&self) -> &DhtErrorKind {
         &self.kind
     }
     
+    #[allow(unused)]
     pub fn detail(&self) -> Option<&str> {
         self.detail.as_ref().map(|x| &**x)
     }
