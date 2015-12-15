@@ -124,7 +124,9 @@ impl<'a> RequestType<'a> {
     }
 }
 
-/// Mainline dht extension for forward compatibility
+/// Mainline dht extension for forward compatibility.
+///
+/// Treat unsupported messages with either a target id key or info hash key as find node messages.
 fn forward_compatible_find_node<'a>(rqst_root: &Dictionary<'a, Bencode<'a>>) -> Option<&'static str> {
     match (rqst_root.lookup(message::TARGET_ID_KEY), rqst_root.lookup(message::INFO_HASH_KEY)) {
         (Some(_), _) => Some(message::TARGET_ID_KEY),

@@ -59,10 +59,18 @@ impl MainlineDht {
         if self.send.send(OneshotTask::RegisterSender(send)).is_err() {
             warn!("bip_dht: MainlineDht failed to send a register sender message...");
             // TODO: Should we push a Shutdown event through the sender here? We would need
-            // to know the cause or create a new cause for this specific scenario.
+            // to know the cause or create a new cause for this specific scenario since the
+            // client could have been lazy and wasnt monitoring this until after it shutdown!
         }
         
         recv
+    }
+    
+    /// Send a shutdown the DHT so it will clean up it's resources and stop serving requests.
+    ///
+    /// Returns true if the shutdown succeeded or false if the DHT was already shutdown.
+    pub fn shutdown(self) -> bool {
+        self.send.send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated)).is_ok()
     }
 }
 

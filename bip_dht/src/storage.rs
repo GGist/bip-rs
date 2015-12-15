@@ -183,7 +183,7 @@ impl Eq for ItemExpiration { }
 
 #[cfg(test)]
 mod tests {
-    use bip_util::bt::{self, InfoHash};
+    use bip_util::bt::{self};
     use bip_util::test as bip_test;
     
     use chrono::{Duration};
