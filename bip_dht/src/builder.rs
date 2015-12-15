@@ -74,14 +74,6 @@ impl MainlineDht {
     }
 }
 
-impl Drop for MainlineDht {
-    fn drop(&mut self) {
-        if self.send.send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated)).is_err() {
-            warn!("bip_dht: MainlineDht failed to send a shutdown message (may have already been shutdown)...");
-        }
-    }
-}
-
 //----------------------------------------------------------------------------//
 
 /// Stores information for initializing a DHT.
