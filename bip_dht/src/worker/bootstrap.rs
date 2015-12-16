@@ -203,6 +203,9 @@ impl TableBootstrap {
                 return BootstrapStatus::Failed
             }
             
+            // Mark that we requested from the node
+            node.local_request();
+            
             // Create an entry for the timeout in the map
             self.active_messages.insert(trans_id, timeout);
             

@@ -49,7 +49,7 @@ impl RoutingTable {
         Buckets::new(&self.buckets)
     }
     
-    /// Find an instance if the target node in the RoutingTable, if it exists.
+    /// Find an instance of the target node in the RoutingTable, if it exists.
     pub fn find_node(&self, node: &Node) -> Option<&Node> {
         let bucket_index = leading_bit_count(self.node_id, node.id());
         

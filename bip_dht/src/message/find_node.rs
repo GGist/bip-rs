@@ -40,6 +40,10 @@ impl<'a> FindNodeRequest<'a> {
         self.trans_id
     }
     
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
+    }
+    
     pub fn target_id(&self) -> NodeId {
         self.target_id
     }

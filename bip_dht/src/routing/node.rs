@@ -172,7 +172,8 @@ impl Debug for Node {
 
 // TODO: Verify the two scenarios follow the specification as some cases seem questionable (pun intended), ie, a node
 // responds to us once, and then requests from us but never responds to us for the duration of the session. This means they
-// could stay marked as a good node even though they could ignore our requests and just sending us periodic requests...
+// could stay marked as a good node even though they could ignore our requests and just sending us periodic requests
+// to keep their node marked as good in our routing table...
 
 /// First scenario where a node is good is if it has responded to one of our requests recently.
 ///

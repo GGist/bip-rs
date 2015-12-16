@@ -62,8 +62,8 @@ pub struct TableLookup {
 // Gather nodes 
 
 impl TableLookup {
-    pub fn new<H>(table_id: NodeId, target_id: InfoHash, id_generator: MIDGenerator, will_announce: bool, table: &RoutingTable,
-        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
+    pub fn new<H>(table_id: NodeId, target_id: InfoHash, id_generator: MIDGenerator, will_announce: bool,
+        table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
         -> Option<TableLookup> where H: Handshaker {
         // Pick a buckets worth of nodes and put them into the all_sorted_nodes list
         let mut all_sorted_nodes = Vec::with_capacity(bucket::MAX_BUCKET_SIZE);
@@ -85,7 +85,7 @@ impl TableLookup {
             active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
         // Call start_request_round with the list of initial_nodes (return even if the search completed...for now :D)
-        if table_lookup.start_request_round(initial_pick_nodes_filtered, out, event_loop) != LookupStatus::Failed {
+        if table_lookup.start_request_round(initial_pick_nodes_filtered, table, out, event_loop) != LookupStatus::Failed {
             Some(table_lookup)
         } else {
             None
@@ -97,8 +97,8 @@ impl TableLookup {
     }
     
     pub fn recv_response<'a, H>(&mut self, node: Node, trans_id: &TransactionID, msg: GetPeersResponse<'a>,
-        out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>) -> LookupStatus
-        where H: Handshaker {
+        table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
+        -> LookupStatus where H: Handshaker {
         // Process the message transaction id
         let (dist_to_beat, timeout) = if let Some(lookup) = self.active_lookups.remove(trans_id) {
             lookup
@@ -176,14 +176,14 @@ impl TableLookup {
             // If the node gave us a closer id than its own to the target id, continue the search
             if let Some(ref nodes) = iterate_nodes {
                 let filtered_nodes = nodes.iter().filter(|&&(_, good)| good).map(|&(ref n, _)| (n, next_dist_to_beat));
-                if self.start_request_round(filtered_nodes, out, event_loop) == LookupStatus::Failed {
+                if self.start_request_round(filtered_nodes, table, out, event_loop) == LookupStatus::Failed {
                     return LookupStatus::Failed
                 }
             }
             
             // If there are not more active lookups, start the endgame
             if self.active_lookups.is_empty() {
-                if self.start_endgame_round(out, event_loop) == LookupStatus::Failed {
+                if self.start_endgame_round(table, out, event_loop) == LookupStatus::Failed {
                     return LookupStatus::Failed
                 }
             }
@@ -195,7 +195,7 @@ impl TableLookup {
         }
     }
     
-    pub fn recv_timeout<H>(&mut self, trans_id: &TransactionID, out: &SyncSender<(Vec<u8>, SocketAddr)>,
+    pub fn recv_timeout<H>(&mut self, trans_id: &TransactionID, table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>,
         event_loop: &mut EventLoop<DhtHandler<H>>) -> LookupStatus where H: Handshaker {
         if self.active_lookups.remove(trans_id).is_none() {
             warn!("bip_dht: Received expired/unsolicited node timeout for an active table lookup...");
@@ -205,7 +205,7 @@ impl TableLookup {
         if !self.in_endgame {
             // If there are not more active lookups, start the endgame
             if self.active_lookups.is_empty() {
-                if self.start_endgame_round(out, event_loop) == LookupStatus::Failed {
+                if self.start_endgame_round(table, out, event_loop) == LookupStatus::Failed {
                     return LookupStatus::Failed
                 }
             }
@@ -214,7 +214,8 @@ impl TableLookup {
         self.current_lookup_status()
     }
     
-    pub fn recv_finished(&mut self, handshake_port: u16, out: &SyncSender<(Vec<u8>, SocketAddr)>) -> LookupStatus {
+    pub fn recv_finished(&mut self, handshake_port: u16, table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>)
+        -> LookupStatus {
         let mut fatal_error = false;
         
         // Announce if we were told to
@@ -232,6 +233,11 @@ impl TableLookup {
                 if out.send((announce_peer_msg, node.addr())).is_err() {
                     error!("bip_dht: TableLookup announce request failed to send through the out channel...");
                     fatal_error = true;
+                }
+                
+                if !fatal_error {
+                    // We requested from the node, marke it down if the node is in our routing table
+                    table.find_node(node).map(|n| n.local_request());
                 }
             }
         }
@@ -255,8 +261,9 @@ impl TableLookup {
         }
     }
     
-    fn start_request_round<'a, H, I>(&mut self, nodes: I, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
-        -> LookupStatus where I: Iterator<Item=(&'a Node, DistanceToBeat)>, H: Handshaker {
+    fn start_request_round<'a, H, I>(&mut self, nodes: I, table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>,
+        event_loop: &mut EventLoop<DhtHandler<H>>) -> LookupStatus where I: Iterator<Item=(&'a Node, DistanceToBeat)>,
+        H: Handshaker {
         // Loop through the given nodes
         let mut messages_sent = 0;
         for (node, dist_to_beat) in nodes {
@@ -282,6 +289,9 @@ impl TableLookup {
                 return LookupStatus::Failed
             }
             
+            // We requested from the node, mark it down
+            table.find_node(node).map(|n| n.local_request());
+            
             messages_sent += 1;
         }
         
@@ -293,8 +303,8 @@ impl TableLookup {
         }
     }
     
-    fn start_endgame_round<H>(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>)
-        -> LookupStatus where H: Handshaker {
+    fn start_endgame_round<H>(&mut self, table: &RoutingTable, out: &SyncSender<(Vec<u8>, SocketAddr)>,
+        event_loop: &mut EventLoop<DhtHandler<H>>) -> LookupStatus where H: Handshaker {
         // Entering the endgame phase
         self.in_endgame = true;
         
@@ -326,6 +336,9 @@ impl TableLookup {
                     error!("bip_dht: Could not send an endgame message through the channel...");
                     return LookupStatus::Failed
                 }
+                
+                // Mark that we requested from the node in the RoutingTable
+                table.find_node(node).map(|n| n.local_request());
                 
                 // Mark that we requested from the node
                 *req = true;

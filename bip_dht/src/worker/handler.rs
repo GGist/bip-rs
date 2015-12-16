@@ -318,6 +318,10 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
     match message {
         Ok(MessageType::Request(RequestType::Ping(p))) => {
             info!("bip_dht: Received a PingRequest...");
+            let node = Node::as_good(p.node_id(), addr);
+            
+            // Node requested from us, mark it in the Routingtable
+            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
             
             let ping_rsp = PingResponse::new(p.transaction_id(), work_storage.routing_table.node_id());
             let ping_msg = ping_rsp.encode();
@@ -329,6 +333,10 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
         },
         Ok(MessageType::Request(RequestType::FindNode(f))) => {
             info!("bip_dht: Received a FindNodeRequest...");
+            let node = Node::as_good(f.node_id(), addr);
+            
+            // Node requested from us, mark it in the Routingtable
+            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
             
             // Grab the closest nodes
             let mut closest_nodes_bytes = Vec::with_capacity(26 * 8);
@@ -347,6 +355,11 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
         },
         Ok(MessageType::Request(RequestType::GetPeers(g))) => {
             info!("bip_dht: Received a GetPeersRequest...");
+            let node = Node::as_good(g.node_id(), addr);
+            
+            // Node requested from us, mark it in the Routingtable
+            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
+            
             // TODO: Move socket address serialization code into bip_util
             // TODO: Check what the maximum number of values we can give without overflowing a udp packet
             // Also, if we arent going to give all of the contacts, we may want to shuffle which ones we give
@@ -406,6 +419,10 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
         },
         Ok(MessageType::Request(RequestType::AnnouncePeer(a))) => {
             info!("bip_dht: Received an AnnouncePeerRequest...");
+            let node = Node::as_good(a.node_id(), addr);
+            
+            // Node requested from us, mark it in the Routingtable
+            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
             
             // Validate the token
             let is_valid = match Token::new(a.token()) {
@@ -534,7 +551,7 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
             };
             
             if let Some(lookup) = opt_lookup {
-                match lookup.recv_response(node, &trans_id, g, &work_storage.out_channel, event_loop) {
+                match lookup.recv_response(node, &trans_id, g, &work_storage.routing_table, &work_storage.out_channel, event_loop) {
                     LookupStatus::Searching      => (),
                     LookupStatus::Completed      => broadcast_dht_event(&mut work_storage.event_notifiers, DhtEvent::LookupCompleted(lookup.info_hash())),
                     LookupStatus::Failed         => shutdown_event_loop(event_loop, ShutdownCause::Unspecified),
@@ -713,7 +730,7 @@ fn handle_check_lookup_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut 
         
     let opt_lookup_info = match table_actions.get_mut(&trans_id.action_id()) {
         Some(&mut TableAction::Lookup(ref mut lookup)) => {
-            Some((lookup.recv_timeout(&trans_id, &work_storage.out_channel, event_loop), lookup.info_hash()))
+            Some((lookup.recv_timeout(&trans_id, &work_storage.routing_table, &work_storage.out_channel, event_loop), lookup.info_hash()))
         },
         Some(&mut TableAction::Bootstrap(_, _)) => {
             error!("bip_dht: Resolved a TransactionID to a check table lookup but TableBootstrap found...");
@@ -751,7 +768,7 @@ fn handle_check_lookup_endgame<H>(handler: &mut DhtHandler<H>, event_loop: &mut 
         
     let opt_lookup_info = match table_actions.remove(&trans_id.action_id()) {
         Some(TableAction::Lookup(mut lookup)) => {
-            Some((lookup.recv_finished(work_storage.handshaker.port(), &work_storage.out_channel), lookup.info_hash()))
+            Some((lookup.recv_finished(work_storage.handshaker.port(), &work_storage.routing_table, &work_storage.out_channel), lookup.info_hash()))
         },
         Some(TableAction::Bootstrap(_, _)) => {
             error!("bip_dht: Resolved a TransactionID to a check table lookup but TableBootstrap found...");

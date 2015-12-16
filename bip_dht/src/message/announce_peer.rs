@@ -65,6 +65,10 @@ impl<'a> AnnouncePeerRequest<'a> {
         self.trans_id
     }
     
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
+    }
+    
     pub fn info_hash(&self) -> InfoHash {
         self.info_hash
     }

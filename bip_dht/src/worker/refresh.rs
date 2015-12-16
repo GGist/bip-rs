@@ -59,6 +59,9 @@ impl TableRefresh {
 				error!("bip_dht: TableRefresh failed to send a refresh message to the out channel...");
 				return RefreshStatus::Failed
 			}
+            
+            // Mark that we requested from the node
+            node.local_request();
 		}
 		
 		self.curr_refresh_bucket += 1;
