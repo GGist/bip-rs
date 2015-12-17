@@ -11,6 +11,7 @@ use bip_handshake::{Handshaker};
 use bip_util::bt::{InfoHash};
 use bip_util::convert::{self};
 use bip_util::net::{IpAddr};
+use log::{LogLevel};
 use mio::{self, EventLoop, Handler};
 
 use message::{MessageType};
@@ -307,6 +308,9 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
     });
     
     // Do not process requests if we are read only
+    // TODO: Add read only flags to messages we send it we are read only!
+    // Also, check for read only flags on responses we get before adding nodes
+    // to our RoutingTable.
     if work_storage.read_only {
         match message {
             Ok(MessageType::Request(_)) => return,
@@ -508,22 +512,24 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<Dh
                 broadcast_bootstrap_completed(trans_id.action_id(), table_actions, work_storage, event_loop);
             }
             
-            
-            // Print Routing Table
-            let mut total = 0;
-            for (index, bucket) in work_storage.routing_table.buckets().enumerate() {
-                let num_nodes = match bucket {
-                    BucketContents::Empty => 0,
-                    BucketContents::Sorted(b) => b.iter().filter(|n| n.status() == NodeStatus::Good ).count(),
-                    BucketContents::Assorted(b) => b.iter().filter(|n| n.status() == NodeStatus::Good ).count(),
-                };
-                total += num_nodes;
-                        
-                if num_nodes != 0 {
-                    print!("Bucket {}: {} | ", index, num_nodes);
+            if log_enabled!(LogLevel::Info) {
+                let mut total = 0;
+                
+                for (index, bucket) in work_storage.routing_table.buckets().enumerate() {
+                    let num_nodes = match bucket {
+                        BucketContents::Empty => 0,
+                        BucketContents::Sorted(b) => b.iter().filter(|n| n.status() == NodeStatus::Good ).count(),
+                        BucketContents::Assorted(b) => b.iter().filter(|n| n.status() == NodeStatus::Good ).count(),
+                    };
+                    total += num_nodes;
+                            
+                    if num_nodes != 0 {
+                        print!("Bucket {}: {} | ", index, num_nodes);
+                    }
                 }
+                
+                print!("\nTotal: {}\n\n\n", total);
             }
-            print!("\nTotal: {}\n\n\n", total);
         },
         Ok(MessageType::Response(ResponseType::GetPeers(g))) => {
            info!("bip_dht: Received a GetPeersResponse...");

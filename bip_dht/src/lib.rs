@@ -28,7 +28,7 @@ extern crate chrono;
 
 mod builder;
 mod error;
-mod message;
+pub mod message;
 mod router;
 mod security;
 mod storage;

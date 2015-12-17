@@ -89,7 +89,7 @@ fn main() {
         0x7a, 0xff, 0xfa, 0x55, 0x3a, 0xea, 0xd0, 0xcc];
     
     let address = ("0.0.0.0", 6889).to_socket_addrs().unwrap().next().unwrap();
-    let dht = DhtBuilder::with_router(Router::Transmission).set_source_addr(address)
+    let dht = DhtBuilder::with_router(Router::Transmission).set_source_addr(address).set_read_only(false)
     .start_mainline(SimpleHandshaker{ filter: HashSet::new(), count: 0 }).unwrap();
     
     let dht_events = dht.events();

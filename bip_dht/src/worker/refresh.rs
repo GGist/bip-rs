@@ -44,12 +44,6 @@ impl TableRefresh {
 			// Generate a transaction id for the request
 			let trans_id = self.id_generator.generate();
 			
-			// Start a timer for the next refresh
-			if event_loop.timeout_ms((0, ScheduledTask::CheckTableRefresh(trans_id)), REFRESH_INTERVAL_TIMEOUT).is_err() {
-				error!("bip_dht: TableRefresh failed to set a timeout for the next refresh...");
-				return RefreshStatus::Failed
-			}
-			
 			// Construct the message
 			let find_node_req = FindNodeRequest::new(trans_id.as_ref(), table.node_id(), target_id);
 			let find_node_msg = find_node_req.encode();
@@ -62,6 +56,15 @@ impl TableRefresh {
             
             // Mark that we requested from the node
             node.local_request();
+		}
+		
+		// Generate a dummy transaction id (only the action id will be used)
+		let trans_id = self.id_generator.generate();
+		
+		// Start a timer for the next refresh
+		if event_loop.timeout_ms((0, ScheduledTask::CheckTableRefresh(trans_id)), REFRESH_INTERVAL_TIMEOUT).is_err() {
+			error!("bip_dht: TableRefresh failed to set a timeout for the next refresh...");
+			return RefreshStatus::Failed
 		}
 		
 		self.curr_refresh_bucket += 1;
