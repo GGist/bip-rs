@@ -11,3 +11,6 @@ repository  = "https://github.com/GGist/bip-rs/bip_bencode"
 keywords    = ["bencode", "bittorrent"]
 
 license     = "MIT"
+
+[features]
+unstable = []

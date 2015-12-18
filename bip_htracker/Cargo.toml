@@ -11,3 +11,6 @@ repository  = "https://github.com/GGist/bip-rs/bip_htracker"
 keywords    = ["tracker", "bittorrent", "http"]
 
 license     = "MIT"
+
+[features]
+unstable = []

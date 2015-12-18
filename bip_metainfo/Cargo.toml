@@ -11,3 +11,6 @@ repository  = "https://github.com/GGist/bip-rs/bip_metainfo"
 keywords    = ["metainfo", "torrent", "file", "bittorrent"]
 
 license     = "MIT"
+
+[features]
+unstable = []

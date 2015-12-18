@@ -11,3 +11,6 @@ repository  = "https://github.com/GGist/bip-rs/bip_lpd"
 keywords    = ["peer", "discovery", "local", "service"]
 
 license     = "MIT"
+
+[features]
+unstable = []

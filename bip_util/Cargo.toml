@@ -16,3 +16,6 @@ license     = "MIT"
 chrono      = "0.2.0"
 rand        = "0.3.0"
 sha1        = "0.1.0"
+
+[features]
+unstable = []

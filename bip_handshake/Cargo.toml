@@ -15,3 +15,6 @@ license     = "MIT"
 [dependencies]
 bip_util    = { path = "../bip_util", version = "0.1.0" }
 threadpool  = "0.1.0"
+
+[features]
+unstable = []

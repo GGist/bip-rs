@@ -11,3 +11,6 @@ repository  = "https://github.com/GGist/bip-rs/bip_peer"
 keywords    = ["peer", "wire", "protocol", "pwp", "bittorrent"]
 
 license     = "MIT"
+
+[features]
+unstable = []
