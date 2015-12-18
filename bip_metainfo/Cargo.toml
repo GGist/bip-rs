@@ -1,4 +1,13 @@
 [package]
-name = "bip_metainfo"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_metainfo"
+version     = "0.0.0"
+description = "Parsing and building of bittorrent metainfo files"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_metainfo"
+repository  = "https://github.com/GGist/bip-rs/bip_metainfo"
+
+keywords    = ["metainfo", "torrent", "file", "bittorrent"]
+
+license     = "MIT"

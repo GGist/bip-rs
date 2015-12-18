@@ -1,4 +1,13 @@
 [package]
-name = "bip_utracker"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_utracker"
+version     = "0.0.1"
+description = "Communication with bittorrent UDP trackers"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_utracker"
+repository  = "https://github.com/GGist/bip-rs/bip_utracker"
+
+keywords    = ["tracker", "bittorrent", "udp"]
+
+license     = "MIT"

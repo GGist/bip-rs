@@ -1,10 +1,17 @@
 [package]
-name = "bip_handshake"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_handshake"
+version     = "0.1.0"
+description = "Common handshaking interface as well as a default handshake implementation"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_handshake"
+repository  = "https://github.com/GGist/bip-rs/bip_handshake"
+
+keywords    = ["handshake", "bittorrent"]
+
+license     = "MIT"
 
 [dependencies]
-threadpool = "0.1.0"
-
-[dependencies.bip_util]
-path = "../bip_util"
+bip_util    = { path = "../bip_util", version = "0.1.0" }
+threadpool  = "0.1.0"

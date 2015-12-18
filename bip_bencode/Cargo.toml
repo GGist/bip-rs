@@ -1,4 +1,13 @@
 [package]
-name = "bip_bencode"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_bencode"
+version     = "0.1.0"
+description = "Efficient decoding and encoding for bencode"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_bencode"
+repository  = "https://github.com/GGist/bip-rs/bip_bencode"
+
+keywords    = ["bencode", "bittorrent"]
+
+license     = "MIT"

@@ -1,9 +1,18 @@
 [package]
-name = "bip_util"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_util"
+version     = "0.1.0"
+description = "Utilities for the Bittorrent Infrastructure Project"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_util"
+repository  = "https://github.com/GGist/bip-rs/bip_util"
+
+keywords    = ["utility"]
+
+license     = "MIT"
 
 [dependencies]
-sha1   = "0.1.0"
-rand   = "0.3.0"
-chrono = "0.2.0"
+chrono      = "0.2.0"
+rand        = "0.3.0"
+sha1        = "0.1.0"

@@ -1,4 +1,13 @@
 [package]
-name = "bip_htracker"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_htracker"
+version     = "0.0.0"
+description = "Communication with bittorrent HTTP trackers"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_htracker"
+repository  = "https://github.com/GGist/bip-rs/bip_htracker"
+
+keywords    = ["tracker", "bittorrent", "http"]
+
+license     = "MIT"

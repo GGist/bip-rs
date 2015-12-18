@@ -1,4 +1,13 @@
 [package]
-name = "bip_lpd"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name        = "bip_lpd"
+version     = "0.0.0"
+description = "Implementation of the bittorrent Local Peer/Service Discovery mechanism"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_lpd"
+repository  = "https://github.com/GGist/bip-rs/bip_lpd"
+
+keywords    = ["peer", "discovery", "local", "service"]
+
+license     = "MIT"

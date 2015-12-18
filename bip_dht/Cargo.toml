@@ -1,23 +1,23 @@
 [package]
-name = "bip_dht"
-version = "0.1.0"
-authors = ["Andrew <amiller4421@gmail.com>"]
+name          = "bip_dht"
+version       = "0.1.0"
+description   = "Implementation of the bittorrent mainline DHT"
+
+authors       = ["Andrew <amiller4421@gmail.com>"]
+
+homepage      = "https://github.com/GGist/bip-rs/bip_dht"
+repository    = "https://github.com/GGist/bip-rs/bip_dht"
+
+keywords      = ["dht", "distributed", "hash", "mainline", "bittorrent"]
+
+license       = "MIT"
 
 [dependencies]
-crc        = "1.2.0"
-log        = "0.3.0"
-mio        = "0.5.0"
-rand       = "0.3.0"
-chrono     = "0.2.0"
-
-[dependencies.bip_bencode]
-path = "../bip_bencode"
-
-[dependencies.bip_handshake]
-path = "../bip_handshake"
-
-[dependencies.bip_util]
-path = "../bip_util"
-
-[profile.test]
-debug = true
+bip_bencode   = { path = "../bip_bencode", version = "0.1.0" }
+bip_handshake = { path = "../bip_handshake", version = "0.1.0" }
+bip_util      = { path = "../bip_util", version = "0.1.0" }
+crc           = "1.2.0"
+log           = "0.3.0"
+mio           = "0.5.0"
+rand          = "0.3.0"
+chrono        = "0.2.0"
