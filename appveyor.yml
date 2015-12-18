@@ -1,0 +1,70 @@
+environment:
+  matrix:
+  - CRATE_DIR: bip_bencode
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_bencode
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_dht
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_dht
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_handshake
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_handshake
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_htracker
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_htracker
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_lpd
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_lpd
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_metainfo
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_metainfo
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_peer
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_peer
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_util
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_util
+    TARGET: x86_64-pc-windows-gnu
+
+  - CRATE_DIR: bip_utracker
+    TARGET: i686-pc-windows-gnu
+
+  - CRATE_DIR: bip_utracker
+    TARGET: x86_64-pc-windows-gnu
+
+install:
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe"
+  - rust-nightly-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin
+  - SET PATH=%PATH%;C:\MinGW\bin
+  - rustc -V
+  - cargo -V
+
+build: false
+
+test_script:
+  - cd %CRATE_DIR%
+  - cargo build
+  - cargo test --verbose
