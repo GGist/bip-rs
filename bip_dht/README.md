@@ -1,4 +1,4 @@
-# Bittorrent Maineline DHT (bip_dht)
+# Bittorrent Mainline DHT (bip_dht)
 Implementation of the bittorrent mainline dht.
 
 ## Terminology
