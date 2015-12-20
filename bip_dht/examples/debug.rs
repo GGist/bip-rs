@@ -39,16 +39,16 @@ impl Handshaker for SimpleHandshaker {
 
     /// Unique peer id used to identify ourselves to other peers.
     fn id(&self) -> PeerId {
-		[0u8; 20].into()
-	}
+        [0u8; 20].into()
+    }
 
     /// Advertise port that is being listened on by the handshaker.
     ///
     /// It is important that this is the external port that the peer will be sending data
     /// to. This is relevant if the client employs nat traversal via upnp or other means.
     fn port(&self) -> u16 {
-		6889
-	}
+        6889
+    }
 
     /// Initiates a handshake with the given socket address.
     fn connect(&mut self, _: Option<PeerId>, _: InfoHash, addr: SocketAddr) {
@@ -59,27 +59,27 @@ impl Handshaker for SimpleHandshaker {
         self.filter.insert(addr);
         self.count += 1;
         println!("Received new peer {:?}, total unique peers {}", addr, self.count);
-	}
+    }
     
     /// Adds a filter that is applied to handshakes before they are initiated or completed.
     fn filter<F>(&mut self, _: Box<F>) where F: Fn(SocketAddr) -> bool + Send {
-		()
-	}
+        ()
+    }
     
     /// Stream that connections for the specified hash are sent to after they are successful.
     ///
     /// Connections MAY be dropped if all streams for a given hash are destroyed.
     fn stream(&self, _: InfoHash) -> () {
-		()
-	}
+        ()
+    }
 }
 
 fn main() {
-	log::set_logger(|m| {
-		m.set(LogLevelFilter::max());
-		Box::new(SimpleLogger)
-	}).unwrap();
-	let hash = InfoHash::from_bytes(b"My Unique Info Hash");
+    log::set_logger(|m| {
+        m.set(LogLevelFilter::max());
+        Box::new(SimpleLogger)
+    }).unwrap();
+    let hash = InfoHash::from_bytes(b"My Unique Info Hash");
     
     let handshaker = SimpleHandshaker{ filter: HashSet::new(), count: 0 };
     let dht = DhtBuilder::with_router(Router::Transmission)
