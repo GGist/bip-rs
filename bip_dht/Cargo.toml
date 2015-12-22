@@ -1,6 +1,6 @@
 [package]
 name          = "bip_dht"
-version       = "0.1.0"
+version       = "0.2.0"
 description   = "Implementation of the bittorrent mainline DHT"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]

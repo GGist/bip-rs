@@ -4,6 +4,9 @@ use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
 use std::vec::{IntoIter};
 
 const UTORRENT_DHT:     (&'static str, u16) = ("router.utorrent.com", 6881);
+// As of recent, this looks to be no longer a CNAME to router.utorrent.com,
+// if this is not the case, we should remove it in the future.
+const BITTORRENT_DHT:   (&'static str, u16) = ("router.bittorrent.com", 6881);
 const BITCOMET_DHT:     (&'static str, u16) = ("router.bitcomet.com", 6881);
 const TRANSMISSION_DHT: (&'static str, u16) = ("dht.transmissionbt.com", 6881);
 
@@ -13,6 +16,8 @@ const TRANSMISSION_DHT: (&'static str, u16) = ("dht.transmissionbt.com", 6881);
 pub enum Router {
     /// Bootstrap server maintained by uTorrent.
     uTorrent,
+    /// Bootstrap server maintained by BitTorrent.
+    BitTorrent,
     /// Bootstrap server maintained by BitComet.
     BitComet,
     /// Bootstrap server maintained by Transmission.
@@ -59,6 +64,7 @@ impl Router {
     fn socket_addrs(&self) -> io::Result<IntoIter<SocketAddr>> {
         match self {
             &Router::uTorrent     => UTORRENT_DHT.to_socket_addrs(),
+            &Router::BitTorrent   => BITTORRENT_DHT.to_socket_addrs(),
             &Router::BitComet     => BITCOMET_DHT.to_socket_addrs(),
             &Router::Transmission => TRANSMISSION_DHT.to_socket_addrs(),
             &Router::Custom(addr) => {
@@ -88,6 +94,9 @@ impl Display for Router {
         match *self {
             Router::uTorrent => {
                 f.write_fmt(format_args!("{}:{}", UTORRENT_DHT.0, UTORRENT_DHT.1))
+            },
+            Router::BitTorrent => {
+                f.write_fmt(format_args!("{}:{}", BITTORRENT_DHT.0, BITTORRENT_DHT.1))
             },
             Router::BitComet => {
                 f.write_fmt(format_args!("{}:{}", BITCOMET_DHT.0, BITCOMET_DHT.1))
