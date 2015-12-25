@@ -20,7 +20,7 @@ pub trait Handshaker: Send {
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr);
     
     /// Adds a filter that is applied to handshakes before they are initiated or completed.
-    fn filter<F>(&mut self, process: Box<F>) where F: Fn(SocketAddr) -> bool + Send;
+    fn filter<F>(&mut self, process: Box<F>) where F: Fn(&SocketAddr) -> bool + Send;
     
     /// Stream that connections for the specified hash are sent to after they are successful.
     ///
