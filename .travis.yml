@@ -17,6 +17,7 @@ env:
   global:
     - secure: cBgN6D8ZxwC5UA+3pxWg8ZHf1rtnEPEbwYP9W+NNzzOGLXDvDsZVhBeP0v9ZSHOdIxAENk5zypJOgV3TnMAk/JT5+oJ4elNJfefi22Mxlj5PRANb8K894nBXAzhgEB1LFfOh/9gSrvOZzbmK35l8fGFUx263BqcoPIjQ4UEcuyo=
   matrix:
+    - CRATE_DIR=bip
     - CRATE_DIR=bip_bencode
     - CRATE_DIR=bip_dht
     - CRATE_DIR=bip_handshake
@@ -40,4 +41,7 @@ script:
   - cd $CRATE_DIR
   - travis-cargo build
   - travis-cargo test
-  - travis-cargo doc
+  - if [ $CRATE_DIR == "bip" ]; then
+    travis-cargo doc;
+    travis-cargo doc-upload;
+    fi
