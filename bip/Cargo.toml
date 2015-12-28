@@ -15,3 +15,6 @@ bip_metainfo  = "0.0.0"
 bip_peer      = "0.0.0"
 bip_util      = "0.1.0"
 bip_utracker  = "0.0.1"
+
+[features]
+unstable = []
