@@ -1,5 +1,6 @@
 use std::io::{self, Error, ErrorKind};
 use std::net::{SocketAddr};
+use std::sync::{Arc};
 use std::sync::mpsc::{self};
 
 use bip_util::bt::{InfoHash, PeerId};
@@ -16,9 +17,29 @@ const BTP_10_PROTOCOL:  &'static str = "BitTorrent protocol";
 
 /// Handshaker that uses the bittorrent handshake protocol.
 pub struct BTHandshaker<T> where T: Send {
+    inner: Arc<InnerBTHandshaker<T>>
+}
+
+// TODO: For some reason, it would not let us derive this...
+impl<T> Clone for BTHandshaker<T> where T: Send {
+    fn clone(&self) -> BTHandshaker<T> {
+        BTHandshaker{ inner: self.inner.clone() }
+    }
+}
+
+/// Used so that Drop executes just once and shuts down the event loop.
+pub struct InnerBTHandshaker<T> where T: Send {
     send:    mio::Sender<HandlerTask<T>>,
     port:    u16,
     peer_id: PeerId
+}
+
+impl<T> Drop for InnerBTHandshaker<T> where T: Send {
+    fn drop(&mut self) {
+        if self.send.send(HandlerTask::Shutdown).is_err() {
+            error!("bip_handshake: Error shutting down event loop...");
+        }
+    }
 }
 
 impl<T> BTHandshaker<T> where T: From<TcpStream> + Send + 'static {
@@ -40,8 +61,9 @@ impl<T> BTHandshaker<T> where T: From<TcpStream> + Send + 'static {
             let listen_port = try!(listener.local_addr()).port();
             
             let send = try!(handler::create_handshake_handler(listener, peer_id, protocol));
+            let inner = InnerBTHandshaker{ send: send, port: listen_port, peer_id: peer_id };
             
-            Ok(BTHandshaker{ send: send, port: listen_port, peer_id: peer_id })
+            Ok(BTHandshaker{ inner: Arc::new(inner) })
         }
     }
 }
@@ -50,24 +72,30 @@ impl<T> Handshaker for BTHandshaker<T> where T: Send {
     type Stream = mpsc::Receiver<(T, PeerId)>;
     
     fn id(&self) -> PeerId {
-        self.peer_id
+        self.inner.peer_id
     }
     
     fn port(&self) -> u16 {
-        self.port
+        self.inner.port
     }
     
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
-        self.send.send(HandlerTask::ConnectPeer(expected, hash, addr));
+        if self.inner.send.send(HandlerTask::ConnectPeer(expected, hash, addr)).is_err() {
+            error!("bip_handshake: Error sending a connect peer message to event loop...");
+        }
     }
     
     fn filter<F>(&mut self, process: Box<F>) where F: Fn(&SocketAddr) -> bool + Send + 'static {
-        self.send.send(HandlerTask::RegisterFilter(process));
+        if self.inner.send.send(HandlerTask::RegisterFilter(process)).is_err() {
+            error!("bip_handshake: Error sending a filter peer message to event loop...");
+        }
     }
     
     fn stream(&self, hash: InfoHash) -> mpsc::Receiver<(T, PeerId)> {
         let (send, recv) = mpsc::channel();
-        self.send.send(HandlerTask::RegisterSender(hash, send));
+        if self.inner.send.send(HandlerTask::RegisterSender(hash, send)).is_err() {
+            error!("bip_handshake: Error sending a register sender message to event loop...");
+        }
         
         recv
     }
@@ -75,11 +103,13 @@ impl<T> Handshaker for BTHandshaker<T> where T: Send {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Write};
+    use std::mem::{self};
     use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr};
+    use std::sync::mpsc::{TryRecvError};
     use std::thread::{self};
+    use std::time::{Duration};
     
-    use bip_util::bt::{self, PeerId};
+    use bip_util::bt::{self};
     use mio::tcp::{TcpStream};
     
     use bittorrent::{BTHandshaker};
@@ -107,7 +137,49 @@ mod tests {
         // Connect to handshaker two from handshaker one
         handshaker_one.connect(Some(peer_id_two), info_hash, handshaker_two_addr);
         
-        let tcp_one = handshaker_one_stream.recv().unwrap();
-        let tcp_two = handshaker_two_stream.recv().unwrap();
+        // Allow the handshakers to connect to each other
+        thread::sleep(Duration::from_millis(100));
+        
+        // Should receive the peer from both handshakers
+        match (handshaker_one_stream.try_recv(), handshaker_two_stream.try_recv()) {
+            (Ok(_), Ok(_)) => (),
+            _              => panic!("Failed to find peers on one or both handshakers...")
+        };
+    }
+    
+    #[test]
+    fn positive_shutdown_on_drop() {
+        // Create our handshaker addresses and ids
+        let ip = Ipv4Addr::new(127, 0, 0, 1);
+        let addr = SocketAddr::V4(SocketAddrV4::new(ip, 0));
+        let peer_id = [0u8; bt::PEER_ID_LEN].into();
+        
+        // Create the handshaker
+        let handshaker = BTHandshaker::<TcpStream>::new(&addr, peer_id).unwrap();
+        
+        // Subscribe to a specific info hash
+        let info_hash = [1u8; bt::INFO_HASH_LEN].into();
+        let peer_recv = handshaker.stream(info_hash);
+        
+        // Clone the handshaker so there are two copies of it
+        let handshaker_clone = handshaker.clone();
+        
+        // Drop one of the copies of the handshaker
+        mem::drop(handshaker_clone);
+        
+        // Allow the event loop to process the shutdown that should NOT have been fired
+        thread::sleep(Duration::from_millis(100));
+        
+        // Make sure that we can still receive values on our channel
+        assert_eq!(peer_recv.try_recv().unwrap_err(), TryRecvError::Empty);
+        
+        // Drop the other copy of the handshaker so there are no more copies around
+        mem::drop(handshaker);
+        
+        // Allow the event loop to process the shutdown that should have been fired
+        thread::sleep(Duration::from_millis(100));
+        
+        // Assert that the channel hunp up (because of the shutdown)
+        assert_eq!(peer_recv.try_recv().unwrap_err(), TryRecvError::Disconnected);
     }
 }

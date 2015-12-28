@@ -147,7 +147,7 @@ impl Connection {
         
         match res_remaining {
             Ok(rem) if rem == 0 => self.advance_state(check_info_hash),
-            Ok(rem)             => ConnectionResult::Working,
+            Ok(_)               => ConnectionResult::Working,
             Err(_)              => {
                 warn!("bip_handshake: Error while reading bytes from TcpStream...");
                 
