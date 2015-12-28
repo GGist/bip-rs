@@ -5,7 +5,7 @@ extern crate log;
 
 use std::collections::{HashSet};
 use std::io::{self, Read};
-use std::net::{SocketAddr};
+use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4, ToSocketAddrs};
 use std::thread::{self};
 
 use bip_dht::{DhtBuilder, Router};
@@ -62,7 +62,7 @@ impl Handshaker for SimpleHandshaker {
     }
     
     /// Adds a filter that is applied to handshakes before they are initiated or completed.
-    fn filter<F>(&mut self, _: Box<F>) where F: Fn(SocketAddr) -> bool + Send {
+    fn filter<F>(&mut self, _: Box<F>) where F: Fn(&SocketAddr) -> bool + Send {
         ()
     }
     
@@ -82,7 +82,8 @@ fn main() {
     let hash = InfoHash::from_bytes(b"My Unique Info Hash");
     
     let handshaker = SimpleHandshaker{ filter: HashSet::new(), count: 0 };
-    let dht = DhtBuilder::with_router(Router::Transmission)
+    let router = "46.101.197.175:443".to_socket_addrs().unwrap().next().unwrap();
+    let dht = DhtBuilder::with_router(Router::Custom(router)).set_source_addr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 6889)))
     .set_read_only(false).start_mainline(handshaker).unwrap();
     
     // Spawn a thread to listen to and report events
