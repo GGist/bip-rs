@@ -1,4 +1,4 @@
-use std::collections::{HashMap};
+use std::collections::{HashMap, HashSet};
 use std::net::{SocketAddrV4, SocketAddr};
 use std::sync::mpsc::{SyncSender};
 
@@ -54,6 +54,7 @@ pub struct TableLookup {
     // requested node's distance
     active_lookups:   HashMap<TransactionID, (DistanceToBeat, Timeout)>,
     announce_tokens:  HashMap<Node, Vec<u8>>,
+    requested_nodes:  HashSet<Node>,
     // Storing whether or not it has ever been pinged so that we
     // can perform the brute force lookup if the lookup failed
     all_sorted_nodes: Vec<(Distance, Node, bool)>
@@ -82,7 +83,7 @@ impl TableLookup {
         // Construct the lookup table structure
         let mut table_lookup = TableLookup{ table_id: table_id, target_id: target_id, in_endgame: false, recv_values: false,
             id_generator: id_generator, will_announce: will_announce, all_sorted_nodes: all_sorted_nodes, announce_tokens: HashMap::new(),
-            active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
+            requested_nodes: HashSet::new(), active_lookups: HashMap::with_capacity(INITIAL_PICK_NUM) };
         
         // Call start_request_round with the list of initial_nodes (return even if the search completed...for now :D)
         if table_lookup.start_request_round(initial_pick_nodes_filtered, table, out, event_loop) != LookupStatus::Failed {
@@ -129,8 +130,17 @@ impl TableLookup {
         
         // Check if we beat the distance, get the next distance to beat
         let (iterate_nodes, next_dist_to_beat) = if let Some(nodes) = opt_nodes {
+            let requested_nodes = &self.requested_nodes;
+            
+            // Filter for nodes that we have already requested from
+            let already_requested = |node_info: &(NodeId, SocketAddrV4)| {
+                let node = Node::as_questionable(node_info.0, SocketAddr::V4(node_info.1));
+                
+                !requested_nodes.contains(&node)
+            };
+            
             // Get the closest distance (or the current distance)
-            let next_dist_to_beat = nodes.into_iter().fold(dist_to_beat, |closest, (id, _)| {
+            let next_dist_to_beat = nodes.into_iter().filter(&already_requested).fold(dist_to_beat, |closest, (id, _)| {
                 let distance = self.target_id ^ id;
                 
                 if distance < closest {
@@ -142,7 +152,7 @@ impl TableLookup {
             
             // Check if we got closer (equal to is not enough)
             let iterate_nodes = if next_dist_to_beat < dist_to_beat {
-                let iterate_nodes = pick_iterate_nodes(nodes.into_iter(), self.target_id);
+                let iterate_nodes = pick_iterate_nodes(nodes.into_iter().filter(&already_requested), self.target_id);
                 
                 // Push nodes into the all nodes list
                 for (id, v4_addr) in nodes {
@@ -290,6 +300,9 @@ impl TableLookup {
             }
             
             // We requested from the node, mark it down
+            self.requested_nodes.insert(node.clone());
+            
+            // Update the node in the routing table
             table.find_node(node).map(|n| n.local_request());
             
             messages_sent += 1;
