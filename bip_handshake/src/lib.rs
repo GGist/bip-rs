@@ -3,6 +3,7 @@ extern crate bytes;
 #[macro_use]
 extern crate log;
 extern crate mio;
+extern crate slab;
 
 mod bittorrent;
 mod handshaker;

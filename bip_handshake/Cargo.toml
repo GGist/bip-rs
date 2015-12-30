@@ -14,10 +14,11 @@ keywords      = ["handshake", "bittorrent"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_util      = { path = "../bip_util", version = "0.2.0" }
-mio           = "0.5.0"
-bytes         = "0.3.0"
-log           = "0.3.0"
+bip_util    = { path = "../bip_util", version = "0.2.0" }
+mio         = { git = "https://github.com/GGist/mio", branch = "win-fix-oneshot" }
+bytes       = "0.3.0"
+log         = "0.3.0"
+slab        = { git = "https://github.com/carllerche/slab", rev = "36c635b313" }
 
 [features]
-unstable      = []
+unstable    = []
