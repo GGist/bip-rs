@@ -9,7 +9,7 @@ use bip_util::bt::{InfoHash};
 use bip_util::sha::{self};
 use url::{Url};
 
-use decode::{self};
+use parse::{self};
 use error::{ParseError, ParseErrorKind, ParseResult};
 use iter::{Paths, Files, Pieces};
 
@@ -31,7 +31,7 @@ impl MetainfoFile {
         where B: AsRef<[u8]> {
         let bytes_slice = bytes.as_ref();
         
-        decode_from_bytes(bytes_slice)
+        parse_from_bytes(bytes_slice)
     }
     
     /// Read a MetainfoFile from the given file.
@@ -82,21 +82,21 @@ impl MetainfoFile {
     }
 }
 
-/// Decodes the given bytes and builds a MetainfoFile from them.
-fn decode_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
+/// Parses the given bytes and builds a MetainfoFile from them.
+fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
     let root_bencode = try!(Bencode::decode(bytes).map_err(|_| {
         ParseError::new(ParseErrorKind::CorruptData, "Specified File Is Not Valid Bencode")
     }));
-    let root_dict = try!(decode::decode_root_dict(&root_bencode));
+    let root_dict = try!(parse::parse_root_dict(&root_bencode));
     
-    let announce = try!(decode::decode_announce_url(root_dict)).to_owned();
-    let opt_comment = decode::decode_comment(root_dict).map(|e| e.to_owned());
-    let opt_encoding = decode::decode_encoding(root_dict).map(|e| e.to_owned());
-    let opt_created_by = decode::decode_created_by(root_dict).map(|e| e.to_owned());
-    let opt_creation_date = decode::decode_creation_date(root_dict);
+    let announce = try!(parse::parse_announce_url(root_dict)).to_owned();
+    let opt_comment = parse::parse_comment(root_dict).map(|e| e.to_owned());
+    let opt_encoding = parse::parse_encoding(root_dict).map(|e| e.to_owned());
+    let opt_created_by = parse::parse_created_by(root_dict).map(|e| e.to_owned());
+    let opt_creation_date = parse::parse_creation_date(root_dict);
     
-    let info_hash = try!(decode::decode_info_hash(root_dict));
-    let info_dict = try!(decode::decode_info_dict(root_dict));
+    let info_hash = try!(parse::parse_info_hash(root_dict));
+    let info_dict = try!(parse::parse_info_dict(root_dict));
     let info_dictionary = try!(InfoDictionary::new(info_dict));
     
     Ok(MetainfoFile{ comment: opt_comment, announce: announce, encoding: opt_encoding, info_hash: info_hash,
@@ -119,7 +119,7 @@ pub struct InfoDictionary {
 impl InfoDictionary {
     /// Builds the InfoDictionary from the root bencode of the metainfo file.
     fn new<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<InfoDictionary> {
-        decode_from_info_dictionary(info_dict)
+        parse_from_info_dictionary(info_dict)
     }
     
     /// Some file directory if this is a multi-file torrent, otherwise None.
@@ -142,31 +142,39 @@ impl InfoDictionary {
     }
     
     /// Iterator over each of the pieces SHA-1 hash.
+    ///
+    /// Ordering of pieces yielded in the iterator is guaranteed to be the order in
+    /// which they are found in the torrent file as this is necessary to refer to
+    /// pieces by their index to other peers.
     pub fn pieces<'a>(&'a self) -> Pieces<'a> {
         Pieces::new(&self.pieces)
     }
     
-    /// Iterator over each file within 
+    /// Iterator over each file within the torrent file.
+    ///
+    /// Ordering of files yielded in the iterator is guaranteed to be the order in
+    /// which they are found in the torrent file as this is necessary to reconstruct
+    /// pieces received from peers.
     pub fn files<'a>(&'a self) -> Files<'a> {
         Files::new(&self.files)
     }
 }
 
-/// Decodes the given info dictionary and builds an InfoDictionary from it.
-fn decode_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<InfoDictionary> {
-    let piece_len = try!(decode::decode_piece_length(info_dict));
-    let is_private = decode::decode_private(info_dict);
+/// Parses the given info dictionary and builds an InfoDictionary from it.
+fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<InfoDictionary> {
+    let piece_len = try!(parse::parse_piece_length(info_dict));
+    let is_private = parse::parse_private(info_dict);
     
-    let pieces = try!(decode::decode_pieces(info_dict));
+    let pieces = try!(parse::parse_pieces(info_dict));
     let piece_buffers = try!(allocate_pieces(pieces));
     
     if is_multi_file_torrent(info_dict) { 
-        let file_directory = try!(decode::decode_name(info_dict)).to_owned();
-        let files_bencode = try!(decode::decode_files_list(info_dict));
+        let file_directory = try!(parse::parse_name(info_dict)).to_owned();
+        let files_bencode = try!(parse::parse_files_list(info_dict));
         
         let mut files_list = Vec::with_capacity(files_bencode.len());
         for file_bencode in files_bencode {
-            let file_dict = try!(decode::decode_file_dict(file_bencode));
+            let file_dict = try!(parse::parse_file_dict(file_bencode));
             let file = try!(File::as_multi_file(file_dict));
             
             files_list.push(file);
@@ -184,7 +192,7 @@ fn decode_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> P
 
 /// Returns whether or not this is a multi file torrent.
 fn is_multi_file_torrent<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> bool {
-    decode::decode_length(info_dict).is_err()
+    parse::parse_length(info_dict).is_err()
 }
 
 /// Validates and allocates the hash pieces on the heap.
@@ -221,23 +229,23 @@ pub struct File {
 impl File {
     /// Parse the info dictionary and generate a single file File.
     fn as_single_file<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<File> {
-        let length = try!(decode::decode_length(info_dict));
-        let md5sum = decode::decode_md5sum(info_dict).map(|m| m.to_owned());
-        let name = try!(decode::decode_name(info_dict));
+        let length = try!(parse::parse_length(info_dict));
+        let md5sum = parse::parse_md5sum(info_dict).map(|m| m.to_owned());
+        let name = try!(parse::parse_name(info_dict));
         
         Ok(File{ len: length, path: vec![name.to_owned()], md5sum: md5sum })
     }
     
     /// Parse the file dictionary and generate a multi file File.
     fn as_multi_file<'a>(file_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<File> {
-        let length = try!(decode::decode_length(file_dict));
-        let md5sum = decode::decode_md5sum(file_dict).map(|m| m.to_owned());
+        let length = try!(parse::parse_length(file_dict));
+        let md5sum = parse::parse_md5sum(file_dict).map(|m| m.to_owned());
         
-        let path_list_bencode = try!(decode::decode_path_list(file_dict));
+        let path_list_bencode = try!(parse::parse_path_list(file_dict));
         
         let mut path_list = Vec::with_capacity(path_list_bencode.len());
         for path_bencode in path_list_bencode {
-            let path = try!(decode::decode_path_str(path_bencode));
+            let path = try!(parse::parse_path_str(path_bencode));
             
             path_list.push(path.to_owned());
         }

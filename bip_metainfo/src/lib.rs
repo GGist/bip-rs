@@ -1,17 +1,20 @@
+#[macro_use]
 extern crate bip_bencode;
 extern crate bip_util;
 extern crate chrono;
+extern crate memmap;
 extern crate url;
+extern crate walkdir;
 
 mod builder;
-mod decode;
-mod encode;
 mod error;
 mod metainfo;
+mod parse;
 
 pub mod iter;
 
 pub use bip_util::bt::{InfoHash};
 
+pub use builder::{MetainfoBuilder, PieceLength};
 pub use error::{ParseError, ParseErrorKind, ParseResult};
 pub use metainfo::{InfoDictionary, MetainfoFile, File};

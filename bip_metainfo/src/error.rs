@@ -1,5 +1,8 @@
 use std::borrow::{Cow};
+use std::error::{Error};
 use std::io::{self};
+
+use walkdir::{self};
 
 /// Result of parsing a torrent file.
 pub type ParseResult<T> = Result<T, ParseError>;
@@ -50,5 +53,11 @@ impl ParseError {
 impl From<io::Error> for ParseError {
     fn from(err: io::Error) -> ParseError {
         ParseError::new(ParseErrorKind::IoError, err.to_string())
+    }
+}
+
+impl From<walkdir::Error> for ParseError {
+    fn from(err: walkdir::Error) -> ParseError {
+        ParseError::new(ParseErrorKind::IoError, err.description().to_owned())
     }
 }
