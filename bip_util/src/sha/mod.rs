@@ -1,8 +1,10 @@
 use std::ops::{BitXor};
 
-use sha1::{Sha1};
-
 use error::{GenericError, GenericResult};
+
+mod builder;
+
+pub use sha::builder::{ShaHashBuilder};
 
 /// Length of a SHA-1 hash.
 pub const SHA_HASH_LEN: usize = 20;
@@ -16,7 +18,7 @@ pub struct ShaHash {
 impl ShaHash {
     /// Create a ShaHash by hashing the given bytes.
     pub fn from_bytes(bytes: &[u8]) -> ShaHash {
-        apply_sha1(bytes).into()
+        ShaHashBuilder::new().add_bytes(bytes).build()
     }
     
     /// Create a ShaHash directly from the given hash.
@@ -79,19 +81,6 @@ impl BitXor<ShaHash> for ShaHash {
         
         self
     }
-}
-
-//----------------------------------------------------------------------------//
-
-/// Applies a SHA-1 hash to the src and outputs it in dst.
-fn apply_sha1(src: &[u8]) -> [u8; SHA_HASH_LEN] {
-    let mut sha = Sha1::new();
-    let mut buffer = [0u8; SHA_HASH_LEN];
-    
-    sha.update(src);
-    sha.output(&mut buffer);
-    
-    buffer
 }
 
 //----------------------------------------------------------------------------//
