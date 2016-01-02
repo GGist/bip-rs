@@ -1,0 +1,16 @@
+[package]
+name        = "bip_magnet"
+version     = "0.0.1"
+description = "Magnet link parsing and construction"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_magnet"
+repository  = "https://github.com/GGist/bip-rs/bip_magnet"
+
+keywords    = ["magnet", "bittorrent"]
+
+license     = "MIT"
+
+[features]
+unstable = []
