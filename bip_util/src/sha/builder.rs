@@ -1,4 +1,5 @@
-use sha1::{Sha1};
+use crypto::digest::{Digest};
+use crypto::sha1::{Sha1};
 
 use sha::{self, ShaHash};
 
@@ -16,7 +17,7 @@ impl ShaHashBuilder {
     
     /// Add bytes to the ShaHashBuilder.
     pub fn add_bytes(mut self, bytes: &[u8]) -> ShaHashBuilder {
-        self.sha.update(bytes);
+        self.sha.input(bytes);
         
         self
     }
@@ -25,7 +26,7 @@ impl ShaHashBuilder {
     pub fn build(&self) -> ShaHash {
         let mut buffer = [0u8; sha::SHA_HASH_LEN];
         
-        self.sha.output(&mut buffer);
+        self.sha.clone().result(&mut buffer);
         
         buffer.into()
     }

@@ -1,6 +1,6 @@
 //! Utilities used by the Bittorrent Infrastructure Project.
 
-extern crate sha1;
+extern crate crypto;
 extern crate rand;
 extern crate chrono;
 

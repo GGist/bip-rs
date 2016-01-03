@@ -1,6 +1,6 @@
 [package]
 name        = "bip_util"
-version     = "0.2.0"
+version     = "0.2.1"
 description = "Utilities for the Bittorrent Infrastructure Project"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -15,7 +15,7 @@ license     = "MIT"
 [dependencies]
 chrono      = "0.2.0"
 rand        = "0.3.0"
-sha1        = "0.1.0"
+rust-crypto = "0.2.0"
 
 [features]
 unstable = []
