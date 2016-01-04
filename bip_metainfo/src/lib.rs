@@ -6,6 +6,9 @@ extern crate memmap;
 extern crate url;
 extern crate walkdir;
 
+#[cfg(test)]
+extern crate rand;
+
 mod builder;
 mod error;
 mod metainfo;

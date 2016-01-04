@@ -12,6 +12,7 @@ use builder::worker::{ResultMessage, MasterMessage};
 use error::{ParseResult, ParseError, ParseErrorKind};
 use parse::{self};
 
+mod queue;
 mod worker;
 
 // Piece length is inversly related to the file size.
