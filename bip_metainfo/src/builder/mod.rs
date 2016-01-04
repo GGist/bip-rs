@@ -28,13 +28,13 @@ mod worker;
 // size which will shrink the pieces size which ensures we do not go outside of our max size.
 // This ensure we can generate good piece lengths for both large and small files.
 
-const BALANCED_MAX_PIECES_SIZE:  usize = 40000;
+const BALANCED_MAX_PIECES_SIZE:  usize = 30000;
 const BALANCED_MIN_PIECE_LENGTH: usize = 512 * 1024;
 
-const FILE_SIZE_MAX_PIECES_SIZE:  usize = 20000;
+const FILE_SIZE_MAX_PIECES_SIZE:  usize = 10000;
 const FILE_SIZE_MIN_PIECE_LENGTH: usize = 1 * 1024 * 1024;
 
-const TRANSFER_MAX_PIECES_SIZE:  usize = 60000;
+const TRANSFER_MAX_PIECES_SIZE:  usize = 50000;
 const TRANSFER_MIN_PIECE_LENGTH: usize = 1 * 1024;
 
 /// Enumerates settings for piece length for generating a torrent file.
@@ -125,7 +125,7 @@ impl<'a> MetainfoBuilder<'a> {
         }
         
         let piece_length = determine_piece_length(file_entry[0].0, self.piece_length);
-        let pieces = try!(process_files_pieces(file_entry.into_iter().map(|(_, f)| f), piece_length, num_threads));
+        let pieces = try!(process_files_pieces(file_entry.into_iter(), piece_length, num_threads));
         
         let (file_length, ref file_name) = file_metadata[0];
         
@@ -165,7 +165,7 @@ impl<'a> MetainfoBuilder<'a> {
         
         let total_file_size = file_entries.iter().fold(0, |prev, curr| prev + curr.0);
         let piece_length = determine_piece_length(total_file_size, self.piece_length);
-        let pieces = try!(process_files_pieces(file_entries.into_iter().map(|(_, f)| f), piece_length, num_threads));
+        let pieces = try!(process_files_pieces(file_entries.into_iter(), piece_length, num_threads));
         
         // Grab the directory name and map our file metadat to the correct structure
         let directory_name = dir_path.as_ref().iter().last().unwrap().to_str().unwrap();
@@ -236,7 +236,7 @@ fn calculate_piece_length(total_file_size: u64, max_pieces_size: usize, min_piec
     let num_pieces = (max_pieces_size as f64) / (sha::SHA_HASH_LEN as f64);
     let piece_length = ((total_file_size as f64) / num_pieces + 0.5) as usize;
     
-    let pot_piece_length = piece_length.next_power_of_two() >> 1;
+    let pot_piece_length = piece_length.next_power_of_two();
     
     if pot_piece_length < min_piece_length {
         min_piece_length
@@ -304,11 +304,11 @@ fn map_files_metadata<'a, I>(file_entries: I, num_paths_skip: usize) -> ParseRes
 
 /// Concurrently calculates the pieces portion of the given file entries.
 fn process_files_pieces<'a, I>(file_entries: I, piece_length: usize, num_threads: usize) -> ParseResult<Vec<u8>>
-    where I: Iterator<Item=DirEntry> {
+    where I: Iterator<Item=(u64, DirEntry)> {
     let (send_files, recv_pieces) = worker::start_hasher_workers(piece_length, num_threads);
     
-    // Send all the file entries to the master worker
-    for entry in file_entries {
+    // Send all the file entries to the master worker (entries of length 0 will fail to mmap)
+    for entry in file_entries.filter(|&(size, _)| size != 0).map(|(_, f)| f) {
         send_files.send(MasterMessage::QueueFile(entry)).unwrap();
     }
     
