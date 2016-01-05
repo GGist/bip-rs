@@ -1,77 +1,103 @@
 use std::fs::{File};
+use std::io::{self, Read};
 use std::sync::{Arc};
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread::{self};
 
-use bip_util::sha::{ShaHash, ShaHashBuilder};
+use bip_util::sha::{ShaHash};
+use crossbeam::sync::{MsQueue};
 use walkdir::{DirEntry};
-use memmap::{Mmap, Protection};
 
-use builder::queue::{IndexQueue};
-use error::{ParseError, ParseErrorKind, ParseResult};
+use builder::buffer::{PieceBuffers, PieceBuffer};
+use error::{ParseError, ParseResult};
+
+/// Trait used to access data that is stored at some location.
+pub trait DataEntry: Send {
+    type Data: Read;
+    
+    fn access(&self) -> io::Result<<Self as DataEntry>::Data>;
+}
+
+impl DataEntry for DirEntry {
+    type Data = File;
+    
+    fn access(&self) -> io::Result<File> {
+        File::open(self.path())
+    }
+}
 
 /// Messages sent to the master hasher.
-pub enum MasterMessage {
-    /// This message should only originate from a client!!!
+pub enum MasterMessage<T> where T: DataEntry {
+    /// Originates from the client!!!
     ///
     /// Process the next file in order.
-    QueueFile(DirEntry),
-    /// This message should only originate from a client!!!
+    IncludeEntry(T),
+    /// Originates from the client!!!
     ///
-    /// This means there are no more files essentially.
+    /// This means there are no more entries.
     ClientFinished,
-    /// This message should only originate from a worker!!!
+    /// Originates from a worker!!!
     ///
     /// Accepts the piece hash with the given piece index.
     AcceptPiece(usize, ShaHash),
-    /// This message should only originate from a worker!!!
+    /// Originates from a worker!!!
     ///
-    /// This means one of our workers has finished and shut down.
+    /// One of our workers has finished and shut down.
     WorkerFinished
 }
 
 /// Message received from the master hasher.
-pub enum ResultMessage {
+pub enum ClientMessage {
     /// Hashing process completed.
     Completed(Vec<(usize, ShaHash)>),
-    /// Hashing process errored out.
+    /// Hashing process errored.
     Errored(ParseError)
 }
 
 /// Message sent to a worker hasher.
+#[derive(PartialEq, Eq)]
 enum WorkerMessage {
     /// Start processing the given memory region.
     ///
     /// Size of the region as well as the region are given.
-    HashFile(usize, Arc<Mmap>),
+    HashPiece(usize, PieceBuffer),
     /// Worker should either exit it's thread or hash
     /// the last (irregular) piece that it was holding on to.
     Finish
 }
 
+// Create master worker, read in chunks of file (only whole pieces, unless we receive a finish), send to a sync sender, 
+
 /// Starts a number of hasher workers which will generate the hash pieces for the files we send to it.
-pub fn start_hasher_workers(piece_length: usize, num_workers: usize) -> (Sender<MasterMessage>, Receiver<ResultMessage>) {
+pub fn start_hasher_workers<T>(piece_length: usize, num_workers: usize) -> (Sender<MasterMessage<T>>, Receiver<ClientMessage>)
+    where T: DataEntry + 'static {
+    // Create channels to communicate with the master and client
     let (master_send, master_recv) = mpsc::channel();
     let (client_send, client_recv) = mpsc::channel();
     
-    // Create workers and channels to communicate with them
-    let mut worker_senders = Vec::with_capacity(num_workers);
-    let index_queue = Arc::new(IndexQueue::new());
+    // Create queue to push work to and pull work from
+    let work_queue = Arc::new(MsQueue::new());
+    
+    // Create buffer allocator to reuse pre allocated buffer
+    let piece_buffers = Arc::new(PieceBuffers::new(piece_length, num_workers));
+    
+    // Create n worker threads that pull work from the queue
     for _ in 0..num_workers {
-        let share_index_queue = index_queue.clone();
-        let clone_master_send = master_send.clone();
-        let (worker_send, worker_recv) = mpsc::channel();
+        let share_master_send = master_send.clone();
+        let share_work_queue = work_queue.clone();
+        let share_piece_buffers = piece_buffers.clone();
         
         thread::spawn(move || {
-            start_hash_worker(clone_master_send, worker_recv, share_index_queue, piece_length);
+            start_hash_worker(share_master_send, share_work_queue, share_piece_buffers);
         });
-        
-        worker_senders.push(worker_send);
     }
     
-    // Create the master worker and channels to communicate with the client_recv
+    // Create the master worker to coordinate between the workers and the client
     thread::spawn(move || {
-        start_hash_master(num_workers, master_recv, client_send, worker_senders);
+        match start_hash_master(num_workers, master_recv, work_queue, piece_buffers) {
+            Ok(pieces) => client_send.send(ClientMessage::Completed(pieces)).unwrap(),
+            Err(error) => client_send.send(ClientMessage::Errored(error)).unwrap()
+        }
     });
     
     (master_send, client_recv)
@@ -79,41 +105,44 @@ pub fn start_hasher_workers(piece_length: usize, num_workers: usize) -> (Sender<
 
 //----------------------------------------------------------------------------//
 
-/// Start a master hasher which will take care of memory mapping files and giving updates to the hasher workers.
-fn start_hash_master(num_workers: usize, recv: Receiver<MasterMessage>, send: Sender<ResultMessage>,
-    senders: Vec<Sender<WorkerMessage>>) {
+/// Start a master hasher which will take care of chunking sequential/overlapping pieces from the data given to it and giving updates to the hasher workers.
+fn start_hash_master<T>(num_workers: usize, recv: Receiver<MasterMessage<T>>, work: Arc<MsQueue<WorkerMessage>>,
+    buffers: Arc<PieceBuffers>) -> ParseResult<Vec<(usize, ShaHash)>> where T: DataEntry {
     let mut pieces = Vec::new();
+    let mut piece_index = 0;
     
-    // Loop through all messages until the client initiates a finish.
+    let mut cont_piece_buffer = buffers.checkout();
+    // Loop through all messages until client sends a finished event
     for msg in recv.iter() {
         match msg {
-            MasterMessage::WorkerFinished             => panic!("bip_metainfo: Worker finished before the client initiated a finish..."),
-            MasterMessage::AcceptPiece(index, piece)  => pieces.push((index, piece)),
-            MasterMessage::ClientFinished             => { break; },
-            MasterMessage::QueueFile(dir_entry)       => {
-                // Distribute the file to all of the workers, if an error occured, send it and shut down.
-                if let Err(e) = distribute_worker_file(&dir_entry, &senders[..]) {
-                    send.send(ResultMessage::Errored(e)).unwrap();
-                    return
-                }
+            MasterMessage::WorkerFinished            => panic!("bip_metainfo: Worker finished unexpectedly..."),
+            MasterMessage::AcceptPiece(index, piece) => pieces.push((index, piece)),
+            MasterMessage::ClientFinished            => { break; },
+            MasterMessage::IncludeEntry(entry)       => { 
+                cont_piece_buffer = try!(distribute_data_entry(entry, &mut piece_index, &*work, cont_piece_buffer, &*buffers));
             }
         }
     }
     
-    // At this point, there are no more files to hash. We should let all workers know that they need to finish up.
-    for send in senders.iter() {
-        send.send(WorkerMessage::Finish).unwrap();
+    // Push last possibly partial piece
+    if !cont_piece_buffer.is_empty() {
+        work.push(WorkerMessage::HashPiece(piece_index, cont_piece_buffer));
     }
     
-    // Wait for all of the workers to either send us the last piece(s) or let us know they are finished.
+    // No more entries, tell workers to shut down
+    for _ in 0..num_workers {
+        work.push(WorkerMessage::Finish);
+    }
+    
+    // Wait for all of the workers to finish up the last pieces
     let mut workers_finished = 0;
     while workers_finished < num_workers {
         match recv.recv() {
             Ok(MasterMessage::AcceptPiece(index, piece)) => pieces.push((index, piece)),
             Ok(MasterMessage::WorkerFinished)            => workers_finished += 1,
-            Ok(MasterMessage::ClientFinished)            => panic!("bip_metainfo: Client told us they finished twice..."),
-            Ok(MasterMessage::QueueFile(..))             => panic!("bip_metainfo: Client tried to queue a file after finishing..."),
-            Err(_)                                       => panic!("bip_metainfo: Master reciever failed before all workers finished...")
+            Ok(MasterMessage::ClientFinished)            => panic!("bip_metainfo: Client sent duplicates finishes..."),
+            Ok(MasterMessage::IncludeEntry(..))          => panic!("bip_metainfo: Client sent an entry after finishing..."),
+            Err(_)                                       => panic!("bip_metainfo: Master failed to verify all workers shutdown...")
         }
     }
     
@@ -122,419 +151,227 @@ fn start_hash_master(num_workers: usize, recv: Receiver<MasterMessage>, send: Se
         one.0.cmp(&two.0)
     });
     
-    send.send(ResultMessage::Completed(pieces)).unwrap();
+    Ok(pieces)
 }
 
-/// Distribute the file to the hasher workers.
-fn distribute_worker_file(dir_entry: &DirEntry, senders: &[Sender<WorkerMessage>]) -> ParseResult<()> {
-    // Try to open the file and mmap it.
-    if let Ok(Ok(mmap)) = File::open(dir_entry.path()).map(|f| Mmap::open(&f, Protection::Read)) {
-        let mmap = Arc::new(mmap);
+/// Process the given data entry, pushing whole pieces onto the worker queue.
+///
+/// Returns the partial (or empty) piece buffer that should be added to if more entries are seen.
+fn distribute_data_entry<T>(entry: T, piece_index: &mut usize, work: &MsQueue<WorkerMessage>, cont_buffer: PieceBuffer,
+    buffers: &PieceBuffers) -> io::Result<PieceBuffer> where T: DataEntry {
+    let mut readable_data = try!(entry.access());
+    let mut piece_buffer = cont_buffer;
+    
+    let mut eof = false;
+    while !eof {
+        eof = try!(piece_buffer.read_bytes(|buffer_slice| {
+            readable_data.read(buffer_slice)
+        }));
         
-        // Send the mmap and its size to all workers.
-        for send in senders {
-            let shared_mmap = mmap.clone();
-            send.send(WorkerMessage::HashFile(shared_mmap.len(), shared_mmap)).unwrap();
+        if piece_buffer.is_whole() {
+            work.push(WorkerMessage::HashPiece(*piece_index, piece_buffer));
+            
+            *piece_index += 1;
+            piece_buffer = buffers.checkout();
         }
-        
-        Ok(())
-    } else {
-        Err(ParseError::new(ParseErrorKind::IoError, "Failed To Open Or Mmap File"))
     }
+    
+    Ok(piece_buffer)
 }
 
 //----------------------------------------------------------------------------//
 
-/// Saves the state of a partial piece (hash) so it can be re-processed with the next mmap.
-///
-/// A partial hash state could extend beyond more than two files in the worst (complex) case
-/// if one of the files is smaller than the piece length which is definitely possible.
-struct PartialHashState {
-    /// Accumulates the bytes within the mmaps
-    builder:     ShaHashBuilder,
-    piece_index: usize,
-    /// Numbers of byte left to process from the start of the next mmap.
-    bytes_left:  usize
-}
-
-/// Starts a hasher worker which will hash all of the mmap handles it receives. Partial pieces will be processed across
-/// multiple mmap regions. If a worker receives a finished message, any partial piece will be hashed immediately and
-/// yielded.
-fn start_hash_worker(send: Sender<MasterMessage>, recv: Receiver<WorkerMessage>, index_queue: Arc<IndexQueue>,
-    piece_length: usize) {
-    let mut region_bytes_processed = 0;
-    let mut opt_partial_hash_state = None;
+/// Starts a hasher worker which will hash all of the buffers it receives.
+fn start_hash_worker<T>(send: Sender<MasterMessage<T>>, work: Arc<MsQueue<WorkerMessage>>, buffers: Arc<PieceBuffers>)
+    where T: DataEntry {
+    let mut work_to_do = true;
     
-    // Receive messages until the master tells us to finish up.
-    for msg in recv.iter() {
-        match msg {
-            WorkerMessage::HashFile(size, mmap) => {
-                // Just need to make sure that the underlying mmap is not modified (by us or anyone else).
-                let region = unsafe{ mmap.as_slice() };
+    while work_to_do {
+        let work_item = work.pop();
+        
+        match work_item {
+            WorkerMessage::Finish                   => { work_to_do = false; },
+            WorkerMessage::HashPiece(index, buffer) => {
+                let hash = ShaHash::from_bytes(buffer.as_slice());
                 
-                // Try to process any partial hashes we saved, if we dont have any saved, process the current mmap itself.
-                //
-                // The idea here is that we we have a partial piece, we need to process the start of the next mmap up to the amount
-                // of bytes we need to make it a whole piece. If the current mmap didnt satisfy that, it means we need to wait for
-                // the next mmap to consume more bytes. In that case, dont clear the partial state (dont call process_current_mmap).
-                opt_partial_hash_state = opt_partial_hash_state.take().and_then(|p| {
-                    process_overlapping_region(p, region, &send)
-                }).or_else(|| {
-                    process_region(region, &index_queue, region_bytes_processed, piece_length, &send)
-                });
-                
-                // Add up the total file size we have seen so far.
-                region_bytes_processed += size;
-            },
-            WorkerMessage::Finish => {
-                // Check if we still have a partial piece being built, if so, build it and send it.
-                opt_partial_hash_state.as_ref().map(|p| {
-                    send.send(MasterMessage::AcceptPiece(p.piece_index, p.builder.build())).unwrap();
-                });
-                
-                send.send(MasterMessage::WorkerFinished).unwrap();
+                send.send(MasterMessage::AcceptPiece(index, hash)).unwrap();
+                buffers.checkin(buffer);
             }
         }
     }
-}
-
-/// Hashes as much of the region as possible at the current piece index with the total number of bytes hashsed in
-/// previous regions.
-///
-/// Optionally returns the piece index of the partial piece for the current region.
-fn process_region(region: &[u8], index_queue: &Arc<IndexQueue>, region_bytes_processed: usize, piece_length: usize,
-    send: &Sender<MasterMessage>) -> Option<PartialHashState> {
-    // Grab a piece index
-    // TODO: Make sure this is the correct ordering, and that we cant relax it
-    let mut next_piece_index = index_queue.get();
-    // Calculate the piece index offset
-    let mut next_region_offset = calculate_piece_offset(region_bytes_processed, next_piece_index.get(), piece_length);
     
-    // While the offset of the next piece resides (even partially) in the current region
-    while next_region_offset < region.len() {
-        let end_region_offset = next_region_offset + piece_length;
-        
-        // Check if our piece slice extends into the next mmap
-        if end_region_offset > region.len() {
-            // Grab the end slice for the partial piece
-            let partial_slice = &region[next_region_offset..];
-            
-            let builder = ShaHashBuilder::new().add_bytes(partial_slice);
-            let bytes_left = piece_length - partial_slice.len();
-            
-            // Return the partial piece state
-            return Some(PartialHashState{ builder: builder, piece_index: next_piece_index.get(), bytes_left: bytes_left })
-        } else {
-            // Hash the complete piece contained in the current mmap
-            let hash = ShaHash::from_bytes(&region[next_region_offset..end_region_offset]);
-            
-            // Send the completed piece hash back to the master
-            send.send(MasterMessage::AcceptPiece(next_piece_index.get(), hash)).unwrap();
-        }
-        
-        // Grab a new piece index
-        next_piece_index = index_queue.get();
-        // Calculate the new piece index offset
-        next_region_offset = calculate_piece_offset(region_bytes_processed, next_piece_index.get(), piece_length);
-    }
-    
-    // Put the index back into the queue for processing later
-    index_queue.put_back(next_piece_index);
-    
-    None
-}
-
-/// Processes the partial piece from one region extending onto the next region.
-///
-/// Returns the state back if it needs to be processed with the next region, or None it is has finished.
-fn process_overlapping_region(mut prev_state: PartialHashState, curr_region: &[u8], send: &Sender<MasterMessage>)
-    -> Option<PartialHashState> {
-    let bytes_left = prev_state.bytes_left;
-    
-    if bytes_left > curr_region.len() {
-        // We are going to have to process this partial piece again after this
-        prev_state.bytes_left -= curr_region.len();
-        prev_state.builder = prev_state.builder.add_bytes(curr_region);
-        
-        Some(prev_state)
-    } else {
-        // We are not going to have to process this partial peice again after this
-        prev_state.bytes_left = 0;
-        let hash = prev_state.builder.add_bytes(&curr_region[0..bytes_left]).build();
-        
-        // Send the processed piece
-        send.send(MasterMessage::AcceptPiece(prev_state.piece_index, hash)).unwrap();
-        
-        None
-    }
-}
-
-/// Calculates the offset into the current mmap that the given piece index resides at.
-fn calculate_piece_offset(region_bytes_processed: usize, piece_index: usize, piece_length: usize) -> usize {
-    // Offset in relation to all previously processed mmaps
-    let global_offset = piece_index * piece_length;
-    
-    // Local offset into the current (or future) mmap
-    global_offset - region_bytes_processed
+    send.send(MasterMessage::WorkerFinished).unwrap();
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc};
-    use std::sync::mpsc::{self};
+    use std::thread::{self};
+    use std::time::{Duration};
+    use std::io::{self, Cursor};
 
     use bip_util::sha::{ShaHash};
     use rand::{self, Rng};
     
-    use builder::queue::{IndexQueue};
-    use builder::worker::{self, MasterMessage};
+    use builder::worker::{self, MasterMessage, DataEntry, ClientMessage};
     
     // Keep these numbers fairly small to avoid lengthy tests
     const DEFAULT_PIECE_LENGTH: usize = 1024;
-    const DEFAULT_NUM_PIECES:   usize = 500;
-    const DEFAULT_NUM_REGIONS:  usize = 4;
+    const DEFAULT_NUM_PIECES:   usize = 300;
     
-    /// Generates a buffer of random bytes with the specified size.
-    fn generate_random_bytes(size: usize) -> Vec<u8> {
-        let mut buffer = vec![0u8; size];
-        let mut rng = rand::thread_rng();
+    // Mock object for providing direct access to bytes via DataEntry.
+    #[derive(Clone)]
+    struct MockDataEntry {
+        buffer: Vec<u8>
+    }
+    
+    impl MockDataEntry {
+        /// Creates a new MockDataEntry with the given number of bytes initialized with random data.
+        fn as_random(num_bytes: usize) -> MockDataEntry {
+            let mut buffer = vec![0u8; num_bytes];
+            let mut rng = rand::thread_rng();
+            
+            rng.fill_bytes(&mut buffer);
+            
+            MockDataEntry{ buffer: buffer }
+        }
         
-        rng.fill_bytes(&mut buffer);
+        /// Access the internal bytes as a slice.
+        fn as_slice(&self) -> &[u8] {
+            &self.buffer
+        }
+    }
+    
+    // Data has to be 'static since we are sending it. Also, Vec doesnt implement read...
+    impl DataEntry for MockDataEntry {
+        type Data = Cursor<Vec<u8>>;
         
-        buffer
+        fn access(&self) -> io::Result<Cursor<Vec<u8>>> {
+            Ok(Cursor::new(self.buffer.clone()))
+        }
+    }
+    
+    /// Test helper which will validate that the pieces calculated from the given entries are correctly calculated
+    /// by the hash workers.
+    fn validate_entries_pieces(data_entries: Vec<MockDataEntry>, piece_length: usize, num_threads: usize) {
+        // Start up the hasher workers
+        let (send, recv) = worker::start_hasher_workers(piece_length, num_threads);
+        
+        // Calculate a contiguous form of the given entries for easy chunking
+        let contiguous_entry = data_entries.iter().map(|entry| entry.as_slice()).fold(vec![], |mut acc, next| {
+            acc.extend_from_slice(next);
+            
+            acc
+        });
+        let computed_pieces = contiguous_entry.chunks(piece_length).enumerate().map(|(index, chunk)| {
+            (index, ShaHash::from_bytes(chunk))
+        }).collect::<Vec<(usize, ShaHash)>>();
+        
+        // Send each of the data entries to the hasher
+        for data_entry in data_entries {
+            send.send(MasterMessage::IncludeEntry(data_entry)).unwrap();
+        }
+        send.send(MasterMessage::ClientFinished).unwrap();
+        
+        // Allow the hasher to finish up it's worker threads
+        thread::sleep(Duration::from_millis(100));
+        
+        // Receive the calculated pieces from the hasher
+        let received_pieces = match recv.recv().unwrap() {
+            ClientMessage::Completed(pieces) => pieces,
+            ClientMessage::Errored(error)    => panic!("Piece Hasher Errored Out: {:?}", error)
+        };
+        
+        // Make sure our computes piece values match up with those computed by the hasher
+        assert_eq!(received_pieces, computed_pieces);
     }
     
     #[test]
-    fn positive_piece_index_zero() {
-        let bytes_processed = 0;
-        let piece_index = 0;
-    
-        let expected_offset = 0;
-        assert_eq!(super::calculate_piece_offset(bytes_processed, piece_index, DEFAULT_PIECE_LENGTH),
-            expected_offset);
-    }
-    
-    #[test]
-    fn positive_piece_index_one() {
-        let bytes_processed = 0;
-        let piece_index = 1;
-        
-        let expected_offset = DEFAULT_PIECE_LENGTH;
-        assert_eq!(super::calculate_piece_offset(bytes_processed, piece_index, DEFAULT_PIECE_LENGTH),
-            expected_offset);
-    }
-    
-    #[test]
-    fn positive_piece_index_larget() {
-        let bytes_processed = 0;
-        let piece_index = 2034;
-        
-        let expected_offset = DEFAULT_PIECE_LENGTH * 2034;
-        assert_eq!(super::calculate_piece_offset(bytes_processed, piece_index, DEFAULT_PIECE_LENGTH),
-            expected_offset);
-    }
-    
-    #[test]
-    fn positive_process_piece_length_divisible_region() {
+    fn positive_piece_length_divisible_region_single_thread() {
         let region_length = DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES;
-        let region = generate_random_bytes(region_length);
-        
-        // Make sure our region has the correct length
-        assert_eq!(region.len(), region_length);
-        
-        // Let the routine process our region
-        let (send, recv) = mpsc::channel();
-        let index_queue = Arc::new(IndexQueue::new());
-        let opt_partial_state = worker::process_region(&region, &index_queue, 0, DEFAULT_PIECE_LENGTH, &send);
-        
-        // Should not have any partial piece left
-        assert!(opt_partial_state.is_none());
-        
-        // Don't simply iterate otherwise we would block (if we are failing fail NOW)
-        let mut supposed_pieces = Vec::with_capacity(DEFAULT_NUM_PIECES);
-        for _ in 0..DEFAULT_NUM_PIECES {
-            if let Ok(MasterMessage::AcceptPiece(index, piece)) = recv.try_recv() {
-                supposed_pieces.push((index, piece));
-            } else {
-                panic!("Receiver failed to receive a piece...")
-            }
-        }
-        assert!(recv.try_recv().is_err());
-        // Since we did not process the pieces in multiple threads, we know the pieces are already in order
-        
-        // Calculate the pieces ourselves to check against our previous result
-        let mut calculated_pieces = Vec::with_capacity(DEFAULT_NUM_PIECES);
-        for (index, chunk) in region.chunks(DEFAULT_PIECE_LENGTH).enumerate() {
-            let piece = ShaHash::from_bytes(chunk);
-            
-            calculated_pieces.push((index, piece));
-        }
-        
-        // Assert that our calculated pieces are equal to the supposed pieces
-        assert_eq!(calculated_pieces, supposed_pieces);
+        let data_entry = vec![MockDataEntry::as_random(region_length)];
+    
+        validate_entries_pieces(data_entry, DEFAULT_PIECE_LENGTH, 1);
     }
     
     #[test]
-    fn positive_process_piece_length_divisible_regions() {
+    fn positive_piece_length_divisible_region_multiple_threads() {
         let region_length = DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES;
-        
-        let mut regions = Vec::with_capacity(DEFAULT_NUM_REGIONS);
-        for _ in 0..DEFAULT_NUM_REGIONS {
-            regions.push(generate_random_bytes(region_length));
-        }
-        
-        // Make sure our region has the designated number of bytes
-        let region_size_sum = regions.iter().map(|r| r.len()).fold(0, |sum, len| sum + len);
-        assert_eq!(region_size_sum, DEFAULT_NUM_REGIONS * region_length);
-        
-        // Compute the supposed pieces for all of our regions
-        let (send, recv) = mpsc::channel();
-        let index_queue = Arc::new(IndexQueue::new());
-        let mut bytes_processed = 0;
-        for region in regions.iter() {
-            let opt_partial_state = worker::process_region(region, &index_queue, bytes_processed,
-                DEFAULT_PIECE_LENGTH, &send);
-            
-            // All regions are a multiple of the piece length, no partial states!
-            assert!(opt_partial_state.is_none());
-            
-            bytes_processed += region.len();
-        }
-        
-        let expected_pieces = DEFAULT_NUM_PIECES * DEFAULT_NUM_REGIONS;
-        
-        // Gather the expected amount of pieces
-        let mut supposed_pieces = Vec::with_capacity(expected_pieces);
-        for _ in 0..expected_pieces {
-            if let Ok(MasterMessage::AcceptPiece(index, piece)) = recv.try_recv() {
-                supposed_pieces.push((index, piece));
-            } else {
-                panic!("Receiver failed to receive a piece...")
-            }
-        }
-        assert!(recv.try_recv().is_err());
-        
-        // Process the regions ourselves
-        let mut calculated_pieces = Vec::with_capacity(expected_pieces);
-        for region in regions.iter() {
-            for chunk in region.chunks(DEFAULT_PIECE_LENGTH) {
-                let piece_index = calculated_pieces.len();
-                let piece = ShaHash::from_bytes(chunk);
-                
-                calculated_pieces.push((piece_index, piece));
-            }
-        }
-        
-        // Assert that our calculated pieces are equal to the supposed pieces
-        assert_eq!(calculated_pieces, supposed_pieces);
+        let data_entry = vec![MockDataEntry::as_random(region_length)];
+    
+        validate_entries_pieces(data_entry, DEFAULT_PIECE_LENGTH, 4);
     }
     
     #[test]
-    fn positive_process_piece_length_undivisible_region() {
-        let region_length = (DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES) - 1;
-        let region = generate_random_bytes(region_length);
+    fn positive_piece_length_undivisible_region_single_thread() {
+        let region_length = DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES + 1;
+        let data_entry = vec![MockDataEntry::as_random(region_length)];
         
-        // Make sure our region has the correct length
-        assert_eq!(region.len(), region_length);
-        
-        let (send, recv) = mpsc::channel();
-        let index_queue = Arc::new(IndexQueue::new());
-        let opt_partial_state = worker::process_region(&region, &index_queue, 0, DEFAULT_PIECE_LENGTH, &send);
-        
-        // Perform some checks on the partial piece
-        let partial_state = opt_partial_state.unwrap();
-        assert_eq!(partial_state.bytes_left, 1);
-        
-        let mut supposed_pieces = Vec::with_capacity(DEFAULT_NUM_PIECES - 1);
-        for _ in 0..(DEFAULT_NUM_PIECES - 1) {
-            if let Ok(MasterMessage::AcceptPiece(index, piece)) = recv.try_recv() {
-                supposed_pieces.push((index, piece));
-            } else {
-                panic!("Receiver failed to receive a piece...")
-            }
-        }
-        assert!(recv.try_recv().is_err());
-        
-        // Push the last partial piece manually
-        supposed_pieces.push((partial_state.piece_index, partial_state.builder.build()));
-        
-        let mut calculated_pieces = Vec::with_capacity(DEFAULT_NUM_PIECES);
-        for (index, chunk) in region.chunks(DEFAULT_PIECE_LENGTH).enumerate() {
-            let piece = ShaHash::from_bytes(chunk);
-            
-            calculated_pieces.push((index, piece));
-        }
-        
-        assert_eq!(calculated_pieces, supposed_pieces);
+        validate_entries_pieces(data_entry, DEFAULT_PIECE_LENGTH, 1);
     }
     
     #[test]
-    fn positive_process_piece_length_undivisible_regions() {
-        // Two regions that are smaller than the piece length, one that is bigger
-        let region_one_length = DEFAULT_PIECE_LENGTH - 1;
-        let region_two_length = DEFAULT_PIECE_LENGTH / 2;
-        let region_three_length = DEFAULT_NUM_PIECES * DEFAULT_PIECE_LENGTH;
+    fn positive_piece_length_undivisible_region_multiple_threads() {
+        let region_length = DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES + 1;
+        let data_entry = vec![MockDataEntry::as_random(region_length)];
         
-        // Make our region contiguous so it is easier for us to validate the pieces
-        let contiguous_region_length = region_one_length + region_two_length + region_three_length;
-        let contiguous_region = generate_random_bytes(contiguous_region_length);
+        validate_entries_pieces(data_entry, DEFAULT_PIECE_LENGTH, 4);
+    }
+    
+    #[test]
+    fn positive_piece_length_divisible_regions_single_thread() {
+        let region_lengths = [
+            DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES,
+            DEFAULT_PIECE_LENGTH * 1,
+            DEFAULT_PIECE_LENGTH * 50
+        ];
+        let data_entries = region_lengths.iter().map(|&length| 
+            MockDataEntry::as_random(length)
+        ).collect();
         
-        assert_eq!(contiguous_region.len(), contiguous_region_length);
+        validate_entries_pieces(data_entries, DEFAULT_PIECE_LENGTH, 1);
+    }
+    
+    #[test]
+    fn positive_piece_length_divisible_regions_multiple_threads() {
+        let region_lengths = [
+            DEFAULT_PIECE_LENGTH * DEFAULT_NUM_PIECES,
+            DEFAULT_PIECE_LENGTH * 1,
+            DEFAULT_PIECE_LENGTH * 50
+        ];
+        let data_entries = region_lengths.iter().map(|&length| 
+            MockDataEntry::as_random(length)
+        ).collect();
         
-        let (send, recv) = mpsc::channel();
-        let index_queue = Arc::new(IndexQueue::new());
-        let mut bytes_processed = 0;
+        validate_entries_pieces(data_entries, DEFAULT_PIECE_LENGTH, 4);
+    }
+    
+    #[test]
+    fn positive_piece_length_undivisible_regions_single_thread() {
+        let region_lengths = [
+            DEFAULT_PIECE_LENGTH / 2 * DEFAULT_NUM_PIECES,
+            DEFAULT_PIECE_LENGTH / 4 * DEFAULT_NUM_PIECES,
+            DEFAULT_PIECE_LENGTH * 1,
+            (DEFAULT_PIECE_LENGTH * 2 - 1) * 2
+        ];
+        let data_entries = region_lengths.iter().map(|&length|
+            MockDataEntry::as_random(length)
+        ).collect();
         
-        let region_one = &contiguous_region[0..region_one_length];
-        let region_two = &contiguous_region[region_one_length..(region_one_length + region_two_length)];
-        let region_three = &contiguous_region[(region_one_length + region_two_length)..];
+        validate_entries_pieces(data_entries, DEFAULT_PIECE_LENGTH, 1);
+    }
+    
+    #[test]
+    fn positive_piece_length_undivisible_regions_multiple_threads() {
+        let region_lengths = [
+            DEFAULT_PIECE_LENGTH / 2 * DEFAULT_NUM_PIECES,
+            DEFAULT_PIECE_LENGTH / 4 * DEFAULT_NUM_PIECES,
+            DEFAULT_PIECE_LENGTH * 1,
+            (DEFAULT_PIECE_LENGTH * 2 - 1) * 2
+        ];
+        let data_entries = region_lengths.iter().map(|&length|
+            MockDataEntry::as_random(length)
+        ).collect();
         
-        // Process region one
-        let partial_state_one = worker::process_region(region_one, &index_queue, bytes_processed, DEFAULT_PIECE_LENGTH,
-            &send).unwrap();
-        // The first region overlaps into the second, we need to re-process it, but the remainder bytes should
-        // ALL be contained in the second region, so we dont need to process it with the third region.
-        assert!(worker::process_overlapping_region(partial_state_one, region_two, &send).is_none());
-        
-        bytes_processed += region_one.len();
-        
-        // Process region two
-        let partial_state_two = worker::process_region(region_two, &index_queue, bytes_processed, DEFAULT_PIECE_LENGTH,
-            &send).unwrap();
-        // Second region overlaps into the third region
-        assert!(worker::process_overlapping_region(partial_state_two, region_three, &send).is_none());
-        
-        bytes_processed += region_two.len();
-        
-        // Process region three
-        let partial_state_three = worker::process_region(region_three, &index_queue, bytes_processed, DEFAULT_PIECE_LENGTH,
-            &send).unwrap();
-        // Since the second region overlapped into the third and took a number of bytes not equal to the piece length,
-        // we dont have bytes that are divisible by the piece length which means we will also have a partial state.
-        // However, since this is the last partial state, we just need to manually get the hash of the last partial piece.
-        
-        let expected_pieces = contiguous_region_length / DEFAULT_PIECE_LENGTH;
-        
-        let mut supposed_pieces = Vec::with_capacity(expected_pieces + 1);
-        for _ in 0..expected_pieces {
-            if let Ok(MasterMessage::AcceptPiece(index, piece)) = recv.try_recv() {
-                supposed_pieces.push((index, piece));
-            } else {
-                panic!("Receiver failed to receive a piece...")
-            }
-        }
-        assert!(recv.try_recv().is_err());
-        
-        // Push the last partial piece manually
-        supposed_pieces.push((partial_state_three.piece_index, partial_state_three.builder.build()));
-        
-        let mut calculated_pieces = Vec::with_capacity(expected_pieces + 1);
-        for (index, chunk) in contiguous_region.chunks(DEFAULT_PIECE_LENGTH).enumerate() {
-            let piece = ShaHash::from_bytes(chunk);
-            
-            calculated_pieces.push((index, piece));
-        }
-        
-        assert_eq!(calculated_pieces, supposed_pieces);
+        validate_entries_pieces(data_entries, DEFAULT_PIECE_LENGTH, 4);
     }
 }

@@ -16,7 +16,7 @@ license     = "MIT"
 bip_bencode = { path = "../bip_bencode", version = "0.1.0" }
 bip_util    = { path = "../bip_util", version = "0.2.0" }
 chrono      = "0.2.0"
-memmap      = "0.2.0"
+crossbeam   = "0.2.0"
 url         = "0.5.0"
 walkdir     = "0.1.0"
 
