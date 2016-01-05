@@ -8,11 +8,11 @@ use chrono::{UTC};
 use url::{Url};
 use walkdir::{DirEntry, WalkDir};
 
-use builder::worker::{ResultMessage, MasterMessage};
+use builder::worker::{ClientMessage, MasterMessage};
 use error::{ParseResult, ParseError, ParseErrorKind};
 use parse::{self};
 
-mod queue;
+mod buffer;
 mod worker;
 
 // Piece length is inversly related to the file size.
@@ -29,13 +29,17 @@ mod worker;
 // size which will shrink the pieces size which ensures we do not go outside of our max size.
 // This ensure we can generate good piece lengths for both large and small files.
 
-const BALANCED_MAX_PIECES_SIZE:  usize = 30000;
+// Maximum Piece Length Across The Board, Takes Priority Over Max Pieces Sizes
+// (Not Applied To Custom Lengths)
+const ALL_OPT_MAX_PIECE_LENGTH: usize = 16 * 1024 * 1024;
+
+const BALANCED_MAX_PIECES_SIZE:  usize = 40000;
 const BALANCED_MIN_PIECE_LENGTH: usize = 512 * 1024;
 
-const FILE_SIZE_MAX_PIECES_SIZE:  usize = 10000;
+const FILE_SIZE_MAX_PIECES_SIZE:  usize = 20000;
 const FILE_SIZE_MIN_PIECE_LENGTH: usize = 1 * 1024 * 1024;
 
-const TRANSFER_MAX_PIECES_SIZE:  usize = 50000;
+const TRANSFER_MAX_PIECES_SIZE:  usize = 60000;
 const TRANSFER_MIN_PIECE_LENGTH: usize = 1 * 1024;
 
 /// Enumerates settings for piece length for generating a torrent file.
@@ -239,10 +243,10 @@ fn calculate_piece_length(total_file_size: u64, max_pieces_size: usize, min_piec
     
     let pot_piece_length = piece_length.next_power_of_two();
     
-    if pot_piece_length < min_piece_length {
-        min_piece_length
-    } else {
-        pot_piece_length
+    match (pot_piece_length > min_piece_length, pot_piece_length < ALL_OPT_MAX_PIECE_LENGTH) {
+        (true, true) => pot_piece_length,
+        (false, _)   => min_piece_length,
+        (_, false)   => ALL_OPT_MAX_PIECE_LENGTH
     }
 }
 
@@ -310,7 +314,7 @@ fn process_files_pieces<'a, I>(file_entries: I, piece_length: usize, num_threads
     
     // Send all the file entries to the master worker (entries of length 0 will fail to mmap)
     for entry in file_entries.filter(|&(size, _)| size != 0).map(|(_, f)| f) {
-        send_files.send(MasterMessage::QueueFile(entry)).unwrap();
+        send_files.send(MasterMessage::IncludeEntry(entry)).unwrap();
     }
     
     // Let the master worker know we are don sending file entries
@@ -318,8 +322,8 @@ fn process_files_pieces<'a, I>(file_entries: I, piece_length: usize, num_threads
     
     // Receive the result from the master worker
     let hash_pieces = match recv_pieces.recv().unwrap() {
-        ResultMessage::Completed(pieces) => pieces,
-        ResultMessage::Errored(err)      => return Err(err)
+        ClientMessage::Completed(pieces) => pieces,
+        ClientMessage::Errored(err)      => return Err(err)
     };
     
     // Concat all of the pieces into a byte string
