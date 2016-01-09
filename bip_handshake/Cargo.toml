@@ -1,6 +1,6 @@
 [package]
 name        = "bip_handshake"
-version     = "0.1.1"
+version     = "0.1.2"
 description = "Common handshaking interface as well as a default handshake implementation"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -13,7 +13,7 @@ keywords    = ["handshake", "bittorrent"]
 license     = "MIT"
 
 [dependencies]
-bip_util    = { path = "../bip_util", version = "0.1.0" }
+bip_util    = { path = "../bip_util", version = "0.2.0" }
 mio         = "0.5.0"
 bytes       = "0.3.0"
 log         = "0.3.0"
