@@ -3,7 +3,7 @@ extern crate bip_metainfo;
 use std::fs::{File};
 use std::io::{Write};
 
-use bip_metainfo::{MetainfoBuilder, PieceLength};
+use bip_metainfo::{MetainfoBuilder};
 
 // Note: Remember to run this in release mode since building this file is VERY cpu bound.
 
