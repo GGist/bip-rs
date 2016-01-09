@@ -6,15 +6,15 @@ description   = "Internal Use: Pulls in all crates for documentation"
 authors       = ["Andrew <amiller4421@gmail.com>"]
 
 [dependencies]
-bip_bencode   = "0.1.0"
-bip_dht       = "0.2.0"
-bip_handshake = "0.1.0"
-bip_htracker  = "0.0.0"
-bip_lpd       = "0.0.0"
-bip_metainfo  = "0.0.0"
-bip_peer      = "0.0.0"
-bip_util      = "0.1.0"
-bip_utracker  = "0.0.1"
+bip_bencode   = "*"
+bip_dht       = "*"
+bip_handshake = "*"
+bip_htracker  = "*"
+bip_lpd       = "*"
+bip_metainfo  = "*"
+bip_peer      = "*"
+bip_util      = "*"
+bip_utracker  = "*"
 
 [features]
 unstable = []
