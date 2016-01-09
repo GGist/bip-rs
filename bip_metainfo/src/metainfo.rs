@@ -168,7 +168,7 @@ fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> Pa
     let pieces = try!(parse::parse_pieces(info_dict));
     let piece_buffers = try!(allocate_pieces(pieces));
     
-    if is_multi_file_torrent(info_dict) { 
+    if is_multi_file_torrent(info_dict) {
         let file_directory = try!(parse::parse_name(info_dict)).to_owned();
         let files_bencode = try!(parse::parse_files_list(info_dict));
         
@@ -271,4 +271,352 @@ impl File {
     pub fn paths<'a>(&'a self) -> Paths<'a> {
         Paths::new(&self.path)
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap};
+    
+    use bip_bencode::{Bencode};
+    use bip_util::sha::{self};
+    use bip_util::bt::{InfoHash};
+    
+    use metainfo::{MetainfoFile};
+    use parse::{self};
+    
+    /// Helper function for manually constructing a metainfo file based on the parameters given.
+    ///
+    /// If the metainfo file builds successfully, assertions will be made about the contents of it based
+    /// on the parameters given.
+    fn validate_parse_from_params(tracker: Option<&str>, create_date: Option<i64>, comment: Option<&str>,
+        create_by: Option<&str>, encoding: Option<&str>, piece_length: Option<i64>, pieces: Option<&[u8]>,
+        private: Option<i64>, directory: Option<&str>, files: Option<Vec<(Option<i64>, Option<&[u8]>, Option<Vec<String>>)>>) {
+        let mut root_dict = BTreeMap::new();
+        
+        tracker.as_ref().map(|t| root_dict.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(t)));
+        create_date.as_ref().map(|&c| root_dict.insert(parse::CREATION_DATE_KEY, ben_int!(c)));
+        comment.as_ref().map(|c| root_dict.insert(parse::COMMENT_KEY, ben_bytes!(c)));
+        create_by.as_ref().map(|c| root_dict.insert(parse::CREATED_BY_KEY, ben_bytes!(c)));
+        encoding.as_ref().map(|e| root_dict.insert(parse::ENCODING_KEY, ben_bytes!(e)));
+        
+        let mut info_dict = BTreeMap::new();
+        
+        piece_length.as_ref().map(|&p| info_dict.insert(parse::PIECE_LENGTH_KEY, ben_int!(p)));
+        pieces.as_ref().map(|p| info_dict.insert(parse::PIECES_KEY, ben_bytes!(p)));
+        private.as_ref().map(|&p| info_dict.insert(parse::PRIVATE_KEY, ben_int!(p)));
+        
+        directory.as_ref().and_then(|d| {
+            // We intended to build a multi file torrent since we provided a directory
+            info_dict.insert(parse::NAME_KEY, ben_bytes!(d));
+            
+            files.as_ref().map(|files| {
+                let bencode_files = Bencode::List(files.iter().map(|&(ref opt_len, ref opt_md5, ref opt_paths)| {
+                    let opt_bencode_paths = opt_paths.as_ref().map(|p| {
+                        Bencode::List(p.iter().map(|e| ben_bytes!(e)).collect())
+                    });
+                    let mut file_dict = BTreeMap::new();
+                    
+                    opt_bencode_paths.map(|p| file_dict.insert(parse::PATH_KEY, p));
+                    opt_len.map(|l| file_dict.insert(parse::LENGTH_KEY, ben_int!(l)));
+                    opt_md5.map(|m| file_dict.insert(parse::MD5SUM_KEY, ben_bytes!(m)));
+                    
+                    Bencode::Dict(file_dict)
+                }).collect());
+                
+                info_dict.insert(parse::FILES_KEY, bencode_files);
+            });
+            
+            Some(d)
+        }).or_else(|| {
+            // We intended to build a single file torrent if a directory was not specified
+            files.as_ref().map(|files| {
+                let (ref opt_len, ref opt_md5, ref opt_path) = files[0];
+                
+                opt_path.as_ref().map(|p| info_dict.insert(parse::NAME_KEY, ben_bytes!(&p[0])));
+                opt_len.map(|l| info_dict.insert(parse::LENGTH_KEY, ben_int!(l)));
+                opt_md5.map(|m| info_dict.insert(parse::MD5SUM_KEY, ben_bytes!(m)));
+            });
+            
+            None
+        });
+        let bencode_info_dict = Bencode::Dict(info_dict);
+        let info_hash = InfoHash::from_bytes(&bencode_info_dict.encode());
+        
+        root_dict.insert(parse::INFO_KEY, bencode_info_dict);
+        
+        let metainfo_file = MetainfoFile::from_bytes(Bencode::Dict(root_dict).encode()).unwrap();
+        
+        assert_eq!(metainfo_file.info_hash(), info_hash);
+        assert_eq!(metainfo_file.comment(), comment);
+        assert_eq!(metainfo_file.created_by(), create_by);
+        assert_eq!(metainfo_file.encoding(), encoding);
+        assert_eq!(metainfo_file.creation_date, create_date);
+        
+        assert_eq!(metainfo_file.info().directory(), directory);
+        assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap());
+        assert_eq!(metainfo_file.info().is_private(), private.unwrap_or(0) == 1);
+        
+        let pieces = pieces.unwrap();
+        assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(), metainfo_file.info().pieces().count());
+        for (piece_chunk, piece_elem) in pieces.chunks(sha::SHA_HASH_LEN).zip(metainfo_file.info().pieces()) {
+            assert_eq!(piece_chunk, piece_elem);
+        }
+        
+        let num_files = files.as_ref().map(|f| f.len()).unwrap_or(0);
+        assert_eq!(metainfo_file.info().files().count(), num_files);
+        
+        let mut supp_files = files.as_ref().unwrap().iter();
+        let mut meta_files = metainfo_file.info().files();
+        for _ in 0..num_files {
+            let meta_file = meta_files.next().unwrap();
+            let supp_file = supp_files.next().unwrap();
+            
+            assert_eq!(meta_file.length(), supp_file.0.unwrap());
+            assert_eq!(meta_file.md5sum(), supp_file.1);
+            
+            let meta_paths: Vec<&str> = meta_file.paths().collect();
+            let supp_paths: Vec<&str> = supp_file.2.as_ref().unwrap().iter().map(|p| &p[..]).collect();
+            assert_eq!(meta_paths, supp_paths);
+        }
+    }
+    
+    #[test]
+    fn positive_parse_from_single_file() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_from_multi_file() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let directory = "dummy_file_directory";
+        let files     = vec![
+            (Some(0), None, Some(vec!["dummy_sub_directory".to_owned(), "dummy_file_name".to_owned()]))
+        ];
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), None, Some(directory), Some(files));
+    }
+    
+    #[test]
+    fn positive_parse_from_multi_files() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let directory = "dummy_file_directory";
+        let files     = vec![
+            (Some(0), None, Some(vec!["dummy_sub_directory".to_owned(), "dummy_file_name".to_owned()])),
+            (Some(5), None, Some(vec!["other_dummy_file_name".to_owned()]))
+        ];
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), None, Some(directory), Some(files));
+    }
+    
+    #[test]
+    fn positive_parse_from_empty_pieces() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; 0];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_creation_date() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let creation_date = 5050505050;
+        
+        validate_parse_from_params(Some(tracker), Some(creation_date), None, None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_comment() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let comment = "This is my boring test comment...";
+        
+        validate_parse_from_params(Some(tracker), None, Some(comment), None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_created_by() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let created_by = "Me";
+        
+        validate_parse_from_params(Some(tracker), None, None, Some(created_by), None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_encoding() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let encoding = "UTF-8";
+        
+        validate_parse_from_params(Some(tracker), None, None, None, Some(encoding), Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_private_zero() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let private = 0;
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), Some(private), None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_private_one() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let private = 1;
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), Some(private), None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    fn positive_parse_with_private_non_zero() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let private = -1;
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), Some(private), None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_from_empty_bytes() {
+        MetainfoFile::from_bytes(b"").unwrap();
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_with_no_tracker() {
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        validate_parse_from_params(None, None, None, None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_with_no_piece_length() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        let private = -1;
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, None,
+            Some(&pieces), Some(private), None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_with_no_pieces() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        
+        let file_len   = 0;
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            None, None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_from_single_file_with_no_file_length() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_paths = vec!["dummy_file_name".to_owned()];
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(None, None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_from_single_file_with_no_file_name() {
+        let tracker   = "udp://dummy_domain.com:8989";
+        let piece_len = 1024;
+        let pieces    = [0u8; sha::SHA_HASH_LEN];
+        
+        let file_len   = 0;
+        
+        validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
+            Some(&pieces), None, None, Some(vec![(Some(file_len), None, None)]));
+    }
+    
+        /*
+        fn validate_parse_from_params(tracker: Option<&str>, create_date: Option<i64>, comment: Option<&str>,
+        create_by: Option<&str>, encoding: Option<&str>, piece_length: Option<i64>, pieces: Option<&[u8]>,
+        private: Option<i64>, directory: Option<&str>, files: Option<Vec<(Option<i64>, Option<&[u8]>, Option<Vec<String>>)>>) {*/
 }
