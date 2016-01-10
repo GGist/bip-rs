@@ -1,6 +1,6 @@
 [package]
 name        = "bip_metainfo"
-version     = "0.1.2"
+version     = "0.1.3"
 description = "Parsing and building of bittorrent metainfo files"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
