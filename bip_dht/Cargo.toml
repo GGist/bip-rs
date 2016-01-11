@@ -1,12 +1,13 @@
 [package]
 name          = "bip_dht"
-version       = "0.2.1"
+version       = "0.2.2"
 description   = "Implementation of the bittorrent mainline DHT"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
 
-homepage      = "https://github.com/GGist/bip-rs/bip_dht"
-repository    = "https://github.com/GGist/bip-rs/bip_dht"
+homepage      = "https://github.com/GGist/bip-rs"
+repository    = "https://github.com/GGist/bip-rs/tree/master/bip_dht"
+documentation = "http://ggist.github.io/bip-rs/bip_dht/index.html"
 
 keywords      = ["dht", "distributed", "hash", "mainline", "bittorrent"]
 
@@ -23,4 +24,4 @@ rand          = "0.3.0"
 chrono        = "0.2.0"
 
 [features]
-unstable = []
+unstable      = []

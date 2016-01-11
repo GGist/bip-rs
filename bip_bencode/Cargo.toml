@@ -1,16 +1,17 @@
 [package]
-name        = "bip_bencode"
-version     = "0.1.0"
-description = "Efficient decoding and encoding for bencode"
+name          = "bip_bencode"
+version       = "0.1.1"
+description   = "Efficient decoding and encoding for bencode"
 
-authors     = ["Andrew <amiller4421@gmail.com>"]
+authors       = ["Andrew <amiller4421@gmail.com>"]
 
-homepage    = "https://github.com/GGist/bip-rs/bip_bencode"
-repository  = "https://github.com/GGist/bip-rs/bip_bencode"
+homepage      = "https://github.com/GGist/bip-rs"
+repository    = "https://github.com/GGist/bip-rs/tree/master/bip_bencode"
+documentation = "http://ggist.github.io/bip-rs/bip_bencode/index.html"
 
-keywords    = ["bencode", "bittorrent"]
+keywords      = ["bencode", "bittorrent"]
 
-license     = "MIT"
+license       = "MIT"
 
 [features]
-unstable = []
+unstable      = []

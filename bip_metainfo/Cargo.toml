@@ -1,27 +1,28 @@
 [package]
-name        = "bip_metainfo"
-version     = "0.1.3"
-description = "Parsing and building of bittorrent metainfo files"
+name          = "bip_metainfo"
+version       = "0.1.4"
+description   = "Parsing and building of bittorrent metainfo files"
 
-authors     = ["Andrew <amiller4421@gmail.com>"]
+authors       = ["Andrew <amiller4421@gmail.com>"]
 
-homepage    = "https://github.com/GGist/bip-rs/bip_metainfo"
-repository  = "https://github.com/GGist/bip-rs/bip_metainfo"
+homepage      = "https://github.com/GGist/bip-rs"
+repository    = "https://github.com/GGist/bip-rs/tree/master/bip_metainfo"
+documentation = "http://ggist.github.io/bip-rs/bip_metainfo/index.html"
 
-keywords    = ["metainfo", "torrent", "file", "bittorrent"]
+keywords      = ["metainfo", "torrent", "file", "bittorrent"]
 
-license     = "MIT"
+license       = "MIT"
 
 [dependencies]
-bip_bencode = { path = "../bip_bencode", version = "0.1.0" }
-bip_util    = { path = "../bip_util", version = "0.2.0" }
-chrono      = "0.2.0"
-crossbeam   = "0.2.0"
-url         = "0.5.0"
-walkdir     = "0.1.0"
+bip_bencode   = { path = "../bip_bencode", version = "0.1.0" }
+bip_util      = { path = "../bip_util", version = "0.2.0" }
+chrono        = "0.2.0"
+crossbeam     = "0.2.0"
+url           = "0.5.0"
+walkdir       = "0.1.0"
 
 [dev-dependencies]
-rand = "0.3.0"
+rand          = "0.3.0"
 
 [features]
-unstable = []
+unstable      = []
