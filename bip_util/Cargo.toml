@@ -1,6 +1,6 @@
 [package]
 name          = "bip_util"
-version       = "0.2.2"
+version       = "0.2.3"
 description   = "Utilities for the Bittorrent Infrastructure Project"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -11,7 +11,7 @@ documentation = "http://ggist.github.io/bip-rs/bip_util/index.html"
 
 keywords      = ["utility"]
 
-license       = "MIT"
+license       = "MIT/Apache-2.0"
 
 [dependencies]
 chrono        = "0.2.0"

@@ -1,9 +1,11 @@
 [package]
 name          = "bip"
 version       = "0.1.0"
-description   = "Internal Use: Pulls in all crates for documentation"
+description   = "DO NOT PUBLISH: Pulls crates for documentation into CI"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
+
+license       = "MIT/Apache-2.0"
 
 [dependencies]
 bip_bencode   = "*"
@@ -17,4 +19,4 @@ bip_util      = "*"
 bip_utracker  = "*"
 
 [features]
-unstable = []
+unstable      = []

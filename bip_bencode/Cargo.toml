@@ -1,6 +1,6 @@
 [package]
 name          = "bip_bencode"
-version       = "0.1.1"
+version       = "0.1.2"
 description   = "Efficient decoding and encoding for bencode"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -11,7 +11,7 @@ documentation = "http://ggist.github.io/bip-rs/bip_bencode/index.html"
 
 keywords      = ["bencode", "bittorrent"]
 
-license       = "MIT"
+license       = "MIT/Apache-2.0"
 
 [features]
 unstable      = []

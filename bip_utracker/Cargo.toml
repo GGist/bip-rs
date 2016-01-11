@@ -1,6 +1,6 @@
 [package]
 name        = "bip_utracker"
-version     = "0.0.1"
+version     = "0.0.2"
 description = "Communication with bittorrent UDP trackers"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -10,7 +10,7 @@ repository  = "https://github.com/GGist/bip-rs/bip_utracker"
 
 keywords    = ["tracker", "bittorrent", "udp"]
 
-license     = "MIT"
+license     = "MIT/Apache-2.0"
 
 [features]
 unstable = []

@@ -1,6 +1,6 @@
 [package]
 name        = "bip_lpd"
-version     = "0.0.0"
+version     = "0.0.1"
 description = "Implementation of the bittorrent Local Peer/Service Discovery mechanism"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -10,7 +10,7 @@ repository  = "https://github.com/GGist/bip-rs/bip_lpd"
 
 keywords    = ["peer", "discovery", "local", "service"]
 
-license     = "MIT"
+license     = "MIT/Apache-2.0"
 
 [features]
 unstable = []

@@ -20,3 +20,18 @@ A collection of crates for building applications using bittorrent technologies.
 ## Metainfo (bip_metainfo) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](http://ggist.github.io/bip-rs/bip_metainfo/index.html) [![Crate](http://meritbadge.herokuapp.com/bip_metainfo)](https://crates.io/crates/bip_metainfo)
 
 **About**: At their core, metainfo files serve the purpose of providing a list of checksums for clients interested in specific files, how long each hashed piece should be, and the directory structure for the files. This allows clients to verify the integrity of received files, as well as the ability to recreate exactly the directory structure for the files. Aside from that, there is a plethora of optional information that can be included in this file such as nodes to be contacted in the DHT, trackers to contact, as well as comments, date created, who created the metainfo file, etc.
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.
