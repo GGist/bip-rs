@@ -1,4 +1,4 @@
-//! Iterators over various pieces of information within a metainfo file.
+//! Iterators over torrent file information.
 
 use bip_util::sha::{self};
 

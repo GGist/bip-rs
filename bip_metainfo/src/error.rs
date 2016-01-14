@@ -1,3 +1,5 @@
+//! Errors for torrent file building and parsing.
+
 use std::borrow::{Cow};
 use std::error::{Error};
 use std::io::{self};

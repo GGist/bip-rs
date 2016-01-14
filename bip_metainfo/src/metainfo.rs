@@ -13,7 +13,7 @@ use parse::{self};
 use error::{ParseError, ParseErrorKind, ParseResult};
 use iter::{Paths, Files, Pieces};
 
-/// Information about swarms and file(s) referenced by the torrent file.
+/// Contains optional and required information for the torrent.
 #[derive(Debug)]
 pub struct MetainfoFile {
     comment:         Option<String>,
@@ -105,7 +105,7 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
 
 //----------------------------------------------------------------------------//
 
-/// Information about the file(s) referenced by the torrent file.
+/// Contains files and checksums for the torrent.
 #[derive(Debug)]
 pub struct InfoDictionary {
     files:          Vec<File>,
@@ -218,7 +218,7 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 
 //----------------------------------------------------------------------------//
 
-/// Information about a single file within an InfoDictionary.
+/// Contains information for a single file.
 #[derive(Debug)]
 pub struct File {
     len:    i64,
