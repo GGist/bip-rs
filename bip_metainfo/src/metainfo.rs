@@ -3,7 +3,6 @@
 use bip_bencode::{Bencode, Dictionary};
 use bip_util::bt::{InfoHash};
 use bip_util::sha::{self};
-use url::{Url};
 
 use parse::{self};
 use error::{ParseError, ParseErrorKind, ParseResult};
@@ -13,7 +12,7 @@ use iter::{Paths, Files, Pieces};
 #[derive(Debug)]
 pub struct MetainfoFile {
     comment:         Option<String>,
-    announce:        Url,
+    announce:        Option<String>,
     encoding:        Option<String>,
     info_hash:       InfoHash,
     created_by:      Option<String>,
@@ -36,8 +35,8 @@ impl MetainfoFile {
     }
     
     /// Announce url for the main tracker of the metainfo file.
-    pub fn announce_url(&self) -> &Url {
-        &self.announce
+    pub fn main_tracker(&self) -> Option<&str> {
+        self.announce.as_ref().map(|a| &a[..])
     }
     
     /// Comment included within the metainfo file.
@@ -73,7 +72,7 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
     }));
     let root_dict = try!(parse::parse_root_dict(&root_bencode));
     
-    let announce = try!(parse::parse_announce_url(root_dict)).to_owned();
+    let announce = parse::parse_announce_url(root_dict).map(|e| e.to_owned());
     let opt_comment = parse::parse_comment(root_dict).map(|e| e.to_owned());
     let opt_encoding = parse::parse_encoding(root_dict).map(|e| e.to_owned());
     let opt_created_by = parse::parse_created_by(root_dict).map(|e| e.to_owned());
@@ -527,14 +526,7 @@ mod tests {
     }
     
     #[test]
-    #[should_panic]
-    fn negative_parse_from_empty_bytes() {
-        MetainfoFile::from_bytes(b"").unwrap();
-    }
-    
-    #[test]
-    #[should_panic]
-    fn negative_parse_with_no_tracker() {
+    fn positive_parse_with_no_main_tracker() {
         let piece_len = 1024;
         let pieces    = [0u8; sha::SHA_HASH_LEN];
         
@@ -543,6 +535,12 @@ mod tests {
         
         validate_parse_from_params(None, None, None, None, None, Some(piece_len),
             Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_from_empty_bytes() {
+        MetainfoFile::from_bytes(b"").unwrap();
     }
     
     #[test]

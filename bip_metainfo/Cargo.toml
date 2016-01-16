@@ -13,12 +13,12 @@ keywords      = ["metainfo", "torrent", "file", "bittorrent"]
 
 license       = "MIT/Apache-2.0"
 
-bip_bencode = { path = "../bip_bencode", version = "0.1.0" }
-bip_util    = { path = "../bip_util", version = "0.2.0" }
-chrono      = "0.2.0"
-crossbeam   = "0.2.0"
-url         = "0.5.0"
-walkdir     = "0.1.0"
+[dependencies]
+bip_bencode   = { path = "../bip_bencode", version = "0.1.0" }
+bip_util      = { path = "../bip_util", version = "0.2.0" }
+chrono        = "0.2.0"
+crossbeam     = "0.2.0"
+walkdir       = "0.1.0"
 
 [dev-dependencies]
 rand          = "0.3.0"

@@ -3,7 +3,6 @@ extern crate bip_bencode;
 extern crate bip_util;
 extern crate chrono;
 extern crate crossbeam;
-extern crate url;
 extern crate walkdir;
 
 #[cfg(test)]

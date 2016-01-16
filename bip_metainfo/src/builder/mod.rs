@@ -4,10 +4,9 @@ use std::iter::{ExactSizeIterator};
 use bip_bencode::{Bencode};
 use bip_util::sha::{self, ShaHash};
 use chrono::{UTC};
-use url::{Url};
 
 use accessor::{Accessor, IntoAccessor};
-use error::{ParseResult, ParseError, ParseErrorKind};
+use error::{ParseResult};
 use parse::{self};
 
 mod buffer;
@@ -62,14 +61,16 @@ pub struct MetainfoBuilder<'a> {
 }
 
 impl<'a> MetainfoBuilder<'a> {
-    /// Create a MetainfoBuilder with the given main tracker.
-    pub fn with_tracker(tracker_url: &'a str) -> ParseResult<MetainfoBuilder<'a>> {
-        // Check if the tracker is a valid url
-        if is_valid_url(tracker_url) {
-            Ok(generate_default_builder(tracker_url))
-        } else {
-            Err(ParseError::new(ParseErrorKind::InvalidData, "Given Tracker Is Not A Valid URL"))
-        }
+    /// Create a new MetainfoBuilder with some default values set.
+    pub fn new() -> MetainfoBuilder<'a> {
+        generate_default_builder()
+    }
+    
+    /// Set the main tracker that this torrent file points to.
+    pub fn set_main_tracker(mut self, tracker_url: &'a str) -> MetainfoBuilder<'a> {
+        self.root.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url));
+        
+        self
     }
     
     /// Set the creation date for the torrent.
@@ -188,29 +189,17 @@ impl<'a> MetainfoBuilder<'a> {
         // Return the bencoded root dictionary
         Ok(Bencode::Dict(root).encode())
     }
-    
-    /// Sets the main tracker url to the given (unvalidated) url.
-    fn set_tracker(mut self, valid_tracker_url: &'a str) -> MetainfoBuilder<'a> {
-        self.root.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(valid_tracker_url));
-        
-        self
-    }
 }
 
 //----------------------------------------------------------------------------//
 
 /// Generates a default MetainfoBuilder.
-fn generate_default_builder<'a>(valid_tracker_url: &'a str) -> MetainfoBuilder<'a> {
+fn generate_default_builder<'a>() -> MetainfoBuilder<'a> {
     let builder = MetainfoBuilder{ root: BTreeMap::new(), info: BTreeMap::new(),
         piece_length: PieceLength::OptBalanced };
     let default_creation_date = UTC::now().timestamp();
     
-    builder.set_tracker(valid_tracker_url).set_creation_date(default_creation_date)
-}
-
-/// True if the given url is valid.
-fn is_valid_url(url: &str) -> bool {
-    Url::parse(url).is_ok()
+    builder.set_creation_date(default_creation_date)
 }
 
 /// Calculate the final piece length given the total file size and piece length strategy.

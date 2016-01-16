@@ -1,6 +1,5 @@
 use bip_bencode::{Bencode, Dictionary, BencodeConvert, BencodeConvertError, BencodeConvertErrorKind};
 use bip_util::bt::{InfoHash};
-use url::{Url};
 
 use error::{ParseError, ParseErrorKind, ParseResult};
 
@@ -52,14 +51,8 @@ pub fn parse_root_dict<'a, 'b>(root_bencode: &'b Bencode<'a>) -> ParseResult<&'b
 }
 
 /// Parses the announce url from the root dictionary.
-pub fn parse_announce_url<'a>(root_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<Url> {
-    let tracker_url = try!(CONVERT.lookup_and_convert_str(root_dict, ANNOUNCE_URL_KEY));
-    
-    Url::parse(tracker_url).map_err(|_| {
-        let err_msg = format!("Invalid Tracker Format: {}", tracker_url);
-        
-        ParseError::new(ParseErrorKind::InvalidData, err_msg)
-    })
+pub fn parse_announce_url<'a>(root_dict: &Dictionary<'a, Bencode<'a>>) -> Option<&'a str> {
+    CONVERT.lookup_and_convert_str(root_dict, ANNOUNCE_URL_KEY).ok()
 }
 
 /// Parses the creation date from the root dictionary.
