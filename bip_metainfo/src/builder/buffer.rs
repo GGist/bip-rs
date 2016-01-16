@@ -57,18 +57,12 @@ impl PieceBuffer {
         PieceBuffer{ buffer: vec![0u8; piece_length], bytes_read: 0 }
     }
     
-    /// Supply a closure which will be given a mutable slice of the region of unread bytes
-    /// for the current piece buffer.
-    ///
-    /// Returns whether or not the end of file has been reached, or an error if one occured.
-    pub fn read_bytes<F>(&mut self, mut read_bytes: F) -> io::Result<bool>
-        where F: FnMut(&mut [u8]) -> io::Result<usize> {
-        let buffer_slice = &mut self.buffer[self.bytes_read..];
-        let bytes_read = try!(read_bytes(buffer_slice));
+    pub fn write_bytes<C>(&mut self, mut callback: C) -> io::Result<usize>
+        where C: FnMut(&mut [u8]) -> io::Result<usize> {
+        let new_bytes_read = try!(callback(&mut self.buffer[self.bytes_read..]));
+        self.bytes_read += new_bytes_read;
         
-        self.bytes_read += bytes_read;
-        
-        Ok(bytes_read == 0)
+        Ok(new_bytes_read)
     }
     
     /// Whether or not the given piece buffer is full.

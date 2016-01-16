@@ -1,23 +1,18 @@
 //! Accessing the fields of a MetainfoFile.
 
-use std::fs::{self};
-use std::path::{self};
-use std::io::{Read};
-
 use bip_bencode::{Bencode, Dictionary};
 use bip_util::bt::{InfoHash};
 use bip_util::sha::{self};
-use url::{Url};
 
 use parse::{self};
 use error::{ParseError, ParseErrorKind, ParseResult};
 use iter::{Paths, Files, Pieces};
 
-/// Information about swarms and file(s) referenced by the torrent file.
+/// Contains optional and required information for the torrent.
 #[derive(Debug)]
 pub struct MetainfoFile {
     comment:         Option<String>,
-    announce:        Url,
+    announce:        Option<String>,
     encoding:        Option<String>,
     info_hash:       InfoHash,
     created_by:      Option<String>,
@@ -34,26 +29,14 @@ impl MetainfoFile {
         parse_from_bytes(bytes_slice)
     }
     
-    /// Read a MetainfoFile from the given file.
-    pub fn from_file<P>(path: P) -> ParseResult<MetainfoFile>
-        where P: AsRef<path::Path> {
-        let mut file = try!(fs::File::open(path));
-        let file_size = try!(file.metadata()).len();
-        
-        let mut file_bytes = Vec::with_capacity(file_size as usize);
-        try!(file.read_to_end(&mut file_bytes));
-        
-        MetainfoFile::from_bytes(&file_bytes)
-    }
-    
     /// InfoHash of the InfoDictionary used to identify swarms of peers exchaning these files.
     pub fn info_hash(&self) -> InfoHash {
         self.info_hash
     }
     
     /// Announce url for the main tracker of the metainfo file.
-    pub fn announce_url(&self) -> &Url {
-        &self.announce
+    pub fn main_tracker(&self) -> Option<&str> {
+        self.announce.as_ref().map(|a| &a[..])
     }
     
     /// Comment included within the metainfo file.
@@ -89,7 +72,7 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
     }));
     let root_dict = try!(parse::parse_root_dict(&root_bencode));
     
-    let announce = try!(parse::parse_announce_url(root_dict)).to_owned();
+    let announce = parse::parse_announce_url(root_dict).map(|e| e.to_owned());
     let opt_comment = parse::parse_comment(root_dict).map(|e| e.to_owned());
     let opt_encoding = parse::parse_encoding(root_dict).map(|e| e.to_owned());
     let opt_created_by = parse::parse_created_by(root_dict).map(|e| e.to_owned());
@@ -105,7 +88,7 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
 
 //----------------------------------------------------------------------------//
 
-/// Information about the file(s) referenced by the torrent file.
+/// Contains files and checksums for the torrent.
 #[derive(Debug)]
 pub struct InfoDictionary {
     files:          Vec<File>,
@@ -218,7 +201,7 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 
 //----------------------------------------------------------------------------//
 
-/// Information about a single file within an InfoDictionary.
+/// Contains information for a single file.
 #[derive(Debug)]
 pub struct File {
     len:    i64,
@@ -543,14 +526,7 @@ mod tests {
     }
     
     #[test]
-    #[should_panic]
-    fn negative_parse_from_empty_bytes() {
-        MetainfoFile::from_bytes(b"").unwrap();
-    }
-    
-    #[test]
-    #[should_panic]
-    fn negative_parse_with_no_tracker() {
+    fn positive_parse_with_no_main_tracker() {
         let piece_len = 1024;
         let pieces    = [0u8; sha::SHA_HASH_LEN];
         
@@ -559,6 +535,12 @@ mod tests {
         
         validate_parse_from_params(None, None, None, None, None, Some(piece_len),
             Some(&pieces), None, None, Some(vec![(Some(file_len), None, Some(file_paths))]));
+    }
+    
+    #[test]
+    #[should_panic]
+    fn negative_parse_from_empty_bytes() {
+        MetainfoFile::from_bytes(b"").unwrap();
     }
     
     #[test]
