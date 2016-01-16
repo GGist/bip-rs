@@ -1,9 +1,5 @@
 //! Accessing the fields of a MetainfoFile.
 
-use std::fs::{self};
-use std::path::{self};
-use std::io::{Read};
-
 use bip_bencode::{Bencode, Dictionary};
 use bip_util::bt::{InfoHash};
 use bip_util::sha::{self};
@@ -32,18 +28,6 @@ impl MetainfoFile {
         let bytes_slice = bytes.as_ref();
         
         parse_from_bytes(bytes_slice)
-    }
-    
-    /// Read a MetainfoFile from the given file.
-    pub fn from_file<P>(path: P) -> ParseResult<MetainfoFile>
-        where P: AsRef<path::Path> {
-        let mut file = try!(fs::File::open(path));
-        let file_size = try!(file.metadata()).len();
-        
-        let mut file_bytes = Vec::with_capacity(file_size as usize);
-        try!(file.read_to_end(&mut file_bytes));
-        
-        MetainfoFile::from_bytes(&file_bytes)
     }
     
     /// InfoHash of the InfoDictionary used to identify swarms of peers exchaning these files.
