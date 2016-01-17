@@ -27,10 +27,11 @@ enum WorkerMessage {
 }
 
 /// Starts a number of hasher workers which will generate the hash pieces for the files we send to it.
-pub fn start_hasher_workers<A>(accessor: A, piece_length: usize, num_workers: usize)
-    -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor {
+pub fn start_hasher_workers<A, C>(accessor: A, piece_length: usize, num_pieces: u64, num_workers: usize, progress: C)
+    -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor, C: Fn(f64) + Send + 'static {
     // Create channels to communicate with the master
     let (master_send, master_recv) = mpsc::channel();
+    let (prog_send, prog_recv) = mpsc::channel();
     
     // Create queue to push work to and pull work from
     let work_queue = Arc::new(MsQueue::new());
@@ -49,8 +50,13 @@ pub fn start_hasher_workers<A>(accessor: A, piece_length: usize, num_workers: us
         });
     }
     
+    // Create a worker thread to execute the user callback for the progress update
+    thread::spawn(move || {
+        start_progress_updater(prog_recv, num_pieces, progress);
+    });
+    
     // Create the master worker to coordinate between the workers
-    start_hash_master(accessor, num_workers, master_recv, work_queue, piece_buffers)
+    start_hash_master(accessor, num_workers, master_recv, work_queue, piece_buffers, prog_send)
 }
 
 //----------------------------------------------------------------------------//
@@ -58,7 +64,7 @@ pub fn start_hasher_workers<A>(accessor: A, piece_length: usize, num_workers: us
 /// Start a master hasher which will take care of chunking sequential/overlapping pieces from the data given to it and giving
 /// updates to the hasher workers.
 fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<MasterMessage>, work: Arc<MsQueue<WorkerMessage>>,
-    buffers: Arc<PieceBuffers>) -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor {
+    buffers: Arc<PieceBuffers>, progress_sender: Sender<usize>) -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor {
     let mut pieces = Vec::new();
     let mut piece_index = 0;
     
@@ -82,6 +88,10 @@ fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<Mast
                 
                 piece_index += 1;
                 curr_piece_buffer = buffers.checkout();
+                
+                if progress_sender.send(piece_index).is_err() {
+                    // TODO: Add logging here
+                }
             }
         }
         
@@ -94,6 +104,11 @@ fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<Mast
     if let Some(piece_buffer) = opt_piece_buffer {
         if !piece_buffer.is_empty() {
             work.push(WorkerMessage::HashPiece(piece_index, piece_buffer));
+            
+            piece_index += 1;
+            if progress_sender.send(piece_index).is_err() {
+                // TODO: Add logging here
+            }
         }
     }
     
@@ -118,6 +133,17 @@ fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<Mast
     });
     
     Ok(pieces)
+}
+
+//----------------------------------------------------------------------------//
+
+fn start_progress_updater<C>(recv: Receiver<usize>, num_pieces: u64, progress: C)
+    where C: Fn(f64) {
+    for finished_piece in recv {
+        let percent_complete = (finished_piece as f64) / (num_pieces as f64);
+        
+        progress(percent_complete);
+    }
 }
 
 //----------------------------------------------------------------------------//
@@ -150,6 +176,7 @@ mod tests {
     use std::ops::{Range, Index};
     use std::io::{self, Cursor, Read};
     use std::path::{Path};
+    use std::sync::mpsc::{self};
 
     use bip_util::sha::{ShaHash};
     use rand::{self, Rng};
@@ -216,12 +243,20 @@ mod tests {
     }
     
     fn validate_entries_pieces(accessor: MockAccessor, piece_length: usize, num_threads: usize) {
-        let received_pieces = worker::start_hasher_workers(&accessor, piece_length, num_threads).unwrap();
+        let (prog_send, prog_recv) = mpsc::channel();
+        
+        let total_num_pieces = ((accessor.as_slice().len() as f64) / (piece_length as f64)).ceil() as u64;
+        let received_pieces = worker::start_hasher_workers(&accessor, piece_length, total_num_pieces, num_threads, move |update| {
+            prog_send.send(update).unwrap();
+        }).unwrap();
         
         let computed_pieces = accessor.as_slice().chunks(piece_length).enumerate().map(|(index, chunk)| {
             (index, ShaHash::from_bytes(chunk))
         }).collect::<Vec<(usize, ShaHash)>>();
         
+        let updates_received = prog_recv.iter().count() as u64;
+        
+        assert_eq!(total_num_pieces, updates_received);
         assert_eq!(received_pieces, computed_pieces);
     }
     
