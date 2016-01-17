@@ -117,8 +117,8 @@ impl<'a> MetainfoBuilder<'a> {
     /// the number of workers may not be beneficial. This method WILL block until it completes.
     ///
     /// Returns a list of bytes that make up the complete metainfo file.
-    pub fn build_as_bytes<A>(self, accessor: A, threads: usize) -> ParseResult<Vec<u8>>
-        where A: IntoAccessor {
+    pub fn build_as_bytes<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
+        where A: IntoAccessor, C: Fn(f64) + Send + 'static {
         let access_owner = try!(accessor.into_accessor());
         
         // Collect all of the file information into a list
@@ -134,7 +134,8 @@ impl<'a> MetainfoBuilder<'a> {
         // Build the pieces for the data our accessor is pointing at
         let total_files_len = files_info.iter().fold(0, |acc, nex| acc + nex.0);
         let piece_length = determine_piece_length(total_files_len, self.piece_length);
-        let pieces_list = try!(worker::start_hasher_workers(&access_owner, piece_length, threads));
+        let total_num_pieces = ((total_files_len as f64) / (piece_length as f64) + 0.5) as u64;
+        let pieces_list = try!(worker::start_hasher_workers(&access_owner, piece_length, total_num_pieces, threads, progress));
         let pieces = map_pieces_list(pieces_list.into_iter().map(|(_, piece)| piece));
         
         let mut single_file_name = String::new();
