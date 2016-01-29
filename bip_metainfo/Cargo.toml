@@ -1,6 +1,6 @@
 [package]
 name          = "bip_metainfo"
-version       = "0.2.0"
+version       = "0.2.1"
 description   = "Parsing and building of bittorrent metainfo files"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -22,6 +22,7 @@ walkdir       = "0.1.0"
 
 [dev-dependencies]
 rand          = "0.3.0"
+pbr           = "0.0.5"
 
 [features]
 unstable      = []

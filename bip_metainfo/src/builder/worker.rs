@@ -28,7 +28,7 @@ enum WorkerMessage {
 
 /// Starts a number of hasher workers which will generate the hash pieces for the files we send to it.
 pub fn start_hasher_workers<A, C>(accessor: A, piece_length: usize, num_pieces: u64, num_workers: usize, progress: C)
-    -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor, C: Fn(f64) + Send + 'static {
+    -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor, C: FnMut(f64) + Send + 'static {
     // Create channels to communicate with the master
     let (master_send, master_recv) = mpsc::channel();
     let (prog_send, prog_recv) = mpsc::channel();
@@ -67,7 +67,7 @@ fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<Mast
     buffers: Arc<PieceBuffers>, progress_sender: Sender<usize>) -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor {
     let mut pieces = Vec::new();
     let mut piece_index = 0;
-    
+
     // Our closure may be called multiple times, save partial pieces buffers between calls
     let mut opt_piece_buffer = None;
     try!(accessor.access_pieces(|piece_region| {
@@ -137,8 +137,8 @@ fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<Mast
 
 //----------------------------------------------------------------------------//
 
-fn start_progress_updater<C>(recv: Receiver<usize>, num_pieces: u64, progress: C)
-    where C: Fn(f64) {
+fn start_progress_updater<C>(recv: Receiver<usize>, num_pieces: u64, mut progress: C)
+    where C: FnMut(f64) {
     for finished_piece in recv {
         let percent_complete = (finished_piece as f64) / (num_pieces as f64);
         
