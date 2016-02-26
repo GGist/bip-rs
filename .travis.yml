@@ -15,7 +15,7 @@ addons:
 
 env:
   global:
-    - secure: cBgN6D8ZxwC5UA+3pxWg8ZHf1rtnEPEbwYP9W+NNzzOGLXDvDsZVhBeP0v9ZSHOdIxAENk5zypJOgV3TnMAk/JT5+oJ4elNJfefi22Mxlj5PRANb8K894nBXAzhgEB1LFfOh/9gSrvOZzbmK35l8fGFUx263BqcoPIjQ4UEcuyo=
+    - secure: Mjlxy0VaJeBRsLHMRCZ2S+L13l5REhI+1wmPayNfcDPRFFy8ZwGGY/M5Y3poBGEafqwSKsDhI7E0z4an2s/Wa941hn48dXi3We8HBcqlh3m3pkwFU56YlYjKXN161xgRCI899070P5R1gxNpjIOqk/3vCdi12DYSXPlU5sgMN6I=
   matrix:
     - CRATE_DIR=bip
     - CRATE_DIR=bip_bencode
