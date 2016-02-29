@@ -10,12 +10,15 @@ use mio::tcp::{TcpListener, TcpStream};
 use handshaker::{Handshaker};
 use bittorrent::handler::{HandlerTask};
 
+mod connection;
 mod handler;
 
 const MAX_PROTOCOL_LEN: usize        = 255;
 const BTP_10_PROTOCOL:  &'static str = "BitTorrent protocol";
 
 /// Handshaker that uses the bittorrent handshake protocol.
+///
+/// 
 pub struct BTHandshaker<T> where T: Send {
     inner: Arc<InnerBTHandshaker<T>>
 }
@@ -104,8 +107,8 @@ impl<T> Handshaker for BTHandshaker<T> where T: Send {
 #[cfg(test)]
 mod tests {
     use std::mem::{self};
-    use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr};
-    use std::sync::mpsc::{TryRecvError};
+    use std::net::{SocketAddr, SocketAddrV4, Ipv4Addr, TcpListener};
+    use std::sync::mpsc::{self, TryRecvError};
     use std::thread::{self};
     use std::time::{Duration};
     
@@ -113,18 +116,20 @@ mod tests {
     use mio::tcp::{TcpStream};
     
     use bittorrent::{BTHandshaker};
+    use bittorrent::connection::{self};
+    use bittorrent::handler::{self};
     use handshaker::{Handshaker};
     
     #[test]
     fn positive_make_conenction() {
         // Assign a listen address and peer id for each handshaker
         let ip = Ipv4Addr::new(127, 0, 0, 1);
-        let (addr_one, addr_two) = (SocketAddr::V4(SocketAddrV4::new(ip, 0)), SocketAddr::V4(SocketAddrV4::new(ip, 0)));
+        let addr = SocketAddr::V4(SocketAddrV4::new(ip, 0));
         let (peer_id_one, peer_id_two) = ([1u8; bt::PEER_ID_LEN].into(), [0u8; bt::PEER_ID_LEN].into());
         
         // Create two handshakers
-        let mut handshaker_one = BTHandshaker::<TcpStream>::new(&addr_one, peer_id_one).unwrap();
-        let handshaker_two = BTHandshaker::<TcpStream>::new(&addr_two, peer_id_two).unwrap();
+        let mut handshaker_one = BTHandshaker::<TcpStream>::new(&addr, peer_id_one).unwrap();
+        let handshaker_two = BTHandshaker::<TcpStream>::new(&addr, peer_id_two).unwrap();
         
         // Open up a stream for the specified info hash on both handshakers
         let info_hash = [0u8; bt::INFO_HASH_LEN].into();
@@ -139,6 +144,61 @@ mod tests {
         
         // Allow the handshakers to connect to each other
         thread::sleep(Duration::from_millis(100));
+        
+        // Should receive the peer from both handshakers
+        match (handshaker_one_stream.try_recv(), handshaker_two_stream.try_recv()) {
+            (Ok(_), Ok(_)) => (),
+            _              => panic!("Failed to find peers on one or both handshakers...")
+        };
+    }
+    
+    #[test]
+    fn positive_handshake_expiration() {
+        // Assign a listen address and peer id for each handshaker
+        let ip = Ipv4Addr::new(127, 0, 0, 1);
+        let addr = SocketAddr::V4(SocketAddrV4::new(ip, 0));
+        let (peer_id_one, peer_id_two) = ([1u8; bt::PEER_ID_LEN].into(), [0u8; bt::PEER_ID_LEN].into());
+        
+        // Create two handshakers
+        let mut handshaker_one = BTHandshaker::<TcpStream>::new(&addr, peer_id_one).unwrap();
+        let handshaker_two = BTHandshaker::<TcpStream>::new(&addr, peer_id_two).unwrap();
+        
+        // Open up a stream for the specified info hash on both handshakers
+        let info_hash = [0u8; bt::INFO_HASH_LEN].into();
+        let handshaker_one_stream = handshaker_one.stream(info_hash);
+        let handshaker_two_stream = handshaker_two.stream(info_hash);
+        
+        // Get the address and bind port for handshaker two
+        let handshaker_two_addr = SocketAddr::V4(SocketAddrV4::new(ip, handshaker_two.port()));
+        
+        // Spin up a listener to hold on to connections from our handshaker
+        let listen_addr = SocketAddr::V4(SocketAddrV4::new(ip, 48394));
+        // Need to make sure the connections dont get dropped until test finishes
+        let (send, recv) = mpsc::channel();
+        thread::spawn(move || {
+            let listener = TcpListener::bind(listen_addr).unwrap();
+            
+            for _ in 0..handler::MAX_CONCURRENT_CONNECTIONS {
+                let connection = listener.accept().unwrap().0;
+                send.send(connection).unwrap();
+            }
+        });
+        // Wait for the thread to spin up
+        thread::sleep(Duration::from_millis(100));
+       
+        // Saturate the maximum number of concurrent connections
+        for _ in 0..handler::MAX_CONCURRENT_CONNECTIONS {
+            handshaker_one.connect(None, info_hash, listen_addr);
+        }
+        
+        // Wait for the handshakes to expire
+        thread::sleep(Duration::from_millis(connection::READ_CONNECTION_TIMEOUT + 500));
+        
+        // Connect to handshaker two from handshaker one
+        handshaker_one.connect(Some(peer_id_two), info_hash, handshaker_two_addr);
+        
+        // Allow the handshakers to connect to each other (additional time because event loop is currently saturated)
+        thread::sleep(Duration::from_millis(500));
         
         // Should receive the peer from both handshakers
         match (handshaker_one_stream.try_recv(), handshaker_two_stream.try_recv()) {
