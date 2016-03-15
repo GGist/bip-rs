@@ -4,16 +4,16 @@ extern crate crypto;
 extern crate rand;
 extern crate chrono;
 
-/// Bittorrent specific types and functionality.
+/// Bittorrent specific types.
 pub mod bt;
 
-/// Converting data between types.
+/// Converting between data.
 pub mod convert;
 
 /// Networking primitives and helpers.
 pub mod net;
 
-/// SHA-1 wrapper and utilities.
+/// Hash primitives and helpers.
 pub mod sha;
 
 /// Testing fixtures for dependant crates.
@@ -21,9 +21,8 @@ pub mod sha;
 // when we migrate away from these functions in non test functions.
 pub mod test;
 
-mod error;
-
-pub use error::{GenericResult, GenericError};
+/// Common error types.
+pub mod error;
 
 //----------------------------------------------------------------------------//
 
