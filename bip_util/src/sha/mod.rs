@@ -1,6 +1,6 @@
 use std::ops::{BitXor};
 
-use error::{GenericError, GenericResult};
+use error::{LengthError, LengthResult, LengthErrorKind};
 
 mod builder;
 
@@ -22,9 +22,9 @@ impl ShaHash {
     }
     
     /// Create a ShaHash directly from the given hash.
-    pub fn from_hash(hash: &[u8]) -> GenericResult<ShaHash> {
+    pub fn from_hash(hash: &[u8]) -> LengthResult<ShaHash> {
         if hash.len() != SHA_HASH_LEN {
-            Err(GenericError::InvalidLength(SHA_HASH_LEN))
+            Err(LengthError::new(LengthErrorKind::LengthExpected, SHA_HASH_LEN))
         } else {
             let mut my_hash = [0u8; SHA_HASH_LEN];
             

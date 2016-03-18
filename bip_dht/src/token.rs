@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use chrono::{DateTime, Duration, UTC};
 use rand::{self};
 
-use bip_util::{GenericResult, GenericError};
+use bip_util::error::{LengthResult, LengthError, LengthErrorKind};
 use bip_util::convert::{self};
 use bip_util::sha::{self, ShaHash};
 use bip_util::net::{IpAddr};
@@ -34,9 +34,9 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(bytes: &[u8]) -> GenericResult<Token> {
+    pub fn new(bytes: &[u8]) -> LengthResult<Token> {
         if bytes.len() != sha::SHA_HASH_LEN {
-            Err(GenericError::InvalidLength(sha::SHA_HASH_LEN))
+            Err(LengthError::new(LengthErrorKind::LengthExpected, sha::SHA_HASH_LEN))
         } else {
             let mut token = [0u8; sha::SHA_HASH_LEN];
             

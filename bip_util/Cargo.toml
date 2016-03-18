@@ -1,6 +1,6 @@
 [package]
 name          = "bip_util"
-version       = "0.2.4"
+version       = "0.3.4"
 description   = "Utilities for the Bittorrent Infrastructure Project"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]

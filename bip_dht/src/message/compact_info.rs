@@ -1,7 +1,7 @@
 use std::net::{Ipv4Addr, SocketAddrV4};
 
 use bip_bencode::{Bencode};
-use bip_util::{GenericError, GenericResult};
+use bip_util::error::{LengthError, LengthResult, LengthErrorKind};
 use bip_util::bt::{self, NodeId};
 use bip_util::sha::{ShaHash};
 
@@ -19,9 +19,9 @@ pub struct CompactNodeInfo<'a> {
 }
 
 impl<'a> CompactNodeInfo<'a> {
-    pub fn new(nodes: &'a [u8]) -> GenericResult<CompactNodeInfo<'a>> {
+    pub fn new(nodes: &'a [u8]) -> LengthResult<CompactNodeInfo<'a>> {
         if nodes.len() % BYTES_PER_COMPACT_NODE_INFO != 0 {
-            Err(GenericError::InvalidLengthMultiple(BYTES_PER_COMPACT_NODE_INFO))
+            Err(LengthError::new(LengthErrorKind::LengthMultipleExpected, BYTES_PER_COMPACT_NODE_INFO))
         } else {
             Ok(CompactNodeInfo{ nodes: nodes })
         }
@@ -76,13 +76,13 @@ impl<'a> CompactValueInfo<'a> {
     ///
     /// It is VERY important that the values have been checked to contain only
     /// bencoded bytes and not other types as that will result in a panic.
-    pub fn new(values: &'a [Bencode<'a>]) -> GenericResult<CompactValueInfo<'a>> {
+    pub fn new(values: &'a [Bencode<'a>]) -> LengthResult<CompactValueInfo<'a>> {
         for (index, node) in values.iter().enumerate() {
             // TODO: Do not unwrap here please
             let compact_value = node.bytes().unwrap();
             
             if compact_value.len() != BYTES_PER_COMPACT_IP {
-                return Err(GenericError::InvalidElementLength(index, BYTES_PER_COMPACT_IP))
+                return Err(LengthError::with_index(LengthErrorKind::LengthExpected, BYTES_PER_COMPACT_IP, index))
             }
         }
         
@@ -139,9 +139,9 @@ fn parts_from_compact_info(compact_info: &[u8]) -> (NodeId, SocketAddrV4) {
 }
 
 
-fn socket_v4_from_bytes_be(bytes: &[u8]) -> GenericResult<SocketAddrV4> {
+fn socket_v4_from_bytes_be(bytes: &[u8]) -> LengthResult<SocketAddrV4> {
     if bytes.len() != BYTES_PER_COMPACT_IP {
-        Err(GenericError::InvalidLength(BYTES_PER_COMPACT_IP))
+        Err(LengthError::new(LengthErrorKind::LengthExpected, BYTES_PER_COMPACT_IP))
     } else {
         let (oc_one, oc_two, oc_three, oc_four) = (bytes[0], bytes[1], bytes[2], bytes[3]);
         
