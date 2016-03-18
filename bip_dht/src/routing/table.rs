@@ -212,7 +212,7 @@ impl<'a> BucketContents<'a> {
 /// Iterator over buckets where the item returned is an enum
 /// specifying the current state of the bucket returned.
 #[derive(Copy, Clone)]
-struct Buckets<'a> {
+pub struct Buckets<'a> {
     buckets: &'a [Bucket],
     index:   usize
 }

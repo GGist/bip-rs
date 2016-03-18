@@ -90,7 +90,7 @@ impl Bucket {
 
 //----------------------------------------------------------------------------//
 
-struct GoodNodes<'a> {
+pub struct GoodNodes<'a> {
     iter: Filter<Iter<'a, Node>, fn(&&Node) -> bool>
 }
 
@@ -114,7 +114,7 @@ impl<'a> Iterator for GoodNodes<'a> {
 
 //----------------------------------------------------------------------------//
 
-struct PingableNodes<'a> {
+pub struct PingableNodes<'a> {
     iter: Filter<Iter<'a, Node>, fn(&&Node) -> bool>
 }
 
