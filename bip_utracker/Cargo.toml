@@ -1,16 +1,23 @@
 [package]
-name        = "bip_utracker"
-version     = "0.0.2"
-description = "Communication with bittorrent UDP trackers"
+name          = "bip_utracker"
+version       = "0.0.2"
+description   = "Communication with bittorrent UDP trackers"
 
-authors     = ["Andrew <amiller4421@gmail.com>"]
+authors       = ["Andrew <amiller4421@gmail.com>"]
 
-homepage    = "https://github.com/GGist/bip-rs/bip_utracker"
-repository  = "https://github.com/GGist/bip-rs/bip_utracker"
+homepage      = "https://github.com/GGist/bip-rs/bip_utracker"
+repository    = "https://github.com/GGist/bip-rs/bip_utracker"
 
-keywords    = ["tracker", "bittorrent", "udp"]
+keywords      = ["tracker", "bittorrent", "udp"]
 
-license     = "MIT/Apache-2.0"
+license       = "MIT/Apache-2.0"
+
+[dependencies]
+bip_handshake = { path = "../bip_handshake", version = "0.1.0" }
+bip_util      = { path = "../bip_util", version = "0.3.0" }
+byteorder     = "0.5.0"
+nom           = "1.2.0"
+umio          = "0.1.0"
 
 [features]
-unstable = []
+unstable      = []
