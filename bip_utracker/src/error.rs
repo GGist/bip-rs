@@ -1,17 +1,20 @@
+//! Messaging primitives for server errors.
+
+use std::borrow::{Cow};
 use std::io::{self, Write};
 
 use nom::{IResult};
 
 ///Error reported by the server and sent to the client.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ErrorResponse<'a> {
-    message: &'a str
+    message: Cow<'a, str>
 }
 
 impl<'a> ErrorResponse<'a> {
     /// Create a new ErrorResponse.
     pub fn new(message: &'a str) -> ErrorResponse<'a> {
-        ErrorResponse{ message: message }
+        ErrorResponse{ message: Cow::Borrowed(message) }
     }
     
     /// Construct an ErrorResponse from the given bytes.
@@ -29,6 +32,11 @@ impl<'a> ErrorResponse<'a> {
     
     /// Message describing the error that occured.
     pub fn message(&self) -> &str {
-        self.message
+        &*self.message
+    }
+    
+    /// Create an owned version of the ErrorResponse.
+    pub fn to_owned(&self) -> ErrorResponse<'static> {
+        ErrorResponse{ message: Cow::Owned((*self.message).to_owned()) }
     }
 }

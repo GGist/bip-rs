@@ -1,4 +1,4 @@
-//! Announce constructs used to gather peers.
+//! Messaging primitives for announcing.
 
 use std::io::{self, Write};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -113,6 +113,17 @@ impl<'a> AnnounceRequest<'a> {
     pub fn options(&self) -> &AnnounceOptions<'a> {
         &self.options
     }
+    
+    /// Create an owned version of AnnounceRequest.
+    pub fn to_owned(&self) -> AnnounceRequest<'static> {
+        // Do not call clone and simply switch out the AnnounceOptions as that would
+        // unecessarily allocate a HashMap with shallowly cloned Cow objects which
+        // is superfulous.
+        let owned_options = self.options.to_owned();
+        
+        AnnounceRequest{ info_hash: self.info_hash, peer_id: self.peer_id, state: self.state, ip: self.ip,
+            key: self.key, num_want: self.num_want, port: self.port, options: owned_options }
+    }
 }
 
 /// Parse an AnnounceRequest with the given SourceIP type constructor.
@@ -185,9 +196,17 @@ impl<'a> AnnounceResponse<'a> {
         self.seeders
     }
     
-    /// Peers the tracker know about that are sharing the torrent.
+    /// Peers the tracker knows about that are sharing the torrent.
     pub fn peers(&self) -> &CompactPeers<'a> {
         &self.peers
+    }
+    
+    /// Create an owned version of AnnounceResponse.
+    pub fn to_owned(&self) -> AnnounceResponse<'static> {
+        let owned_peers = self.peers().to_owned();
+        
+        AnnounceResponse{ interval: self.interval, leechers: self.leechers, seeders: self.seeders,
+            peers: owned_peers }
     }
 }
 
@@ -610,7 +629,7 @@ mod tests {
         let explicit_ip = SourceIP::ExplicitV4(ip);
         explicit_ip.write_bytes(&mut received).unwrap();
         
-        let mut expected = convert::ipv4_to_bytes_be(ip);
+        let expected = convert::ipv4_to_bytes_be(ip);
         
         assert_eq!(&received[..], &expected[..]);
     }
@@ -623,7 +642,7 @@ mod tests {
         let explicit_ip = SourceIP::ExplicitV6(ip);
         explicit_ip.write_bytes(&mut received).unwrap();
         
-        let mut expected = convert::ipv6_to_bytes_be(ip);
+        let expected = convert::ipv6_to_bytes_be(ip);
         
         assert_eq!(&received[..], &expected[..]);
     }
@@ -697,10 +716,8 @@ mod tests {
         let peer_id   = [2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3];
         
         let (downloaded, left, uploaded) = (456789, 283465, 200000);
-        let state = ClientState::new(downloaded, left, uploaded, AnnounceEvent::Completed);
         
-        let ip = SourceIP::ImpliedV4;
-        let (key, num_want, port) = (255123, -102340, 1515);
+        let (_, num_want, port) = (255123, -102340, 1515);
         
         let mut bytes = Vec::new();
         bytes.write_all(&info_hash[..]).unwrap();

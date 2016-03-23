@@ -1,4 +1,4 @@
-//! Supply optional information with an AnnounceRequest.
+//! Messaging primitives for announce options.
 
 use std::borrow::{Cow};
 use std::collections::{HashMap};
@@ -30,7 +30,7 @@ pub trait AnnounceOption<'a>: Sized {
 //----------------------------------------------------------------------------//
 
 /// Set of announce options used to provide trackers with extra information.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnnounceOptions<'a> {
     raw_options: HashMap<u8, Cow<'a, [u8]>>
 }
@@ -51,6 +51,7 @@ impl<'a> AnnounceOptions<'a> {
     }
     
     /// Write the AnnounceOptions to the given writer.
+    #[allow(unused)]
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write {
         for (byte, content) in self.raw_options.iter() {
@@ -74,7 +75,7 @@ impl<'a> AnnounceOptions<'a> {
     /// Search for and construct the given AnnounceOption from the current AnnounceOptions.
     ///
     /// Returns None if the option is not found or it failed to read from the given bytes.
-    pub fn get_option<O>(&'a self) -> Option<O>
+    pub fn get<O>(&'a self) -> Option<O>
         where O: AnnounceOption<'a> {
         self.raw_options.get(&O::option_byte()).and_then(|bytes|
             O::read_option(&*bytes)
@@ -84,7 +85,7 @@ impl<'a> AnnounceOptions<'a> {
     /// Add an AnnounceOption to the current set of AnnounceOptions.
     ///
     /// Any existing option with a matching option byte will be replaced.
-    pub fn add_option<O>(&mut self, option: &O)
+    pub fn insert<O>(&mut self, option: &O)
         where O: AnnounceOption<'a> {
         let mut bytes = vec![0u8; option.option_length()];
         option.write_option(&mut bytes[..]);
@@ -93,7 +94,22 @@ impl<'a> AnnounceOptions<'a> {
         // AnnounceOption::read_option method to accept a Cow and give it that because
         // we cant guarantee that the buffer is not Cow::Owned at the moment and would be
         // dropped (replaced) after being constructed.
-        self.raw_options.insert(O::option_byte(), Cow::Owned(bytes));
+        self.insert_bytes(O::option_byte(), bytes);
+    }
+    
+    /// Create an owned version of AnnounceOptions.
+    pub fn to_owned(&self) -> AnnounceOptions<'static> {
+        let mut options = AnnounceOptions::new();
+        
+        for (&key, value) in self.raw_options.iter() {
+            options.insert_bytes(key, (*value).to_vec());
+        }
+        
+        options
+    }
+    
+    fn insert_bytes(&mut self, byte: u8, contents: Vec<u8>) {
+        self.raw_options.insert(byte, Cow::Owned(contents));
     }
 }
 
@@ -205,7 +221,7 @@ mod tests {
         let option = URLDataOption::new(b"AA");
         
         let mut options = AnnounceOptions::new();
-        options.add_option(&option);
+        options.insert(&option);
         options.write_bytes(&mut received).unwrap();
         
         let expected = [super::URL_DATA_BYTE, 2, 'A' as u8, 'A' as u8, super::END_OF_OPTIONS_BYTE];
@@ -222,7 +238,7 @@ mod tests {
         
         let option = URLDataOption::new(&option_content);
         let mut options = AnnounceOptions::new();
-        options.add_option(&option);
+        options.insert(&option);
         options.write_bytes(&mut received).unwrap();
         
         let mut expected = Vec::new();
@@ -274,7 +290,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&url_data_bytes);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
@@ -288,7 +304,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&url_data_bytes);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
@@ -302,7 +318,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&url_data_bytes);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
@@ -316,7 +332,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&url_data_bytes);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
@@ -334,7 +350,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&bytes[2..]);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
@@ -366,7 +382,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&url_data_bytes[..]);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
@@ -401,7 +417,7 @@ mod tests {
         let mut expected = AnnounceOptions::new();
         
         let url_data = URLDataOption::new(&url_data_bytes[..]);
-        expected.add_option(&url_data);
+        expected.insert(&url_data);
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
