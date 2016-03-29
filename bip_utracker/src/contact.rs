@@ -2,7 +2,7 @@
 
 use std::borrow::{Cow};
 use std::io::{self, Write};
-use std::net::{SocketAddrV4, SocketAddrV6};
+use std::net::{SocketAddrV4, SocketAddrV6, SocketAddr};
 
 use bip_util::convert::{self};
 use nom::{IResult, Needed};
@@ -47,6 +47,14 @@ impl<'a> CompactPeers<'a> {
         }
     }
     
+    /// Iterator over all of the contact information.
+    pub fn iter<'b>(&'b self) -> CompactPeersIter<'b> {
+        match self {
+            &CompactPeers::V4(ref peers) => CompactPeersIter::new(CompactPeersIterType::V4(peers.iter())),
+            &CompactPeers::V6(ref peers) => CompactPeersIter::new(CompactPeersIterType::V6(peers.iter()))
+        }
+    }
+    
     /// Create an owned version of CompactPeers.
     pub fn to_owned(&self) -> CompactPeers<'static> {
         match self {
@@ -55,6 +63,41 @@ impl<'a> CompactPeers<'a> {
         }
     }
 }
+
+//----------------------------------------------------------------------------//
+
+/// Internal storage for one of the compact peers iterators.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum CompactPeersIterType<'a> {
+    V4(CompactPeersV4Iter<'a>),
+    V6(CompactPeersV6Iter<'a>)
+}
+
+/// Iterator over the SocketAddr info for some peers.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct CompactPeersIter<'a> {
+    iter: CompactPeersIterType<'a>
+}
+
+impl<'a> CompactPeersIter<'a> {
+    /// Create a new CompactPeersIter.
+    fn new(iter: CompactPeersIterType<'a>) -> CompactPeersIter<'a> {
+        CompactPeersIter{ iter: iter }
+    }
+}
+
+impl<'a> Iterator for CompactPeersIter<'a> {
+    type Item = SocketAddr;
+    
+    fn next(&mut self) -> Option<SocketAddr> {
+        match self.iter {
+            CompactPeersIterType::V4(ref mut iter) => iter.next().map(|a| SocketAddr::V4(a)),
+            CompactPeersIterType::V6(ref mut iter) => iter.next().map(|a| SocketAddr::V6(a))
+        }
+    }
+}
+
+//----------------------------------------------------------------------------//
 
 /// Container for IPv4 peers to be sent/received from a tracker.
 #[derive(Clone, Debug, PartialEq, Eq)]

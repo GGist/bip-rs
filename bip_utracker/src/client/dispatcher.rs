@@ -127,7 +127,12 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
         } else {
             // Match the request type against the response type and update our client
             match (conn_timer.message_params().1, response.response_type()) {
-                (&ClientRequest::Announce(..), &ResponseType::Announce(ref res)) => {
+                (&ClientRequest::Announce(hash, _), &ResponseType::Announce(ref res)) => {
+                    // Forward contact information on to the handshaker
+                    for addr in res.peers().iter() {
+                        self.handshaker.connect(None, hash, addr);
+                    }
+                    
                     self.notify_client(token, Ok(ClientResponse::Announce(res.to_owned())));
                 },
                 (&ClientRequest::Scrape(..), &ResponseType::Scrape(ref res)) => {
@@ -256,7 +261,7 @@ impl ConnectTimer {
     
     /// Yields the current timeout value to use or None if the request should time out completely.
     pub fn current_timeout(&mut self, timed_out: bool) -> Option<u64> {
-        if self.attempt > MAXIMUM_REQUEST_RETRANSMIT_ATTEMPTS {
+        if self.attempt == MAXIMUM_REQUEST_RETRANSMIT_ATTEMPTS {
             None
         } else {
             if timed_out {
