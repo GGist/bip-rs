@@ -1,3 +1,5 @@
+//! Messaging primitives for requests.
+
 use std::io::{self, Write};
 
 use byteorder::{BigEndian, WriteBytesExt};
@@ -9,6 +11,7 @@ use scrape::{ScrapeRequest};
 // For all practical applications, this value should be hardcoded as a valid
 // connection id for connection requests when operating in server mode and processing
 // incoming requests.
+/// Global connection id for connect requests.
 pub const CONNECT_ID_PROTOCOL_ID: u64 = 0x41727101980;
 
 /// Enumerates all types of requests that can be made to a tracker.
@@ -16,6 +19,17 @@ pub enum RequestType<'a> {
     Connect,
     Announce(AnnounceRequest<'a>),
     Scrape(ScrapeRequest<'a>)
+}
+
+impl<'a> RequestType<'a> {
+    /// Create an owned version of the RequestType.
+    pub fn to_owned(&self) -> RequestType<'static> {
+        match self {
+            &RequestType::Connect           => RequestType::Connect,
+            &RequestType::Announce(ref req) => RequestType::Announce(req.to_owned()),
+            &RequestType::Scrape(ref req)   => RequestType::Scrape(req.to_owned())
+        }
+    }
 }
 
 /// TrackerRequest which encapsulates any request sent to a tracker.
@@ -85,6 +99,12 @@ impl<'a> TrackerRequest<'a> {
     /// Actual type of request that this TrackerRequest represents.
     pub fn request_type(&self) -> &RequestType {
         &self.request_type
+    }
+    
+    /// Create an owned version of the TrackerRequest.
+    pub fn to_owned(&self) -> TrackerRequest<'static> {
+        TrackerRequest{ connection_id: self.connection_id, transaction_id: self.transaction_id,
+            request_type: self.request_type.to_owned() }
     }
 }
 

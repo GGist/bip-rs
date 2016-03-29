@@ -1,3 +1,5 @@
+//! Messaging primitives for scraping.
+
 use std::borrow::{Cow};
 use std::io::{self, Write};
 
@@ -89,6 +91,11 @@ impl<'a> ScrapeRequest<'a> {
     pub fn iter<'b>(&'b self) -> ScrapeRequestIter<'b> {
         ScrapeRequestIter::new(&*self.hashes)
     }
+    
+    /// Create an owned version of ScrapeRequest.
+    pub fn to_owned(&self) -> ScrapeRequest<'static> {
+        ScrapeRequest{ hashes: Cow::Owned((*self.hashes).to_vec()) }
+    }
 }
 
 fn parse_request<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], ScrapeRequest<'a>> {
@@ -149,6 +156,11 @@ impl<'a> ScrapeResponse<'a> {
     /// initial request.
     pub fn iter<'b>(&'b self) -> ScrapeResponseIter<'b> {
         ScrapeResponseIter::new(&*self.stats)
+    }
+    
+    /// Create an owned version of ScrapeResponse.
+    pub fn to_owned(&self) -> ScrapeResponse<'static> {
+        ScrapeResponse{ stats: Cow::Owned((*self.stats).to_vec()) }
     }
 }
 
@@ -314,9 +326,9 @@ mod tests {
         response.write_bytes(&mut received).unwrap();
         
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(stat_one.num_seeders());
-        expected.write_i32::<BigEndian>(stat_one.num_downloads());
-        expected.write_i32::<BigEndian>(stat_one.num_leechers());
+        expected.write_i32::<BigEndian>(stat_one.num_seeders()).unwrap();
+        expected.write_i32::<BigEndian>(stat_one.num_downloads()).unwrap();
+        expected.write_i32::<BigEndian>(stat_one.num_leechers()).unwrap();
         
         assert_eq!(&received[..], &expected[..]);
     }
@@ -334,13 +346,13 @@ mod tests {
         response.write_bytes(&mut received).unwrap();
         
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(stat_one.num_seeders());
-        expected.write_i32::<BigEndian>(stat_one.num_downloads());
-        expected.write_i32::<BigEndian>(stat_one.num_leechers());
+        expected.write_i32::<BigEndian>(stat_one.num_seeders()).unwrap();
+        expected.write_i32::<BigEndian>(stat_one.num_downloads()).unwrap();
+        expected.write_i32::<BigEndian>(stat_one.num_leechers()).unwrap();
         
-        expected.write_i32::<BigEndian>(stat_two.num_seeders());
-        expected.write_i32::<BigEndian>(stat_two.num_downloads());
-        expected.write_i32::<BigEndian>(stat_two.num_leechers());
+        expected.write_i32::<BigEndian>(stat_two.num_seeders()).unwrap();
+        expected.write_i32::<BigEndian>(stat_two.num_downloads()).unwrap();
+        expected.write_i32::<BigEndian>(stat_two.num_leechers()).unwrap();
         
         assert_eq!(&received[..], &expected[..]);
     }
@@ -351,7 +363,7 @@ mod tests {
         
         let received = ScrapeRequest::from_bytes(&hash_one);
         
-        let mut expected = ScrapeRequest::new();
+        let expected = ScrapeRequest::new();
         
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }

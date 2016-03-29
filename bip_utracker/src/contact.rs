@@ -1,6 +1,8 @@
+//! Messaging primitives for contact information.
+
 use std::borrow::{Cow};
 use std::io::{self, Write};
-use std::net::{SocketAddrV4, SocketAddrV6};
+use std::net::{SocketAddrV4, SocketAddrV6, SocketAddr};
 
 use bip_util::convert::{self};
 use nom::{IResult, Needed};
@@ -11,7 +13,9 @@ const SOCKET_ADDR_V6_BYTES: usize = 18;
 /// Container for peers to be sent/received from a tracker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompactPeers<'a> {
+    /// IPv4 variant of CompactPeers.
     V4(CompactPeersV4<'a>),
+    /// IPv6 variant of CompactPeers.
     V6(CompactPeersV6<'a>)
 }
 
@@ -42,7 +46,58 @@ impl<'a> CompactPeers<'a> {
             &CompactPeers::V6(ref peers) => peers.write_bytes(writer)
         }
     }
+    
+    /// Iterator over all of the contact information.
+    pub fn iter<'b>(&'b self) -> CompactPeersIter<'b> {
+        match self {
+            &CompactPeers::V4(ref peers) => CompactPeersIter::new(CompactPeersIterType::V4(peers.iter())),
+            &CompactPeers::V6(ref peers) => CompactPeersIter::new(CompactPeersIterType::V6(peers.iter()))
+        }
+    }
+    
+    /// Create an owned version of CompactPeers.
+    pub fn to_owned(&self) -> CompactPeers<'static> {
+        match self {
+            &CompactPeers::V4(ref peers) => CompactPeers::V4(peers.to_owned()),
+            &CompactPeers::V6(ref peers) => CompactPeers::V6(peers.to_owned())
+        }
+    }
 }
+
+//----------------------------------------------------------------------------//
+
+/// Internal storage for one of the compact peers iterators.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum CompactPeersIterType<'a> {
+    V4(CompactPeersV4Iter<'a>),
+    V6(CompactPeersV6Iter<'a>)
+}
+
+/// Iterator over the SocketAddr info for some peers.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct CompactPeersIter<'a> {
+    iter: CompactPeersIterType<'a>
+}
+
+impl<'a> CompactPeersIter<'a> {
+    /// Create a new CompactPeersIter.
+    fn new(iter: CompactPeersIterType<'a>) -> CompactPeersIter<'a> {
+        CompactPeersIter{ iter: iter }
+    }
+}
+
+impl<'a> Iterator for CompactPeersIter<'a> {
+    type Item = SocketAddr;
+    
+    fn next(&mut self) -> Option<SocketAddr> {
+        match self.iter {
+            CompactPeersIterType::V4(ref mut iter) => iter.next().map(|a| SocketAddr::V4(a)),
+            CompactPeersIterType::V6(ref mut iter) => iter.next().map(|a| SocketAddr::V6(a))
+        }
+    }
+}
+
+//----------------------------------------------------------------------------//
 
 /// Container for IPv4 peers to be sent/received from a tracker.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +134,11 @@ impl<'a> CompactPeersV4<'a> {
     /// Iterator over all of the contact information.
     pub fn iter<'b>(&'b self) -> CompactPeersV4Iter<'b> {
         CompactPeersV4Iter::new(&*self.peers)
+    }
+    
+    /// Create an owned version of CompactPeersV4.
+    pub fn to_owned(&self) -> CompactPeersV4<'static> {
+        CompactPeersV4{ peers: Cow::Owned((*self.peers).to_vec()) }
     }
 }
 
@@ -170,6 +230,11 @@ impl<'a> CompactPeersV6<'a> {
     pub fn iter<'b>(&'b self) -> CompactPeersV6Iter<'b> {
         CompactPeersV6Iter::new(&*self.peers)
     }
+    
+    /// Create an owned version of CompactPeersV6.
+    pub fn to_owned(&self) -> CompactPeersV6<'static> {
+        CompactPeersV6{ peers: Cow::Owned((*self.peers).to_vec()) }
+    }
 }
 
 fn parse_peers_v6<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], CompactPeersV6<'a>> {
@@ -226,7 +291,7 @@ impl<'a> Iterator for CompactPeersV6Iter<'a> {
 mod tests {
     use nom::{IResult};
 
-    use super::{CompactPeersV4, CompactPeersV6, CompactPeersV4Iter, CompactPeersV6Iter};
+    use super::{CompactPeersV4, CompactPeersV6};
 
     #[test]
     fn positive_iterate_v4() {
