@@ -1,8 +1,12 @@
 //! Messaging primitives for responses.
 
+use std::io::{self, Write};
+
+use byteorder::{BigEndian, WriteBytesExt};
 use nom::{be_u32, IResult, be_u64};
 
 use announce::{AnnounceResponse};
+use contact::{CompactPeers};
 use error::{ErrorResponse};
 use scrape::{ScrapeResponse};
 
@@ -44,6 +48,44 @@ impl<'a> TrackerResponse<'a> {
     /// Create a new TrackerResponse from the given bytes.
     pub fn from_bytes(bytes: &'a [u8]) -> IResult<&'a [u8], TrackerResponse<'a>> {
         parse_response(bytes)
+    }
+    
+    /// Write the TrackerResponse to the given writer.
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write {
+        match self.response_type() {
+            &ResponseType::Connect(id) => {
+                try!(writer.write_u32::<BigEndian>(::CONNECT_ACTION_ID));
+                try!(writer.write_u32::<BigEndian>(self.transaction_id()));
+                
+                try!(writer.write_u64::<BigEndian>(id));
+            },
+            &ResponseType::Announce(ref req) => {
+                let action_id = match req.peers() {
+                    &CompactPeers::V4(_) => ::ANNOUNCE_IPV4_ACTION_ID,
+                    &CompactPeers::V6(_) => ::ANNOUNCE_IPV6_ACTION_ID
+                };
+            
+                try!(writer.write_u32::<BigEndian>(action_id));
+                try!(writer.write_u32::<BigEndian>(self.transaction_id()));
+                
+                try!(req.write_bytes(writer));
+            },
+            &ResponseType::Scrape(ref req) => {
+                try!(writer.write_u32::<BigEndian>(::SCRAPE_ACTION_ID));
+                try!(writer.write_u32::<BigEndian>(self.transaction_id()));
+                
+                try!(req.write_bytes(writer));
+            },
+            &ResponseType::Error(ref err) => {
+                try!(writer.write_u32::<BigEndian>(ERROR_ACTION_ID));
+                try!(writer.write_u32::<BigEndian>(self.transaction_id()));
+                
+                try!(err.write_bytes(writer));
+            }
+        };
+        
+        Ok(())
     }
     
     /// Transaction ID supplied with a response to uniquely identify a request. 
