@@ -24,10 +24,14 @@ pub mod option;
 pub mod scrape;
 
 mod client;
+mod server;
 
 pub use client::{TrackerClient, ClientRequest, ClientResponse, ClientToken};
 pub use client::error::{ClientResult, ClientError};
 pub use client::receiver::{ClientResponses, ClientResponsesIter};
+
+pub use server::{TrackerServer};
+pub use server::handler::{ServerResult, ServerHandler};
 
 pub use bip_handshake::{Handshaker};
 pub use bip_util::bt::{InfoHash, PeerId};
