@@ -19,12 +19,12 @@ pub trait ServerHandler: Send {
     /// Service an announce request with the given connect id.
     ///
     /// If the result callback is not called, no response will be sent.
-    fn announce<'b, R>(&mut self, id: u64, req: &AnnounceRequest<'b>, result: R)
+    fn announce<'b, R>(&mut self, addr: SocketAddr, id: u64, req: &AnnounceRequest<'b>, result: R)
         where R: for<'a> FnOnce(ServerResult<'a, AnnounceResponse<'a>>);
     
     /// Service a scrape request with the given connect id.
     ///
     /// If the result callback is not called, no response will be sent.
-    fn scrape<'b, R>(&mut self, id: u64, req: &ScrapeRequest<'b>, result: R)
+    fn scrape<'b, R>(&mut self, addr: SocketAddr, id: u64, req: &ScrapeRequest<'b>, result: R)
         where R: for<'a> FnOnce(ServerResult<'a, ScrapeResponse<'a>>);
 }

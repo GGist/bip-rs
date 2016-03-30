@@ -8,7 +8,7 @@ use umio::{ELoopBuilder, Dispatcher, Provider};
 
 use announce::{AnnounceRequest};
 use error::{ErrorResponse};
-use request::{TrackerRequest, RequestType};
+use request::{self, TrackerRequest, RequestType};
 use response::{TrackerResponse, ResponseType};
 use scrape::{ScrapeRequest};
 use server::handler::{ServerHandler};
@@ -64,7 +64,9 @@ impl<H> ServerDispatcher<H> where H: ServerHandler {
         
         match request.request_type() {
             &RequestType::Connect => {
-                self.forward_connect(provider, trans_id, addr);
+                if conn_id == request::CONNECT_ID_PROTOCOL_ID {
+                    self.forward_connect(provider, trans_id, addr);
+                } // TODO: Add Logging
             },
             &RequestType::Announce(ref req) => {
                 self.forward_announce(provider, trans_id, conn_id, req, addr);
@@ -92,7 +94,7 @@ impl<H> ServerDispatcher<H> where H: ServerHandler {
     /// Forward an announce request on to the appropriate handler method.
     fn forward_announce<'a, 'b>(&mut self, provider: &mut Provider<'a, ServerDispatcher<H>>,
         trans_id: u32, conn_id: u64, request: &AnnounceRequest<'b>, addr: SocketAddr) {
-        self.handler.announce(conn_id, request, |result| {
+        self.handler.announce(addr, conn_id, request, |result| {
             let response_type = match result {
                 Ok(response) => ResponseType::Announce(response),
                 Err(err_msg) => ResponseType::Error(ErrorResponse::new(err_msg))
@@ -106,7 +108,7 @@ impl<H> ServerDispatcher<H> where H: ServerHandler {
     /// Forward a scrape request on to the appropriate handler method.
     fn forward_scrape<'a, 'b>(&mut self, provider: &mut Provider<'a, ServerDispatcher<H>>,
         trans_id: u32, conn_id: u64, request: &ScrapeRequest<'b>, addr: SocketAddr) {
-        self.handler.scrape(conn_id, request, |result| {
+        self.handler.scrape(addr, conn_id, request, |result| {
             let response_type = match result {
                 Ok(response) => ResponseType::Scrape(response),
                 Err(err_msg) => ResponseType::Error(ErrorResponse::new(err_msg))
