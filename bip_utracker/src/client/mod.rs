@@ -6,16 +6,16 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use bip_handshake::{Handshaker};
 use bip_util::bt::{InfoHash};
 use bip_util::trans::{TIDGenerator};
-use chan::{self, Receiver};
 use umio::external::{Sender};
 
 use announce::{AnnounceResponse, ClientState};
 use client::dispatcher::{DispatchMessage};
-use client::error::{ClientResult};
+use client::receiver::{ClientResponses};
 use scrape::{ScrapeResponse};
 
 mod dispatcher;
 pub mod error;
+pub mod receiver;
 
 /// Capacity of outstanding requests (assuming each request uses at most 1 timer at any time)
 const DEFAULT_CAPACITY: usize = 4096;
@@ -36,10 +36,38 @@ pub enum ClientResponse {
     Scrape(ScrapeResponse<'static>)
 }
 
+impl ClientResponse {
+    /// Optionally return a reference to the underyling AnnounceResponse.
+    ///
+    /// If you know that the token associated with the response was retrived
+    /// from an AnnounceRequest, then unwrapping this value is guaranteed to
+    /// succeed.
+    pub fn announce_response(&self) -> Option<&AnnounceResponse<'static>> {
+        match self {
+            &ClientResponse::Announce(ref res) => Some(res),
+            &ClientResponse::Scrape(_)         => None
+        }
+    }
+    
+    /// Optionally return a reference to the underyling ScrapeResponse.
+    ///
+    /// If you know that the token associated with the response was retrived
+    /// from a ScrapeRequest, then unwrapping this value is guaranteed to
+    /// succeed.
+    pub fn scrape_response(&self) -> Option<&ScrapeResponse<'static>> {
+        match self {
+            &ClientResponse::Announce(_)     => None,
+            &ClientResponse::Scrape(ref res) => Some(res)
+        }
+    }
+}
+
+//----------------------------------------------------------------------------//
+
 /// Tracker client that executes requests asynchronously.
 pub struct TrackerClient {
     send:      Sender<DispatchMessage>,
-    recv:      Receiver<(ClientToken, ClientResult<ClientResponse>)>,
+    recv:      ClientResponses,
     // We are in charge of incrementing this, background worker is in charge of decrementing
     limiter:   RequestLimiter,
     generator: TokenGenerator
@@ -64,7 +92,7 @@ impl TrackerClient {
         // Limit the capacity of messages (channel capacity - 1)
         let limiter = RequestLimiter::new(capacity);
         
-        let (res_send, res_recv) = chan::async();
+        let (res_send, res_recv) = receiver::new_client_responses();
         
         dispatcher::create_dispatcher(bind, handshaker, chan_capacity, limiter.clone(), res_send).map(|chan|
             TrackerClient{ send: chan, recv: res_recv, limiter: limiter, generator: TokenGenerator::new() }
@@ -87,7 +115,7 @@ impl TrackerClient {
     }
     
     /// Channel that receives the responses from the trackers queried.
-    pub fn responses(&self) -> Receiver<(ClientToken, ClientResult<ClientResponse>)> {
+    pub fn responses(&self) -> ClientResponses {
         self.recv.clone()
     }
 }

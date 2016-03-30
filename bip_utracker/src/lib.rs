@@ -27,6 +27,7 @@ mod client;
 
 pub use client::{TrackerClient, ClientRequest, ClientResponse, ClientToken};
 pub use client::error::{ClientResult, ClientError};
+pub use client::receiver::{ClientResponses, ClientResponsesIter};
 
 pub use bip_handshake::{Handshaker};
 pub use bip_util::bt::{InfoHash, PeerId};
