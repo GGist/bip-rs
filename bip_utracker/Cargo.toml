@@ -24,3 +24,7 @@ umio          = "0.3.0"
 
 [features]
 unstable      = []
+
+[[test]]
+name = "test"
+path = "test/mod.rs"
