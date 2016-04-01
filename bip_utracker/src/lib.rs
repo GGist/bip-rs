@@ -1,3 +1,9 @@
+//! Library for parsing and writing UDP tracker messages.
+//!
+//! Includes a default implementation of a bittorrent UDP tracker client
+//! and a customizable trait based implementation of a bittorrent UDP tracker
+//! server.
+
 extern crate bip_handshake;
 extern crate bip_util;
 extern crate byteorder;

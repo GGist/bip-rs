@@ -10,6 +10,8 @@ mod dispatcher;
 pub mod handler;
 
 /// Tracker server that executes responses asynchronously.
+///
+/// Server will shutdown on drop.
 pub struct TrackerServer {
     send: Sender<DispatchMessage>
 }
