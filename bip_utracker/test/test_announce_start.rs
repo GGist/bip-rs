@@ -1,3 +1,6 @@
+use std::thread::{self};
+use std::time::{Duration};
+
 use bip_util::bt::{self};
 use bip_utracker::{TrackerClient, TrackerServer, ClientRequest};
 use bip_utracker::announce::{ClientState, AnnounceEvent};
@@ -11,6 +14,8 @@ fn positive_announce_started() {
     let mock_handler = MockTrackerHandler::new();
     let server = TrackerServer::run(server_addr, mock_handler).unwrap();
     
+    thread::sleep(Duration::from_millis(200));
+    
     let mock_handshaker = MockHandshaker::new();
     let mut client = TrackerClient::new("127.0.0.1:4501".parse().unwrap(), mock_handshaker.clone()).unwrap();
     let responses = client.responses();
@@ -21,7 +26,6 @@ fn positive_announce_started() {
     )).unwrap();
     
     let (recv_token, res) = responses.recv().unwrap();
-    
     assert_eq!(send_token, recv_token);
     
     let response = res.as_ref().unwrap().announce_response().unwrap();

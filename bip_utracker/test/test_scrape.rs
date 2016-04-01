@@ -1,3 +1,6 @@
+use std::thread::{self};
+use std::time::{Duration};
+
 use bip_util::bt::{self};
 use bip_utracker::{TrackerClient, TrackerServer, ClientRequest};
 
@@ -9,6 +12,8 @@ fn positive_scrape() {
     let server_addr = "127.0.0.1:3506".parse().unwrap();
     let mock_handler = MockTrackerHandler::new();
     let server = TrackerServer::run(server_addr, mock_handler).unwrap();
+    
+    thread::sleep(Duration::from_millis(200));
     
     let mock_handshaker = MockHandshaker::new();
     let mut client = TrackerClient::new("127.0.0.1:4506".parse().unwrap(), mock_handshaker.clone()).unwrap();
