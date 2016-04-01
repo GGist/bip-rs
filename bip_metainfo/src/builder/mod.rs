@@ -117,8 +117,13 @@ impl<'a> MetainfoBuilder<'a> {
     /// the number of workers may not be beneficial. This method WILL block until it completes.
     ///
     /// Returns a list of bytes that make up the complete metainfo file.
+    ///
+    /// Panics if threads is equal to zero.
     pub fn build_as_bytes<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
         where A: IntoAccessor, C: FnMut(f64) + Send + 'static {
+        if threads == 0 {
+            panic!("bip_metainfo: Cannot Build Metainfo File With threads == 0");
+        }
         let access_owner = try!(accessor.into_accessor());
         
         // Collect all of the file information into a list

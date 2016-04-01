@@ -65,6 +65,8 @@ impl ClientResponse {
 //----------------------------------------------------------------------------//
 
 /// Tracker client that executes requests asynchronously.
+///
+/// Client will shutdown on drop.
 pub struct TrackerClient {
     send:      Sender<DispatchMessage>,
     recv:      ClientResponses,
@@ -81,6 +83,8 @@ impl TrackerClient {
     }
     
     /// Create a new TrackerClient with the given message capacity.
+    ///
+    /// Panics if capacity == usize::max_value().
     pub fn with_capacity<H>(bind: SocketAddr, handshaker: H, capacity: usize) -> io::Result<TrackerClient>
         where H: Handshaker + 'static {
         // Need channel capacity to be 1 more in case channel is saturated and client
