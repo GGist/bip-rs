@@ -9,7 +9,7 @@ use {MockTrackerHandler};
 #[test]
 #[allow(unused)]
 fn positive_server_dropped() {
-    let server_addr = "127.0.0.1:3507".parse().unwrap();
+    let server_addr = "127.0.0.1:3508".parse().unwrap();
     let mock_handler = MockTrackerHandler::new();
     
     {
@@ -22,7 +22,7 @@ fn positive_server_dropped() {
     let request = TrackerRequest::new(request::CONNECT_ID_PROTOCOL_ID, 0, RequestType::Connect);
     request.write_bytes(&mut send_message).unwrap();
     
-    let socket = UdpSocket::bind("127.0.0.1:4507").unwrap();
+    let socket = UdpSocket::bind("127.0.0.1:4508").unwrap();
     socket.send_to(&send_message, server_addr);
     
     let mut receive_message = vec![0u8; 1500];

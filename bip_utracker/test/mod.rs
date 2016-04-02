@@ -17,12 +17,18 @@ mod test_announce_stop;
 mod test_client_drop;
 mod test_client_full;
 mod test_connect;
+mod test_connect_cache;
 mod test_scrape;
 mod test_server_drop;
 
 const NUM_PEERS_RETURNED: usize = 20;
 
+#[derive(Clone)]
 struct MockTrackerHandler {
+    inner: Arc<Mutex<InnerMockTrackerHandler>>
+}
+
+struct InnerMockTrackerHandler {
     cids:          HashSet<u64>,
     cid_generator: TIDGenerator<u64>,
     peers_map:     HashMap<InfoHash, HashSet<SocketAddr>>
@@ -30,24 +36,33 @@ struct MockTrackerHandler {
 
 impl MockTrackerHandler {
     pub fn new() -> MockTrackerHandler {
-        MockTrackerHandler{ cids: HashSet::new(), cid_generator: TIDGenerator::<u64>::new(),
-            peers_map: HashMap::new() }
+        MockTrackerHandler{ inner: Arc::new(Mutex::new(InnerMockTrackerHandler{ 
+            cids: HashSet::new(), cid_generator: TIDGenerator::<u64>::new(),
+            peers_map: HashMap::new() })) }
+    }
+    
+    pub fn num_active_connect_ids(&self) -> usize {
+        self.inner.lock().unwrap().cids.len()
     }
 }
 
 impl ServerHandler for MockTrackerHandler {
     fn connect<R>(&mut self, _: SocketAddr, result: R)
         where R: for<'a> FnOnce(ServerResult<'a, u64>) {
-        let cid = self.cid_generator.generate();
-        self.cids.insert(cid);
+        let mut inner_lock = self.inner.lock().unwrap();
+            
+        let cid = inner_lock.cid_generator.generate();
+        inner_lock.cids.insert(cid);
         
         result(Ok(cid));
     }
     
     fn announce<'b, R>(&mut self, addr: SocketAddr, id: u64, req: &AnnounceRequest<'b>, result: R)
         where R: for<'a> FnOnce(ServerResult<'a, AnnounceResponse<'a>>) {
-        if self.cids.contains(&id) {
-            let peers = self.peers_map.entry(req.info_hash()).or_insert(HashSet::new());
+        let mut inner_lock = self.inner.lock().unwrap();
+            
+        if inner_lock.cids.contains(&id) {
+            let peers = inner_lock.peers_map.entry(req.info_hash()).or_insert(HashSet::new());
             // Ignore any source ip directives in the request
             let store_addr = match addr {
                 SocketAddr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(*v4_addr.ip(), req.port())),
@@ -103,11 +118,13 @@ impl ServerHandler for MockTrackerHandler {
         
     fn scrape<'b, R>(&mut self, _: SocketAddr, id: u64, req: &ScrapeRequest<'b>, result: R)
         where R: for<'a> FnOnce(ServerResult<'a, ScrapeResponse<'a>>) {
-        if self.cids.contains(&id) {
+        let mut inner_lock = self.inner.lock().unwrap();
+        
+        if inner_lock.cids.contains(&id) {
             let mut response = ScrapeResponse::new();
             
             for hash in req.iter() {
-                let peers = self.peers_map.entry(hash).or_insert(HashSet::new());
+                let peers = inner_lock.peers_map.entry(hash).or_insert(HashSet::new());
                 
                 response.insert(ScrapeStats::new(peers.len() as i32, 0, peers.len() as i32));
             }
