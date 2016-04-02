@@ -9,14 +9,14 @@ use {MockTrackerHandler, MockHandshaker};
 #[test]
 #[allow(unused)]
 fn positive_scrape() {
-    let server_addr = "127.0.0.1:3506".parse().unwrap();
+    let server_addr = "127.0.0.1:3507".parse().unwrap();
     let mock_handler = MockTrackerHandler::new();
     let server = TrackerServer::run(server_addr, mock_handler).unwrap();
     
-    thread::sleep(Duration::from_millis(200));
+    thread::sleep(Duration::from_millis(100));
     
     let mock_handshaker = MockHandshaker::new();
-    let mut client = TrackerClient::new("127.0.0.1:4506".parse().unwrap(), mock_handshaker.clone()).unwrap();
+    let mut client = TrackerClient::new("127.0.0.1:4507".parse().unwrap(), mock_handshaker.clone()).unwrap();
     let responses = client.responses();
     
     let send_token = client.request(server_addr, ClientRequest::Scrape([0u8; bt::INFO_HASH_LEN].into())).unwrap();

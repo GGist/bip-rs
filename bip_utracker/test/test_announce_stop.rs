@@ -14,7 +14,7 @@ fn positive_announce_stopped() {
     let mock_handler = MockTrackerHandler::new();
     let server = TrackerServer::run(server_addr, mock_handler).unwrap();
     
-    thread::sleep(Duration::from_millis(200));
+    thread::sleep(Duration::from_millis(100));
     
     let mock_handshaker = MockHandshaker::new();
     let mut client = TrackerClient::new("127.0.0.1:4502".parse().unwrap(), mock_handshaker.clone()).unwrap();

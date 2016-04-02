@@ -1,11 +1,12 @@
 use std::collections::{HashMap};
+use std::collections::hash_map::{Entry};
 use std::io::{self, Cursor};
 use std::net::{SocketAddr};
 use std::thread::{self};
 
 use bip_handshake::{Handshaker};
 use chan::{self};
-use chrono::{DateTime, UTC};
+use chrono::{DateTime, UTC, Duration};
 use nom::{IResult};
 use rand::{self};
 use umio::{ELoopBuilder, Dispatcher, Provider};
@@ -24,9 +25,16 @@ const EXPECTED_PACKET_LENGTH: usize = 1500;
 const CONNECTION_ID_VALID_DURATION_MILLIS: i64 = 60000;
 const MAXIMUM_REQUEST_RETRANSMIT_ATTEMPTS: u64 = 8;
 
+/// Internal dispatch timeout.
+enum DispatchTimeout {
+    Connect(ClientToken),
+    CleanUp
+}
+
 /// Internal dispatch message for clients.
 pub enum DispatchMessage {
     Request(SocketAddr, ClientToken, ClientRequest),
+    StartTimer,
     Shutdown
 }
 
@@ -49,6 +57,9 @@ pub fn create_dispatcher<H>(bind: SocketAddr, handshaker: H, msg_capacity: usize
         eloop.run(dispatch).expect("bip_utracker: ELoop Shutdown Unexpectedly...");
     });
     
+    channel.send(DispatchMessage::StartTimer)
+        .expect("bip_utracker: ELoop Failed To Start Connect ID Timer...");
+    
     Ok(channel)
 }
 
@@ -60,6 +71,7 @@ struct ClientDispatcher<H> where H: Handshaker {
     bound_addr:      SocketAddr,
     response_send:   chan::Sender<(ClientToken, ClientResult<ClientResponse>)>,
     active_requests: HashMap<ClientToken, ConnectTimer>,
+    id_cache:        ConnectIdCache,
     limiter:         RequestLimiter
 }
 
@@ -68,7 +80,7 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
     pub fn new(handshaker: H, bind: SocketAddr, limiter: RequestLimiter, rsp_send: chan::Sender<(ClientToken, ClientResult<ClientResponse>)>)
         -> ClientDispatcher<H> {
         ClientDispatcher{ handshaker: handshaker, bound_addr: bind, response_send: rsp_send, active_requests: HashMap::new(),
-            limiter: limiter }
+            id_cache: ConnectIdCache::new(), limiter: limiter }
     }
     
     /// Shutdown the current dispatcher, notifying all pending requests.
@@ -77,6 +89,7 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
         for (&token, _) in self.active_requests.iter() {
             self.notify_client(token, Err(ClientError::ClientShutdown));
         }
+        // TODO: Clear active timeouts
         self.active_requests.clear();
         
         provider.shutdown();
@@ -108,21 +121,24 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
     }
     
     /// Process a response received from some tracker and match it up against our sent requests.
-    pub fn recv_response<'a, 'b>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>, response: TrackerResponse<'b>) {
+    pub fn recv_response<'a, 'b>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>, addr: SocketAddr,
+        response: TrackerResponse<'b>) {
         let token = ClientToken(response.transaction_id());
         
-        let mut conn_timer = if let Some(conn_timer) = self.active_requests.remove(&token) {
-            conn_timer
-        } else { return }; // TODO: Add Logging
+        let conn_timer = if let Some(conn_timer) = self.active_requests.remove(&token) {
+            if conn_timer.message_params().0 == addr {
+                conn_timer
+            } else { return } // TODO: Add Logging (Server Receive Addr Different Than Send Addr)
+        } else { return }; // TODO: Add Logging (Server Gave Us Invalid Transaction Id)
         
-        provider.clear_timeout(conn_timer.timeout_id().unwrap());
+        provider.clear_timeout(conn_timer.timeout_id()
+            .expect("bip_utracker: Failed To Clear Request Timeout"));
         
         // Check if the response requires us to update the connection timer
         if let &ResponseType::Connect(id) = response.response_type() {
-            // TODO: Check if we already had a connection id (malicious server?)
-            conn_timer.set_connect_id(id);
-            self.active_requests.insert(token, conn_timer);
+            self.id_cache.put(addr, id);
             
+            self.active_requests.insert(token, conn_timer);
             self.process_request(provider, token, false);
         } else {
             // Match the request type against the response type and update our client
@@ -166,9 +182,12 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
             }
         };
         
+        let addr = conn_timer.message_params().0;
+        let opt_conn_id = self.id_cache.get(conn_timer.message_params().0);
+        
         // Resolve the type of request we need to make
-        let (conn_id, request_type, addr) = match (conn_timer.connect_id(), conn_timer.message_params()) {
-            (Some(id), (addr, &ClientRequest::Announce(hash, state))) => {
+        let (conn_id, request_type) = match (opt_conn_id, conn_timer.message_params().1) {
+            (Some(id), &ClientRequest::Announce(hash, state)) => {
                 let source_ip = match addr {
                     SocketAddr::V4(_) => SourceIP::ImpliedV4,
                     SocketAddr::V6(_) => SourceIP::ImpliedV6
@@ -176,16 +195,16 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
                 let key = rand::random::<u32>();
                 
                 (id, RequestType::Announce(AnnounceRequest::new(hash, self.handshaker.id(), state, source_ip,
-                    key, DesiredPeers::Default, self.handshaker.port(), AnnounceOptions::new())), addr)
+                    key, DesiredPeers::Default, self.handshaker.port(), AnnounceOptions::new())))
             },
-            (Some(id), (addr, &ClientRequest::Scrape(hash))) => {
+            (Some(id), &ClientRequest::Scrape(hash)) => {
                 let mut scrape_request = ScrapeRequest::new();
                 scrape_request.insert(hash);
                 
-                (id, RequestType::Scrape(scrape_request), addr)
+                (id, RequestType::Scrape(scrape_request))
             },
-            (None, (addr, _)) => {
-                (request::CONNECT_ID_PROTOCOL_ID, RequestType::Connect, addr)
+            (None, _) => {
+                (request::CONNECT_ID_PROTOCOL_ID, RequestType::Connect)
             }
         };
         let tracker_request = TrackerRequest::new(conn_id, token.0, request_type);
@@ -207,7 +226,9 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
         if !write_success {
             self.notify_client(token, Err(ClientError::MaxLength));
         } else {
-            conn_timer.set_timeout_id(provider.set_timeout(token, next_timeout).unwrap());
+            conn_timer.set_timeout_id(
+                provider.set_timeout(DispatchTimeout::Connect(token), next_timeout)
+                    .expect("bip_utracker: Failed To Set Timeout For Request"));
             
             self.active_requests.insert(token, conn_timer);
         }
@@ -215,16 +236,16 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
 }
 
 impl<H> Dispatcher for ClientDispatcher<H> where H: Handshaker {
-    type Timeout = ClientToken;
+    type Timeout = DispatchTimeout;
     type Message = DispatchMessage;
     
-    fn incoming<'a>(&mut self, mut provider: Provider<'a, Self>, message: &[u8], _: SocketAddr) {
+    fn incoming<'a>(&mut self, mut provider: Provider<'a, Self>, message: &[u8], addr: SocketAddr) {
         let response = match TrackerResponse::from_bytes(message) {
             IResult::Done(_, rsp) => rsp,
             _                     => return // TODO: Add Logging
         };
         
-        self.recv_response(&mut provider, response);
+        self.recv_response(&mut provider, addr, response);
     }
     
     fn notify<'a>(&mut self, mut provider: Provider<'a, Self>, message: DispatchMessage) {
@@ -232,12 +253,21 @@ impl<H> Dispatcher for ClientDispatcher<H> where H: Handshaker {
             DispatchMessage::Request(addr, token, req_type) => {
                 self.send_request(&mut provider, addr, token, req_type);
             },
-            DispatchMessage::Shutdown => self.shutdown(&mut provider)
+            DispatchMessage::StartTimer => self.timeout(provider, DispatchTimeout::CleanUp),
+            DispatchMessage::Shutdown   => self.shutdown(&mut provider)
         }
     }
     
-    fn timeout<'a>(&mut self, mut provider: Provider<'a, Self>, timeout: ClientToken) {
-        self.process_request(&mut provider, timeout, true);
+    fn timeout<'a>(&mut self, mut provider: Provider<'a, Self>, timeout: DispatchTimeout) {
+        match timeout {
+            DispatchTimeout::Connect(token)    => self.process_request(&mut provider, token, true),
+            DispatchTimeout::CleanUp           => {
+                self.id_cache.clean_expired();
+                
+                provider.set_timeout(DispatchTimeout::CleanUp, CONNECTION_ID_VALID_DURATION_MILLIS as u64)
+                    .expect("bip_utracker: Failed To Restart Connect Id Cleanup Timer");
+            }
+        };
     }
 }
 
@@ -249,14 +279,13 @@ struct ConnectTimer {
     addr:       SocketAddr,
     attempt:    u64,
     request:    ClientRequest,
-    connect_id: Option<(u64, DateTime<UTC>)>,
     timeout_id: Option<Timeout>
 }
 
 impl ConnectTimer {
     /// Create a new ConnectTimer.
     pub fn new(addr: SocketAddr, request: ClientRequest) -> ConnectTimer {
-        ConnectTimer{ addr: addr, attempt: 0, request: request, connect_id: None, timeout_id: None }
+        ConnectTimer{ addr: addr, attempt: 0, request: request, timeout_id: None }
     }
     
     /// Yields the current timeout value to use or None if the request should time out completely.
@@ -270,27 +299,6 @@ impl ConnectTimer {
             
             Some(calculate_message_timeout_millis(self.attempt))
         }
-    }
-    
-    /// Yields the connection id if it is present and valid or None
-    /// if the connection id needs to be refreshed.
-    pub fn connect_id(&mut self) -> Option<u64> {
-        self.connect_id = self.connect_id.and_then(|(id, created)| {
-            let time_since = (UTC::now() - created).num_milliseconds();
-            
-            if time_since > CONNECTION_ID_VALID_DURATION_MILLIS {
-                None
-            } else {
-                Some((id, created))
-            }
-        });
-        
-        self.connect_id.map(|info| info.0)
-    }
-    
-    /// Sets a new connection id.
-    pub fn set_connect_id(&mut self, id: u64) {
-        self.connect_id = Some((id, UTC::now()));
     }
     
     /// Yields the current timeout id if one is set.
@@ -312,4 +320,67 @@ impl ConnectTimer {
 /// Calculates the timeout for the request given the attempt count.
 fn calculate_message_timeout_millis(attempt: u64) -> u64 {
     (15 * 2u64.pow(attempt as u32)) * 1000
+}
+
+//----------------------------------------------------------------------------//
+
+/// Cache for storing connection ids associated with a specific server address.
+struct ConnectIdCache {
+    cache: HashMap<SocketAddr, (u64, DateTime<UTC>)>
+}
+
+impl ConnectIdCache {
+    /// Create a new connect id cache.
+    fn new() -> ConnectIdCache {
+        ConnectIdCache{ cache: HashMap::new() }
+    }
+    
+    /// Get an un expired connection id for the given addr.
+    fn get(&mut self, addr: SocketAddr) -> Option<u64> {
+        match self.cache.entry(addr) {
+            Entry::Vacant(_)         => None,
+            Entry::Occupied(occ)     => {
+                let curr_time = UTC::now();
+                let prev_time = occ.get().1;
+                
+                if is_expired(curr_time, prev_time) {
+                    occ.remove();
+                    
+                    None
+                } else {
+                    Some(occ.get().0)
+                }
+            }
+        }
+    }
+    
+    /// Put an un expired connection id into cache for the given addr.
+    fn put(&mut self, addr: SocketAddr, connect_id: u64) {
+        let curr_time = UTC::now();
+        
+        self.cache.insert(addr, (connect_id, curr_time));
+    }
+    
+    /// Removes all entries that have expired.
+    fn clean_expired(&mut self) {
+        let curr_time = UTC::now();
+        let mut curr_index = 0;
+        
+        let mut opt_curr_entry = self.cache.iter().skip(curr_index).map(|(&k, &v)| (k, v)).next();
+        while let Some((addr, (_, prev_time))) = opt_curr_entry.take() {
+            if is_expired(curr_time, prev_time) {
+                self.cache.remove(&addr);
+            }
+            
+            curr_index += 1;
+            opt_curr_entry = self.cache.iter().skip(curr_index).map(|(&k, &v)| (k, v)).next();
+        }
+    }
+}
+
+/// Returns true if the connect id received at prev_time is now expired.
+fn is_expired(curr_time: DateTime<UTC>, prev_time: DateTime<UTC>) -> bool {
+    let valid_duration = Duration::milliseconds(CONNECTION_ID_VALID_DURATION_MILLIS);
+    
+    curr_time - prev_time >= valid_duration
 }

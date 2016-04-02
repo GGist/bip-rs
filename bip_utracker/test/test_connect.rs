@@ -14,7 +14,7 @@ fn positive_receive_connect_id() {
     let mock_handler = MockTrackerHandler::new();
     let server = TrackerServer::run(server_addr, mock_handler).unwrap();
     
-    thread::sleep(Duration::from_millis(200));
+    thread::sleep(Duration::from_millis(100));
     
     let mut client = TrackerClient::new("127.0.0.1:4505".parse().unwrap(), MockHandshaker::new()).unwrap();
     let responses = client.responses();
