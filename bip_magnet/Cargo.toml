@@ -3,7 +3,7 @@ name        = "bip_magnet"
 version     = "0.0.2"
 description = "Magnet link parsing and construction"
 
-authors     = ["Andrew <amiller4421@gmail.com>"]
+authors     = ["Astro <astro@spaceboyz.net>"]
 
 homepage    = "https://github.com/GGist/bip-rs/bip_magnet"
 repository  = "https://github.com/GGist/bip-rs/bip_magnet"
@@ -14,3 +14,8 @@ license     = "MIT/Apache-2.0"
 
 [features]
 unstable = []
+
+[dependencies]
+bip_util      = { path = "../bip_util", version = "0.3.0" }
+url           = "^0.5.7"
+base32        = "^0.3.1"

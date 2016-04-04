@@ -23,6 +23,7 @@ env:
     - CRATE_DIR=bip_handshake
     - CRATE_DIR=bip_htracker
     - CRATE_DIR=bip_lpd
+    - CRATE_DIR=bip_magnet
     - CRATE_DIR=bip_metainfo
     - CRATE_DIR=bip_peer
     - CRATE_DIR=bip_util

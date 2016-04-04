@@ -15,6 +15,9 @@ environment:
   - CRATE_DIR: bip_lpd
     TARGET: i686-pc-windows-gnu
 
+  - CRATE_DIR: bip_magnet
+    TARGET: i686-pc-windows-gnu
+
   - CRATE_DIR: bip_metainfo
     TARGET: i686-pc-windows-gnu
 
