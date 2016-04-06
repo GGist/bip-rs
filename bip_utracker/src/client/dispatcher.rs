@@ -39,12 +39,15 @@ pub enum DispatchMessage {
 }
 
 /// Create a new background dispatcher to execute request and send responses back.
+///
+/// Assumes msg_capacity is less than usize::max_value().
 pub fn create_dispatcher<H>(bind: SocketAddr, handshaker: H, msg_capacity: usize, limiter: RequestLimiter,
     rsp_send: chan::Sender<(ClientToken, ClientResult<ClientResponse>)>) -> io::Result<external::Sender<DispatchMessage>>
     where H: Handshaker + 'static {
+    // Timer capacity is plus one for the cache cleanup timer
     let builder = ELoopBuilder::new()
         .channel_capacity(msg_capacity)
-        .timer_capacity(msg_capacity)
+        .timer_capacity(msg_capacity + 1)
         .bind_address(bind)
         .buffer_length(EXPECTED_PACKET_LENGTH);
         
