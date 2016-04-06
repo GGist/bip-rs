@@ -114,23 +114,42 @@ impl<'a> AnnounceOptions<'a> {
 }
 
 /// Parse the options in the byte slice and store them in the option map.
-fn parse_options<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], ()> {
-    alt!(bytes, parse_end_option | call!(parse_no_option, option_map) | call!(parse_user_option, option_map))
+fn parse_options<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], bool> {
+    let mut curr_bytes = bytes;
+    let mut eof = false;
+    
+    // Iteratively try all parsers until one succeeds and check whether the eof has been reached.
+    // Return early on incomplete or error.
+    while !eof {
+        let parse_result = alt!(curr_bytes, parse_end_option | call!(parse_no_option) |
+            call!(parse_user_option, option_map));
+    
+        match parse_result {
+            IResult::Done(new_bytes, found_eof) => {
+                eof = found_eof;
+                
+                curr_bytes = new_bytes;
+            },
+            some_error => { return some_error; }
+        };
+    }
+    
+    IResult::Done(curr_bytes, eof)
 }
 
 /// Parse an end of buffer or the end of option byte.
-named!(parse_end_option<&[u8], ()>, map!(alt!(
+named!(parse_end_option<&[u8], bool>, map!(alt!(
     eof | tag!([END_OF_OPTIONS_BYTE])
-), |_| ()));
+), |_| true));
 
-/// Parse a noop byte followed by a recursive call to parse another option.
-fn parse_no_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], ()> {
-    preceded!(bytes, tag!([NO_OPERATION_BYTE]), call!(parse_options, option_map))
+/// Parse a noop byte.
+fn parse_no_option<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], bool> {
+    map!(bytes, tag!([NO_OPERATION_BYTE]), |_| false)
 }
 
-/// Parse a user defined option followed by a recursive call to parse another option.
-fn parse_user_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], ()> {
-    preceded!(bytes, chain!(
+/// Parse a user defined option.
+fn parse_user_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], bool> {
+    chain!(bytes,
         option_byte:     be_u8 ~
         option_contents: length_bytes!(byte_usize) ,
         || {
@@ -138,8 +157,9 @@ fn parse_user_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [
                 Entry::Occupied(mut occ) => { occ.get_mut().to_mut().extend_from_slice(option_contents); },
                 Entry::Vacant(vac)       => { vac.insert(Cow::Borrowed(option_contents)); } 
             };
-        }),
-        call!(parse_options, option_map)
+            
+            false
+        }
     )
 }
 
