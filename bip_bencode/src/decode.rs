@@ -6,21 +6,263 @@ use bencode::{Bencode};
 use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 use dictionary::{Dictionary};
 
-pub fn decode<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Bencode<'a>, usize)> {
-    let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
+// Storage for regular bencode as well as mappings (the invariant is that the
+// underlying recursive type is a dictionary, it is a programming error otherwise)
+enum IBencodeType<'a> {
+    Bencode(Bencode<'a>),
+    BencodeMapping(&'a str, Bencode<'a>)
+}
+
+/// Decodes the given list of bytes at the given position into a bencoded structures.
+///
+/// Panic only occurs is a programming error occurred.
+pub fn decode<'a>(bytes: &'a [u8], mut pos: usize) -> BencodeParseResult<(Bencode<'a>, usize)> {
+    let mut bencode_stack = Vec::new();
+    let (shallow_type, new_pos) = try!(decode_shallow(bytes, pos));
+    pos = new_pos;
     
+    bencode_stack.push(IBencodeType::Bencode(shallow_type));
+    
+    // While the stack is not empty, keep pulling, parsing, collapsing, etc.
+    while let Some(curr_ibencode) = bencode_stack.pop() {
+        match curr_ibencode {
+            ib_int @ IBencodeType::Bencode(Bencode::Int(_)) => {
+                let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_int, pos));
+                
+                if let Some(last_type) = opt_last_type {
+                    return Ok((last_type, pos))
+                }
+            },
+            ib_bytes @ IBencodeType::Bencode(Bencode::Bytes(_)) => {
+                let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_bytes, pos));
+                
+                if let Some(last_type) = opt_last_type {
+                    return Ok((last_type, pos))
+                }
+            },
+            ib_list @ IBencodeType::Bencode(Bencode::List(_)) => {
+                let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
+                
+                if curr_byte == ::BEN_END {
+                    // Recursive type has reached it's end, collapse it now
+                    pos += 1;
+                    let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_list, pos));
+                    
+                    if let Some(last_type) = opt_last_type {
+                        return Ok((last_type, pos))
+                    }
+                } else {
+                    // Recursive type still has entries, push it back and then push the entry onto the stack
+                    bencode_stack.push(ib_list);
+                    
+                    let (shallow_type, new_pos) = try!(decode_shallow(bytes, pos));
+                    pos = new_pos;
+                    
+                    bencode_stack.push(IBencodeType::Bencode(shallow_type));
+                }
+            },
+            ib_dict @ IBencodeType::Bencode(Bencode::Dict(_)) => {
+                let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
+                
+                if curr_byte == ::BEN_END {
+                    // Recursive type has reached it's end, collapse it now
+                    pos += 1;
+                    let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_dict, pos));
+                    
+                    if let Some(last_type) = opt_last_type {
+                        return Ok((last_type, pos))
+                    }
+                } else {
+                    // Recursive type still has entries, push it back and then push the entry onto the stack
+                    bencode_stack.push(ib_dict);
+                    
+                    let (key, new_pos) = try!(decode_key(bytes, pos));
+                    pos = new_pos;
+                    
+                    let (shallow_type, new_pos) = try!(decode_shallow(bytes, pos));
+                    pos = new_pos;
+                    
+                    bencode_stack.push(IBencodeType::BencodeMapping(key, shallow_type));
+                }
+            },
+            ib_map_int @ IBencodeType::BencodeMapping(_, Bencode::Int(_)) => {
+                let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_map_int, pos));
+                
+                if let Some(last_type) = opt_last_type {
+                    return Ok((last_type, pos))
+                }
+            },
+            ib_map_bytes @ IBencodeType::BencodeMapping(_, Bencode::Bytes(_)) => {
+                let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_map_bytes, pos));
+                
+                if let Some(last_type) = opt_last_type {
+                    return Ok((last_type, pos))
+                }
+            },
+            ib_map_list @ IBencodeType::BencodeMapping(_, Bencode::List(_)) => {
+                let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
+                
+                if curr_byte == ::BEN_END {
+                    // Recursive type has reached it's end, collapse it now
+                    pos += 1;
+                    let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_map_list, pos));
+                    
+                    if let Some(last_type) = opt_last_type {
+                        return Ok((last_type, pos))
+                    }
+                } else {
+                    // Recursive type still has entries, push it back and then push the entry onto the stack
+                    bencode_stack.push(ib_map_list);
+                    
+                    let (shallow_type, new_pos) = try!(decode_shallow(bytes, pos));
+                    pos = new_pos;
+                    
+                    bencode_stack.push(IBencodeType::Bencode(shallow_type));
+                }
+            },
+            ib_map_dict @ IBencodeType::BencodeMapping(_, Bencode::Dict(_)) => {
+                let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
+                
+                if curr_byte == ::BEN_END {
+                    // Recursive type has reached it's end, collapse it now
+                    pos += 1;
+                    let opt_last_type = try!(collapse_bencode(&mut bencode_stack, ib_map_dict, pos));
+                    
+                    if let Some(last_type) = opt_last_type {
+                        return Ok((last_type, pos))
+                    }
+                } else {
+                    // Recursive type still has entries, push it back and then push the entry onto the stack
+                    bencode_stack.push(ib_map_dict);
+                    
+                    let (key, new_pos) = try!(decode_key(bytes, pos));
+                    pos = new_pos;
+                    
+                    let (shallow_type, new_pos) = try!(decode_shallow(bytes, pos));
+                    pos = new_pos;
+                    
+                    bencode_stack.push(IBencodeType::BencodeMapping(key, shallow_type));
+                }
+            }
+        };
+    }
+    
+    panic!("bip_bencode: Reached End Of Decode Without Returning")
+}
+
+/// Collapses the given bencode type into the bencode type on the top of the stack.
+///
+/// Returns Some if there is nothing to collapse the bencode type into.
+fn collapse_bencode<'a>(stack: &mut Vec<IBencodeType<'a>>, ibencode: IBencodeType<'a>, curr_pos: usize) -> BencodeParseResult<Option<Bencode<'a>>> {
+    if let Some(top_ibencode) = stack.pop() {
+        match (top_ibencode, ibencode) {
+            (IBencodeType::Bencode(Bencode::Int(_)), _) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Into A Bencode::Int")
+            },
+            (IBencodeType::Bencode(Bencode::Bytes(_)), _) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Into A Bencode::Bytes")
+            },
+            (IBencodeType::Bencode(Bencode::List(mut list)), IBencodeType::Bencode(bencode)) => {
+                list.push(bencode);
+                stack.push(IBencodeType::Bencode(Bencode::List(list)));
+                Ok(None)
+            },
+            (IBencodeType::Bencode(Bencode::List(_)), IBencodeType::BencodeMapping(..)) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Mapping Into A Bencode::List")
+            },
+            (IBencodeType::Bencode(Bencode::Dict(mut dict)), IBencodeType::BencodeMapping(key, bencode)) => {
+                // Spec says that the keys must be in alphabetical order
+                match dict.keys().last() {
+                    Some(last_key) if key < *last_key => {
+                        return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
+                            "Key Not In Alphabetical Order For Dictionary", Some(curr_pos)))
+                    },
+                    _ => ()
+                };
+                
+                // Spec says that duplicate entries are not allowed
+                match dict.entry(key) {
+                    Entry::Vacant(n)   => n.insert(bencode),
+                    Entry::Occupied(_) => {
+                        return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
+                            "Duplicate Key Found For Dictionary", Some(curr_pos)))
+                    }
+                };
+                
+                stack.push(IBencodeType::Bencode(Bencode::Dict(dict)));
+                Ok(None)
+            },
+            (IBencodeType::Bencode(Bencode::Dict(_)), IBencodeType::Bencode(_)) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Into A Bencode::Dict")
+            },
+            (IBencodeType::BencodeMapping(_, Bencode::Int(_)), _) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Into A Bencode::Int Mapping")
+            },
+            (IBencodeType::BencodeMapping(_, Bencode::Bytes(_)), _) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Into A Bencode::Bytes Mapping")
+            },
+            (IBencodeType::BencodeMapping(key, Bencode::List(mut list)), IBencodeType::Bencode(bencode)) => {
+                list.push(bencode);
+                stack.push(IBencodeType::BencodeMapping(key, Bencode::List(list)));
+                Ok(None)
+            },
+            (IBencodeType::BencodeMapping(_, Bencode::List(_)), IBencodeType::BencodeMapping(..)) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Mapping Into A Bencode::List Mapping")
+            },
+            (IBencodeType::BencodeMapping(key, Bencode::Dict(mut dict)), IBencodeType::BencodeMapping(i_key, bencode)) => {
+                // Spec says that the keys must be in alphabetical order
+                match dict.keys().last() {
+                    Some(last_key) if i_key < *last_key => {
+                        return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
+                            "Key Not In Alphabetical Order For Dictionary", Some(curr_pos)))
+                    },
+                    _ => ()
+                };
+                
+                // Spec says that duplicate entries are not allowed
+                match dict.entry(i_key) {
+                    Entry::Vacant(n)   => n.insert(bencode),
+                    Entry::Occupied(_) => {
+                        return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
+                            "Duplicate Key Found For Dictionary", Some(curr_pos)))
+                    }
+                };
+                
+                stack.push(IBencodeType::BencodeMapping(key, Bencode::Dict(dict)));
+                Ok(None)
+            },
+            (IBencodeType::BencodeMapping(_, Bencode::Dict(_)), IBencodeType::Bencode(_)) => {
+                panic!("bip_bencode: Attempted To Collapse A Bencode Type Into A Bencode::Dict Mapping")
+            }
+        }
+    } else {
+        // We need to return the current ibencode as a complete type
+        match ibencode {
+            IBencodeType::Bencode(bencode)   => Ok(Some(bencode)),
+            IBencodeType::BencodeMapping(..) => {
+                panic!("bip_bencode: Got BencodeMapping, Expected Bencode")
+            }
+        }
+    }
+}
+
+/// Decodes the next shallow bencode type. Any recursive types will be initialized as empty and ending bytes
+/// for those types will not be consumed (even if the type is empty).
+///
+/// Returns the next shallow bencode type as well as the byte of the next type (or end byte for recursive types).
+fn decode_shallow<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Bencode<'a>, usize)> {
+    let curr_byte = try!(peek_byte(bytes, pos, "End Of Bytes Encountered"));
+
     match curr_byte {
         ::INT_START  => {
             let (bencode, pos) = try!(decode_int(bytes, pos + 1, ::BEN_END));
             Ok((Bencode::Int(bencode), pos))
         },
         ::LIST_START => {
-            let (bencode, pos) = try!(decode_list(bytes, pos + 1));
-            Ok((Bencode::List(bencode), pos))
+            Ok((Bencode::List(Vec::new()), pos + 1))
         },
         ::DICT_START => {
-            let (bencode, pos) = try!(decode_dict(bytes, pos + 1));
-            Ok((Bencode::Dict(bencode), pos))
+            Ok((Bencode::Dict(BTreeMap::new()), pos + 1))
         },
         ::BYTE_LEN_LOW...::BYTE_LEN_HIGH => {
             let (bencode, pos) = try!(decode_bytes(bytes, pos));
@@ -32,6 +274,7 @@ pub fn decode<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Bencode<'a
     }
 }
 
+/// Return the integer as well as the starting byte of the next type.
 fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, usize)> {
     let (_, begin_decode) = bytes.split_at(pos);
     
@@ -70,7 +313,8 @@ fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, u
                       "Could Not Convert Integer/Length To i64", Some(pos)))
     }
 }
-    
+
+/// Returns the byte reference as well as the starting byte of the next type.
 fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8], usize)> {
     let (num_bytes, start_pos) = try!(decode_int(bytes, pos, ::BYTE_LEN_END));
 
@@ -93,65 +337,18 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8]
     Ok((&bytes[start_pos..end_pos], end_pos))
 }
 
-fn decode_list<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Vec<Bencode<'a>>, usize)> {
-    let mut bencode_list = Vec::new();
+/// Returns the key reference as well as the starting byte of the next type.
+fn decode_key<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a str, usize)> {
+    let (key_bytes, next_pos) = try!(decode_bytes(bytes, pos));
+    let key = match str::from_utf8(key_bytes) {
+        Ok(n)  => n,
+        Err(_) => {
+            return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidByte,
+                "Invalid UTF-8 Key Found For Dictionar", Some(next_pos)))
+        }
+    };
     
-    let mut curr_pos = pos;
-    let mut curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In List"));
-    
-    while curr_byte != ::BEN_END {
-        let (bencode, next_pos) = try!(decode(bytes, curr_pos));
-        
-        bencode_list.push(bencode);
-        
-        curr_pos = next_pos;
-        curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In List"));
-    }
-    
-    Ok((bencode_list, curr_pos + 1))
-}
-
-fn decode_dict<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(BTreeMap<&'a str, Bencode<'a>>, usize)> {
-    let mut bencode_dict = BTreeMap::new();
-    
-    let mut curr_pos = pos;
-    let mut curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In Dictionary"));
-    
-    while curr_byte != ::BEN_END {
-        let (key_bytes, next_pos) = try!(decode_bytes(bytes, curr_pos));
-    
-        let key = match str::from_utf8(key_bytes) {
-            Ok(n)  => n,
-            Err(_) => {
-                return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidByte,
-                    "Invalid UTF-8 Key Found For Dictionar", Some(curr_pos)))
-            }
-        };
-        
-        // Spec says that the keys must be in alphabetical order
-        match bencode_dict.keys().last() {
-            Some(last_key) if key < *last_key => {
-                return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
-                "Key Not In Alphabetical Order For Dictionary", Some(curr_pos)))
-            },
-            _ => ()
-        };
-        curr_pos = next_pos;
-        
-        let (value, next_pos) = try!(decode(bytes, curr_pos));
-        match bencode_dict.entry(key) {
-            Entry::Vacant(n)   => n.insert(value),
-            Entry::Occupied(_) => {
-                return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidKey,
-                    "Duplicate Key Found For Dictionary", Some(curr_pos)))
-            }
-        };
-
-        curr_pos = next_pos;
-        curr_byte = try!(peek_byte(bytes, curr_pos, "End Of Bytes Element Encountered In Dictionary"));
-    }
-    
-    Ok((bencode_dict, curr_pos + 1))
+    Ok((key, next_pos))
 }
 
 fn peek_byte(bytes: &[u8], pos: usize, err_msg: &'static str) -> BencodeParseResult<u8> {
@@ -164,6 +361,7 @@ mod tests {
 
     // Positive Cases
     const GENERAL: &'static [u8] = b"d0:12:zero_len_key8:location17:udp://test.com:8011:nested dictd4:listli-500500eee6:numberi500500ee";
+    const RECURSION: &'static [u8] = b"lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllleeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
     const BYTES_UTF8: &'static [u8] = b"16:valid_utf8_bytes";
     const DICTIONARY: &'static [u8] = b"d9:test_dictd10:nested_key12:nested_value11:nested_listli500ei-500ei0eee8:test_key10:test_valuee";
     const LIST: &'static [u8] = b"l10:test_bytesi500ei0ei-500el12:nested_bytesed8:test_key10:test_valueee";
@@ -200,6 +398,13 @@ mod tests {
         assert_eq!(nested_list[0].int().unwrap(), -500500i64);
    }
     
+  #[test]
+  fn positive_decode_recursion() {
+        let _ = Bencode::decode(RECURSION).unwrap();
+        
+        // As long as we didnt overflow our call stack, we are good!
+  }
+    
    #[test]
    fn positive_decode_bytes_utf8() {
         let bencode = Bencode::decode(BYTES_UTF8).unwrap();
@@ -209,10 +414,11 @@ mod tests {
    
     #[test]
     fn positive_decode_dict() {
-        let dict = super::decode_dict(DICTIONARY, 1).unwrap().0;
-        assert_eq!(dict.get("test_key").unwrap().str().unwrap(), "test_value");
+        let bencode = Bencode::decode(DICTIONARY).unwrap();
+        let dict = bencode.dict().unwrap();
+        assert_eq!(dict.lookup("test_key").unwrap().str().unwrap(), "test_value");
         
-        let nested_dict = dict.get("test_dict").unwrap().dict().unwrap();
+        let nested_dict = dict.lookup("test_dict").unwrap().dict().unwrap();
         assert_eq!(nested_dict.lookup("nested_key").unwrap().str().unwrap(), "nested_value");
         
         let nested_list = nested_dict.lookup("nested_list").unwrap().list().unwrap();
@@ -220,10 +426,12 @@ mod tests {
         assert_eq!(nested_list[1].int().unwrap(), -500i64);
         assert_eq!(nested_list[2].int().unwrap(), 0i64);
     }
-   
+    
     #[test]
     fn positive_decode_list() {
-        let list = super::decode_list(LIST, 1).unwrap().0;
+        let bencode = Bencode::decode(LIST).unwrap();
+        let list = bencode.list().unwrap();
+        
         assert_eq!(list[0].str().unwrap(), "test_bytes");
         assert_eq!(list[1].int().unwrap(), 500i64);
         assert_eq!(list[2].int().unwrap(), 0i64);
@@ -324,18 +532,18 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_decode_dict_unordered_keys() {
-        super::decode_dict(DICT_UNORDERED_KEYS, 1).unwrap().0;
+        Bencode::decode(DICT_UNORDERED_KEYS).unwrap();
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_dict_dup_keys_same_data() {
-        super::decode_dict(DICT_DUP_KEYS_SAME_DATA, 1).unwrap().0;
+        Bencode::decode(DICT_DUP_KEYS_SAME_DATA).unwrap();
     }
     
     #[test]
     #[should_panic]
     fn negative_decode_dict_dup_keys_diff_data() {
-        super::decode_dict(DICT_DUP_KEYS_DIFF_DATA, 1).unwrap().0;
+        Bencode::decode(DICT_DUP_KEYS_DIFF_DATA).unwrap();
     }
 }
