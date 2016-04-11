@@ -49,7 +49,7 @@ impl<T> TIDGenerator<T> where T: Copy + Bounded + NumCast + One + Eq, Wrapping<T
 }
 
 /// Generate a new block of transaction ids starting from the current allocation marker.
-fn generate_tids<T: Copy>(curr_alloc: T) -> (T, [T; TRANSACTION_ID_PREALLOC_LEN])
+fn generate_tids<T>(curr_alloc: T) -> (T, [T; TRANSACTION_ID_PREALLOC_LEN])
     where T: Copy + Bounded + NumCast + One + Eq, Wrapping<T>: Add<Wrapping<T>, Output=Wrapping<T>> {
     let max_trans_id = T::max_value();
 
