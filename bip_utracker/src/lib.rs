@@ -7,7 +7,6 @@
 extern crate bip_handshake;
 extern crate bip_util;
 extern crate byteorder;
-extern crate chan;
 extern crate chrono;
 #[macro_use]
 extern crate nom;
@@ -32,9 +31,8 @@ pub mod scrape;
 mod client;
 mod server;
 
-pub use client::{TrackerClient, ClientRequest, ClientResponse, ClientToken};
+pub use client::{TrackerClient, ClientRequest, ClientResponse, ClientToken, ClientMetadata};
 pub use client::error::{ClientResult, ClientError};
-pub use client::receiver::{ClientResponses, ClientResponsesIter};
 
 pub use server::{TrackerServer};
 pub use server::handler::{ServerResult, ServerHandler};

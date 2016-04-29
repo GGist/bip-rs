@@ -5,7 +5,6 @@ use std::net::{SocketAddr};
 use std::thread::{self};
 
 use bip_handshake::{Handshaker};
-use chan::{self};
 use chrono::{DateTime, UTC, Duration};
 use nom::{IResult};
 use rand::{self};
@@ -13,7 +12,7 @@ use umio::{ELoopBuilder, Dispatcher, Provider};
 use umio::external::{self, Timeout};
 
 use announce::{AnnounceRequest, SourceIP, DesiredPeers};
-use client::{ClientToken, ClientResponse, ClientRequest, RequestLimiter};
+use client::{ClientToken, ClientRequest, RequestLimiter, ClientMetadata, ClientResponse};
 use client::error::{ClientResult, ClientError};
 use option::{AnnounceOptions};
 use request::{self, TrackerRequest, RequestType};
@@ -41,9 +40,8 @@ pub enum DispatchMessage {
 /// Create a new background dispatcher to execute request and send responses back.
 ///
 /// Assumes msg_capacity is less than usize::max_value().
-pub fn create_dispatcher<H>(bind: SocketAddr, handshaker: H, msg_capacity: usize, limiter: RequestLimiter,
-    rsp_send: chan::Sender<(ClientToken, ClientResult<ClientResponse>)>) -> io::Result<external::Sender<DispatchMessage>>
-    where H: Handshaker + 'static {
+pub fn create_dispatcher<H>(bind: SocketAddr, handshaker: H, msg_capacity: usize, limiter: RequestLimiter) -> io::Result<external::Sender<DispatchMessage>>
+    where H: Handshaker + 'static, H::MetadataEnvelope: From<ClientMetadata> {
     // Timer capacity is plus one for the cache cleanup timer
     let builder = ELoopBuilder::new()
         .channel_capacity(msg_capacity)
@@ -54,7 +52,7 @@ pub fn create_dispatcher<H>(bind: SocketAddr, handshaker: H, msg_capacity: usize
     let mut eloop = try!(builder.build());
     let channel = eloop.channel();
     
-    let dispatch = ClientDispatcher::new(handshaker, bind, limiter, rsp_send);
+    let dispatch = ClientDispatcher::new(handshaker, bind, limiter);
     
     thread::spawn(move || {
         eloop.run(dispatch).expect("bip_utracker: ELoop Shutdown Unexpectedly...");
@@ -72,25 +70,25 @@ pub fn create_dispatcher<H>(bind: SocketAddr, handshaker: H, msg_capacity: usize
 struct ClientDispatcher<H> where H: Handshaker {
     handshaker:      H,
     bound_addr:      SocketAddr,
-    response_send:   chan::Sender<(ClientToken, ClientResult<ClientResponse>)>,
     active_requests: HashMap<ClientToken, ConnectTimer>,
     id_cache:        ConnectIdCache,
     limiter:         RequestLimiter
 }
 
-impl<H> ClientDispatcher<H> where H: Handshaker {
+impl<H> ClientDispatcher<H> where H: Handshaker, H::MetadataEnvelope: From<ClientMetadata> {
     /// Create a new ClientDispatcher.
-    pub fn new(handshaker: H, bind: SocketAddr, limiter: RequestLimiter, rsp_send: chan::Sender<(ClientToken, ClientResult<ClientResponse>)>)
-        -> ClientDispatcher<H> {
-        ClientDispatcher{ handshaker: handshaker, bound_addr: bind, response_send: rsp_send, active_requests: HashMap::new(),
+    pub fn new(handshaker: H, bind: SocketAddr, limiter: RequestLimiter) -> ClientDispatcher<H> {
+        ClientDispatcher{ handshaker: handshaker, bound_addr: bind, active_requests: HashMap::new(),
             id_cache: ConnectIdCache::new(), limiter: limiter }
     }
     
     /// Shutdown the current dispatcher, notifying all pending requests.
     pub fn shutdown<'a>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>) {
         // Notify all active requests with the appropriate error
-        for (&token, _) in self.active_requests.iter() {
-            self.notify_client(token, Err(ClientError::ClientShutdown));
+        for token_index in 0..self.active_requests.len() {
+            let next_token = *self.active_requests.keys().skip(token_index).next().unwrap();
+            
+            self.notify_client(next_token, Err(ClientError::ClientShutdown));
         }
         // TODO: Clear active timeouts
         self.active_requests.clear();
@@ -99,8 +97,8 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
     }
     
     /// Finish a request by sending the result back to the client.
-    pub fn notify_client(&self, token: ClientToken, result: ClientResult<ClientResponse>) {
-        self.response_send.send((token, result));
+    pub fn notify_client(&mut self, token: ClientToken, result: ClientResult<ClientResponse>) {
+        self.handshaker.metadata(ClientMetadata::new(token, result).into());
         
         self.limiter.acknowledge();
     }
@@ -238,7 +236,7 @@ impl<H> ClientDispatcher<H> where H: Handshaker {
     }
 }
 
-impl<H> Dispatcher for ClientDispatcher<H> where H: Handshaker {
+impl<H> Dispatcher for ClientDispatcher<H> where H: Handshaker, H::MetadataEnvelope: From<ClientMetadata> {
     type Timeout = DispatchTimeout;
     type Message = DispatchMessage;
     

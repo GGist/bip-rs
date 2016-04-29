@@ -4,10 +4,11 @@ extern crate bip_util;
 use std::collections::{HashSet, HashMap};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Sender};
 
 use bip_util::bt::{InfoHash, PeerId};
 use bip_util::trans::{TIDGenerator};
-use bip_utracker::{ServerHandler, ServerResult, Handshaker};
+use bip_utracker::{ServerHandler, ServerResult, Handshaker, ClientMetadata};
 use bip_utracker::announce::{AnnounceResponse, AnnounceRequest, AnnounceEvent};
 use bip_utracker::contact::{CompactPeersV4, CompactPeersV6, CompactPeers};
 use bip_utracker::scrape::{ScrapeRequest, ScrapeResponse, ScrapeStats};
@@ -140,12 +141,13 @@ impl ServerHandler for MockTrackerHandler {
 
 #[derive(Clone)]
 struct MockHandshaker {
+    send:     Sender<ClientMetadata>,
     connects: Arc<Mutex<Vec<SocketAddr>>>
 }
 
 impl MockHandshaker {
-    pub fn new() -> MockHandshaker {
-        MockHandshaker{ connects: Arc::new(Mutex::new(Vec::new())) }
+    pub fn new(send: Sender<ClientMetadata>) -> MockHandshaker {
+        MockHandshaker{ send: send, connects: Arc::new(Mutex::new(Vec::new())) }
     }
     
     pub fn connects_received<F>(&self, callback: F)
@@ -157,7 +159,7 @@ impl MockHandshaker {
 }
 
 impl Handshaker for MockHandshaker {
-    type Stream = ();
+    type MetadataEnvelope = ClientMetadata;
     
     fn id(&self) -> PeerId {
         [0u8; 20].into()
@@ -171,11 +173,7 @@ impl Handshaker for MockHandshaker {
         self.connects.lock().unwrap().push(addr);
     }
     
-    fn filter<F>(&mut self, _: Box<F>) where F: Fn(&SocketAddr) -> bool + Send {
-        ()
-    }
-    
-    fn stream(&self, _: InfoHash) -> () {
-        ()
+    fn metadata(&mut self, data: ClientMetadata) {
+        self.send.send(data).unwrap();
     }
 }

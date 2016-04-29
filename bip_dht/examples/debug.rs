@@ -35,7 +35,7 @@ struct SimpleHandshaker {
 
 impl Handshaker for SimpleHandshaker {
     /// Type of stream used to receive connections from.
-    type Stream = ();
+    type MetadataEnvelope = ();
 
     /// Unique peer id used to identify ourselves to other peers.
     fn id(&self) -> PeerId {
@@ -61,15 +61,8 @@ impl Handshaker for SimpleHandshaker {
         println!("Received new peer {:?}, total unique peers {}", addr, self.count);
     }
     
-    /// Adds a filter that is applied to handshakes before they are initiated or completed.
-    fn filter<F>(&mut self, _: Box<F>) where F: Fn(&SocketAddr) -> bool + Send {
-        ()
-    }
-    
-    /// Stream that connections for the specified hash are sent to after they are successful.
-    ///
-    /// Connections MAY be dropped if all streams for a given hash are destroyed.
-    fn stream(&self, _: InfoHash) -> () {
+    /// Send the given Metadata back to the client.
+    fn metadata(&mut self, _: Self::MetadataEnvelope) {
         ()
     }
 }
