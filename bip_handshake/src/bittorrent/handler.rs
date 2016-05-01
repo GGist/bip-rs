@@ -1,527 +1,435 @@
-use std::collections::{HashMap};
-use std::collections::hash_map::{Entry};
-use std::io::{self, Write};
+use std::collections::{HashSet};
+use std::io::{self, Write, Cursor, ErrorKind, Read};
 use std::net::{SocketAddr};
-use std::sync::mpsc::{self};
+use std::sync::{Arc, RwLock};
 use std::thread::{self};
+use std::marker::{PhantomData};
 
 use bip_util::bt::{self, PeerId, InfoHash};
-use bytes::{ByteBuf, MutByteBuf, MutBuf, Buf, Take};
-use mio::{self, EventLoop, EventSet, PollOpt, Token, Handler, TryRead, TryWrite};
+use mio::{EventLoop, EventSet, PollOpt, Token, Handler, EventLoopConfig, Timeout};
 use mio::tcp::{TcpListener, TcpStream};
-use mio::util::{Slab};
+use nom::{IResult, be_u8};
+use slab::{Slab, Index};
 
-const MAX_CONCURRENT_CONNECTIONS: usize = 1000;
+use bittorrent::{BTPeer};
+use bittorrent::priority::{PriorityChannel, PriorityChannelAck};
+use channel::{Channel};
 
-const PROTOCOL_LEN_LEN:   usize = 1;
+const SERVER_READ_TOKEN: InnerToken = InnerToken(Token(2));
+const SLAB_START_TOKEN:  InnerToken = InnerToken(Token(3));
+
+const MAX_ELOOP_MESSAGE_CAPACITY: usize = 8192;
+const MAX_CONCURRENT_CONNECTIONS: usize = 4096;
+const MAX_READ_TIMEOUT_MILLIS:    u64   = 1500;
+
 const RESERVED_BYTES_LEN: usize = 8;
 
-pub enum HandlerTask<T> {
-    /// Connect to the peer with the given information.
-    ConnectPeer(Option<PeerId>, InfoHash, SocketAddr),
-    /// Register a peer filter before yielding connections.
-    RegisterFilter(Box<Fn(&SocketAddr) -> bool + Send>),
-    /// Register a sender for peers for the given InfoHash.
-    RegisterSender(InfoHash, mpsc::Sender<(T, PeerId)>),
-    /// Signal the EventLoop to shutdown.
+pub enum Task<T> {
+    Connect(Option<PeerId>, InfoHash, SocketAddr),
+    Metadata(T),
     Shutdown
 }
 
-/// Create a HandshakeHandler and return a channel to send tasks to it.
-pub fn create_handshake_handler<T>(listener: TcpListener, peer_id: PeerId, protocol: &'static str)
-    -> io::Result<mio::Sender<HandlerTask<T>>> where T: From<TcpStream> + Send + 'static {
-    let mut event_loop = try!(EventLoop::new());
-    let mut handshake_handler = try!(HandshakeHandler::new(peer_id, protocol, listener, &mut event_loop));
+pub fn spawn_handshaker<C, T>(chan: C, listen: SocketAddr, pid: PeerId, protocol: &'static str, interest: Arc<RwLock<HashSet<InfoHash>>>)
+    -> io::Result<(PriorityChannel<T>, u16)> where C: Channel<T> + 'static, T: Send + 'static + From<BTPeer> {
+    let tcp_listener = try!(TcpListener::bind(&listen));
+    let listen_port = try!(tcp_listener.local_addr()).port();
     
-    let send_channel = event_loop.channel();
+    let mut eloop_config = EventLoopConfig::new();
+    eloop_config
+        .notify_capacity(MAX_ELOOP_MESSAGE_CAPACITY)
+        .timer_capacity(MAX_CONCURRENT_CONNECTIONS);
+    let mut eloop = try!(EventLoop::configured(eloop_config));
+    
+    try!(eloop.register(&tcp_listener, SERVER_READ_TOKEN.0, EventSet::readable(), PollOpt::edge()));
+    
+    // Subtract 1 to reserve one message slot for a high priority message
+    let priority_chan = PriorityChannel::new(eloop.channel(), MAX_ELOOP_MESSAGE_CAPACITY - 1);
+    let mut handler = HandshakeHandler::new(tcp_listener, pid, protocol, chan, interest, priority_chan.channel_ack());
     
     thread::spawn(move || {
-        if event_loop.run(&mut handshake_handler).is_err() {
-            error!("bip_handshake: EventLoop run returned an error, shutting down thread...");
-        }
+        eloop.run(&mut handler).unwrap()
     });
     
-    Ok(send_channel)
+    Ok((priority_chan, listen_port))
 }
 
 //----------------------------------------------------------------------------//
 
-// Initiator -> Transmit whole handshake -> Receive whole handshake
-// Completor -> Receive handshake up to info hash -> Transmite whole handshake -> Receive peer id
+struct InnerToken(Token);
 
-/// Internal state of the connection.
-#[derive(Debug)]
-enum ConnectionState {
-    /// Reading the first chunk of the message.
-    ReadingHead(Take<MutByteBuf>),
-    /// Writing all chunks of our message.
-    Writing(ByteBuf),
-    /// Reading the last chunk of the message.
-    ReadingTail(Take<MutByteBuf>),
-    /// Finished sending and receiving.
-    Finished(InfoHash, PeerId)
-}
-
-/// Transitional state of the connection.
-enum ConnectionTransition {
-    ReadingHead(bool),
-    Writing,
-    ReadingTail(bool)
-}
-
-// External state of the connection.
-enum ConnectionResult {
-    Working,
-    Finished,
-    Errored
-}
-
-struct Connection {
-    /// If completing connection, InfoHash will be filled in when it is validated.
-    info:      (&'static str, Option<InfoHash>, PeerId),
-    state:     ConnectionState,
-    stream:    TcpStream,
-    expected:  Option<PeerId>,
-    initiated: bool
-}
-
-impl Connection {
-    /// Create a new handshake that is initiating the handshake with a remote peer.
-    pub fn initiate(addr: &SocketAddr, protocol: &'static str, info_hash: InfoHash, peer_id: PeerId, expected: Option<PeerId>) -> io::Result<Connection> {
-        let stream = try!(TcpStream::connect(addr));
-        
-        let write_buf = generate_write_buffer(protocol, &info_hash, &peer_id);
-        let conn_state = ConnectionState::Writing(write_buf);
-        
-        Ok(Connection{ info: (protocol, Some(info_hash), peer_id), state: conn_state, stream: stream, expected: expected, initiated: true })
+impl Index for InnerToken {
+    fn from_usize(i: usize) -> InnerToken {
+        InnerToken(Token(i))
     }
     
-    /// Create a new handshake that is completing the handshake with a remote peer.
-    pub fn complete(stream: TcpStream, protocol: &'static str, peer_id: PeerId, expected: Option<PeerId>) -> Connection {
-        let read_len = calculate_handshake_len(protocol) - 20;
-        let read_buf = Take::new(ByteBuf::mut_with_capacity(read_len), read_len);
-        
-        let conn_state = ConnectionState::ReadingHead(read_buf);
-        
-        Connection{ info: (protocol, None, peer_id), state: conn_state, stream: stream, expected: expected, initiated: false }
+    fn as_usize(&self) -> usize {
+        self.0.as_usize()
     }
-    
-    /// Destroy a connection to access the values from the handshake.
-    ///
-    /// Panics if the connection has not actually reached a finished state.
-    pub fn destroy(self) -> (TcpStream, InfoHash, PeerId) {
-        match self.state {
-            ConnectionState::Finished(info_hash, peer_id) => (self.stream, info_hash, peer_id),
-            _ => panic!("bip_handshake: Attempted to deconstruct a connection when it hasnt finished...")
-        }
-    }
-    
-    /// Returns the underlying evented object for the connection.
-    pub fn evented(&self) -> &TcpStream {
-        &self.stream
-    }
-    
-    /// Get the EventSet corresponding to the event this connection is interested in.
-    pub fn event_set(&self) -> EventSet {
-        match self.state {
-            ConnectionState::ReadingHead(_) => EventSet::readable(),
-            ConnectionState::Writing(_)     => EventSet::writable(),
-            ConnectionState::ReadingTail(_) => EventSet::readable(),
-            ConnectionState::Finished(_, _) => EventSet::none()
-        }
-    }
-
-    /// Handle a read event for the connection.
-    ///
-    /// The closure is used to validate, in the case where we are completing an existing handshake,
-    /// whether or not any of our clients are interested in the given info hash, since we will not
-    /// know what info hash the handshake is for until we read it.
-    pub fn handle_read<F>(&mut self, check_info_hash: F) -> ConnectionResult
-        where F: Fn(&InfoHash) -> bool {
-        // Consume more bytes from the TcpStream
-        let res_remaining = match self.state {
-            ConnectionState::ReadingHead(ref mut buf) => self.stream.try_read_buf(buf).map(|_| buf.remaining()),
-            ConnectionState::ReadingTail(ref mut buf) => self.stream.try_read_buf(buf).map(|_| buf.remaining()),
-            _ => return ConnectionResult::Errored
-        };
-        
-        match res_remaining {
-            Ok(rem) if rem == 0 => self.advance_state(check_info_hash),
-            Ok(_)               => ConnectionResult::Working,
-            Err(_)              => {
-                warn!("bip_handshake: Error while reading bytes from TcpStream...");
-                
-                ConnectionResult::Errored
-            }
-        }
-    }
-    
-    /// Handle a write event for the connection.
-    pub fn handle_write(&mut self) -> ConnectionResult {
-        let res_remaining = match self.state {
-            ConnectionState::Writing(ref mut buf) => self.stream.try_write_buf(buf).map(|_| buf.remaining()),
-            _ => return ConnectionResult::Errored
-        };
-        
-        match res_remaining {
-            Ok(rem) if rem == 0 => self.advance_state(|_| panic!("bip_handshake: Error in Connection, closure should not be called")),
-            Ok(_)               => ConnectionResult::Working,
-            Err(_)              => {
-                warn!("bip_handshake: Error while writing bytes to TcpStream...");
-                
-                ConnectionResult::Errored
-            }
-        }
-    }
-    
-    /// Compare the contents of the received handshake with our handshake.
-    fn advance_state<F>(&mut self, check_info_hash: F) -> ConnectionResult
-        where F: Fn(&InfoHash) -> bool {
-        // If we initiated the connection, that means our first state was writing,
-        // else our first state was reading head.
-        
-        // (Initiated) Writing -> ReadingHead -> ReadingTail
-        // (Not Initiated) ReadingHead -> Writing -> Reading
-        
-        // Get our transition state
-        let trans_state = match self.state {
-            ConnectionState::Writing(_)               => ConnectionTransition::Writing,
-            ConnectionState::ReadingHead(ref mut buf) => {
-                let opt_info_hash = compare_info_hash(buf.get_ref().bytes(), &self.info.1, check_info_hash);
-                let protocol_matches = compare_protocol(buf.get_ref().bytes(), self.info.0);
-                
-                let good_transition = if opt_info_hash.is_some() && protocol_matches {
-                    self.info.1 = opt_info_hash;
-                    true
-                } else {
-                    false
-                };
-                
-                ConnectionTransition::ReadingHead(good_transition)
-            },
-            ConnectionState::ReadingTail(ref mut buf) => {
-                let opt_peer_id = compare_peer_id(buf.get_ref().bytes(), &self.expected);
-                
-                let good_transition = if opt_peer_id.is_some() {
-                    self.expected = opt_peer_id;
-                    true
-                } else {
-                    false
-                };
-                
-                ConnectionTransition::ReadingTail(good_transition)
-            },
-            ConnectionState::Finished(_, _) => {
-                return ConnectionResult::Finished
-            }
-        };
-        
-        // Act on our transition state
-        match trans_state {
-            ConnectionTransition::ReadingHead(good) if good => {
-                if self.are_initiator() {
-                    self.state = ConnectionState::ReadingTail(Take::new(ByteBuf::mut_with_capacity(20), 20));
-                } else {
-                    let info_hash = self.info.1.as_ref().unwrap();
-                    self.state = ConnectionState::Writing(generate_write_buffer(&self.info.0, info_hash, &self.info.2));
-                }
-                
-                ConnectionResult::Working
-            }
-            ConnectionTransition::Writing => {
-                if self.are_initiator() {
-                    let read_len = calculate_handshake_len(self.info.0) - 20;
-                    self.state = ConnectionState::ReadingHead(Take::new(ByteBuf::mut_with_capacity(read_len), read_len));
-                } else {
-                    self.state = ConnectionState::ReadingTail(Take::new(ByteBuf::mut_with_capacity(20), 20));
-                }
-                
-                ConnectionResult::Working
-            },
-            ConnectionTransition::ReadingTail(good) if good => {
-                let info_hash = self.info.1.unwrap();
-                let peer_id = self.expected.unwrap();
-                
-                self.state = ConnectionState::Finished(info_hash, peer_id);
-                
-                ConnectionResult::Finished
-            },
-            _ => ConnectionResult::Errored
-        }
-    }
-    
-    /// Returns true if we initiated the connection.
-    fn are_initiator(&self) -> bool {
-        self.initiated
-    }
-}
-
-// Returns true if the protocol matches up.
-fn compare_protocol(head: &[u8], protocol: &'static str) -> bool {
-    let prot_len = head[0] as usize;
-    
-    prot_len == protocol.len() && &head[1..prot_len + 1] == protocol.as_bytes()
-}
-
-// Returns Some(InfoHash) is the info hash matches up.
-fn compare_info_hash<F>(head: &[u8], opt_info_hash: &Option<InfoHash>, check_info_hash: F) -> Option<InfoHash>
-    where F: Fn(&InfoHash) -> bool {
-    let info_hash_offset = head.len() - bt::INFO_HASH_LEN;
-    let info_hash = InfoHash::from_hash(&head[info_hash_offset..]).unwrap();
-    
-    if opt_info_hash.map_or(check_info_hash(&info_hash), |i| info_hash == i) {
-        Some(info_hash)
-    } else {
-        None
-    }
-}
-
-// Returns true if the PeerId matches up.
-fn compare_peer_id(tail: &[u8], expected: &Option<PeerId>) -> Option<PeerId> {
-    let peer_id = PeerId::from_hash(tail).unwrap();
-    
-    if expected.map_or(true, |p| peer_id == p) {
-        Some(peer_id)
-    } else {
-        None
-    }
-}
-
-/// Calculate the expected length of the handshake based on the protocol.
-fn calculate_handshake_len(protocol: &'static str) -> usize {
-    PROTOCOL_LEN_LEN + protocol.len() + RESERVED_BYTES_LEN + 20 + 20
-}
-
-/// Generate a buffer for use when writing our handshake.
-fn generate_write_buffer(protocol: &'static str, info_hash: &InfoHash, peer_id: &PeerId) -> ByteBuf {
-    let mut write_buf = ByteBuf::mut_with_capacity(calculate_handshake_len(protocol));
-    
-    write_buf.write_all(&[protocol.len() as u8]).unwrap();
-    write_buf.write_all(protocol.as_bytes()).unwrap();
-    write_buf.write_all(&[0u8; 8]).unwrap();
-    write_buf.write_all(info_hash.as_ref()).unwrap();
-    write_buf.write_all(peer_id.as_ref()).unwrap();
-    
-    write_buf.flip()
 }
 
 //----------------------------------------------------------------------------//
 
-struct HandshakeHandler<T> where T: From<TcpStream> + Send {
-    filters:          Vec<Box<Fn(&SocketAddr) -> bool + Send>>,
-    listener:         (Token, TcpListener),
-    protocol:         &'static str,
-    peer_id:          PeerId,
-    interested:       HashMap<InfoHash, Vec<mpsc::Sender<(T, PeerId)>>>,
-    connections:      Slab<Connection>
+struct HandshakeHandler<C, T> {
+    interest:     Arc<RwLock<HashSet<InfoHash>>>,
+    /// Pre-Made out buffer for connections to write out to peers.
+    out_buffer:   Vec<u8>,
+    listener:     TcpListener,
+    msg_ack:      PriorityChannelAck,
+    slab:         Slab<Connection, InnerToken>,
+    chan:         C,
+    our_protocol: &'static str,
+    _unused:      PhantomData<T>
 }
 
-impl<T> HandshakeHandler<T> where T: From<TcpStream> + Send {
-    /// Create a new HandshakeHandler.
-    pub fn new(peer_id: PeerId, protocol: &'static str, listener: TcpListener, event_loop: &mut EventLoop<HandshakeHandler<T>>)
-        -> io::Result<HandshakeHandler<T>> {
-        // Create our handler
-        let handler = HandshakeHandler{ filters: Vec::new(), listener: (Token(1), listener), protocol: protocol, peer_id: peer_id,
-            interested: HashMap::new(), connections: Slab::new_starting_at(Token(2), MAX_CONCURRENT_CONNECTIONS) };
-        
-        // Register our handler
-        try!(event_loop.register(&handler.listener.1, handler.listener.0, EventSet::readable(), PollOpt::level() | PollOpt::oneshot()));
-        
-        // Return the handler
-        Ok(handler)
-    }
-    
-    /// Handles a read event that occured in our EventLoop.
-    pub fn handle_read(&mut self, event_loop: &mut EventLoop<HandshakeHandler<T>>, token: Token) {
-        if self.listener.0 == token {
-            self.reregister_token(event_loop, token);
+impl<C, T> HandshakeHandler<C, T> where C: Channel<T>, T: Send {
+    pub fn new(listener: TcpListener, pid: PeerId, protocol: &'static str, chan: C, interest: Arc<RwLock<HashSet<InfoHash>>>,
+        msg_ack: PriorityChannelAck) -> HandshakeHandler<C, T> {
+        let out_buffer = premade_out_buffer(protocol, [0u8; bt::INFO_HASH_LEN].into(), pid);
             
-            // Accept the connection from the listener
-            match self.listener.1.accept() {
-                Ok(Some((stream, addr))) => {
-                    // If the peer is being filtered, just exit
-                    if is_filtered(&mut self.filters[..], &addr) {
-                        return
-                    }
-                    
-                    // Create the completion connection with the remote peer
-                    let connection = Connection::complete(stream, self.protocol, self.peer_id, None);
-                    
-                    // Add the connection to our slab
-                    let opt_remove = if let Ok(token) = self.connections.insert(connection) {
-                        let connection = self.connections.get(token).unwrap();
-                        
-                        // Register the connection with our event loop
-                        event_loop.register(connection.evented(), token, connection.event_set(), PollOpt::level() | PollOpt::oneshot()).map_err(|_| token).err()
-                    } else {
-                        warn!("bip_handshake: Failed to add a new connection to our slab, already full...");
-                        None
-                    };
-                    
-                    // Remove the connection if the registration failed
-                    if let Some(token) = opt_remove {
-                        error!("bip_handshake: Failed to register connection with event loop...");
-                        
-                        self.handle_error(event_loop, token);
-                    }
-                },
-                _ =>  info!("bip_handshake: Error accepting a new socket...")
+        HandshakeHandler{ interest: interest, out_buffer: out_buffer, listener: listener, msg_ack: msg_ack,
+            slab: Slab::new_starting_at(SLAB_START_TOKEN, MAX_CONCURRENT_CONNECTIONS), chan: chan, our_protocol: protocol,
+            _unused: PhantomData }
+    }
+}
+
+impl<C, T> Handler for HandshakeHandler<C, T> where C: Channel<T>, T: Send + From<BTPeer> {
+    type Timeout = InnerToken;
+    type Message = Task<T>;
+    
+    fn ready(&mut self, event_loop: &mut EventLoop<HandshakeHandler<C, T>>, token: Token, events: EventSet) {
+        // If this is a server event, start calling accept on the listener
+        if token == SERVER_READ_TOKEN.0 {
+            if !events.is_readable() || events.is_writable() || events.is_error() || events.is_hup() {
+                panic!("bip_handshake: Mio Returned A Non-Readable Event For Listener");
             }
             
-        } else {
-            // Forward the read event onto the connection
-            let connection_res = if let Some(connection) = self.connections.get_mut(token) {
-                let interested = &self.interested;
-                connection.handle_read(|info_hash| interested.contains_key(info_hash))
+            let mut accept_result = self.listener.accept();
+            while let Ok(Some((stream, _))) = accept_result {
+                let (out_buffer, our_protocol) = (&self.out_buffer, self.our_protocol);
+                self.slab.vacant_entry().and_then(|entry| {
+                    let timeout = event_loop.timeout_ms(entry.index(), MAX_READ_TIMEOUT_MILLIS)
+                        .expect("bip_handshake: Failed To Set Timeout For Read");
+                    event_loop.register(&stream, entry.index().0, EventSet::readable(), PollOpt::edge() | PollOpt::oneshot())
+                        .expect("bip_handshake: Failed To Register Connection Readable");
+                    
+                    let mut connection = Connection::new_complete(stream, out_buffer.clone(), our_protocol);
+                    connection.store_timeout(timeout);
+                    
+                    Some(entry.insert(connection))
+                });
+                
+                accept_result = self.listener.accept();
+            }
+            
+            if accept_result.is_err() {
+                panic!("bip_handshake: Calling Accept On A Client Connection Caused An Error")
+            }
+            return
+        }
+        
+        // If this is a client event, process it as such
+        let connect_state = if let Some(peer_connection) = self.slab.get_mut(InnerToken(token)) {
+            let interest = &self.interest;
+            if events.is_error() || events.is_hup() {
+                ConnectionState::Disconnect
+            } else if events.is_readable() {
+                event_loop.clear_timeout(peer_connection.get_timeout());
+                
+                peer_connection.read(|hash| interest.read().unwrap().contains(&hash))
+            } else if events.is_writable() {
+                peer_connection.write()
             } else {
-                warn!("bip_handshake: Received a read event for a non existant token...");
-                return
-            };
-            
-            // Process the current status of the event
-            match connection_res {
-                ConnectionResult::Working  => self.reregister_token(event_loop, token),
-                ConnectionResult::Errored  => self.handle_error(event_loop, token),
-                ConnectionResult::Finished => {
-                    let connection = self.connections.remove(token).unwrap();
-                    let (stream, info_hash, peer_id) = connection.destroy();
-                    
-                    self.forward_connection(stream, info_hash, peer_id);
-                }
-            };
-        }
-    }
-    
-    /// Handles a write event that occured in our EventLoop.
-    pub fn handle_write(&mut self, event_loop: &mut EventLoop<HandshakeHandler<T>>, token: Token) {
-        let connection_res = if let Some(connection) = self.connections.get_mut(token) {
-            connection.handle_write()
+                ConnectionState::Disconnect
+            }
         } else {
-            warn!("bip_handshake: Received a write event for a non existant token...");
             return
         };
         
-        // Process the current status of the event
-        match connection_res {
-            ConnectionResult::Working  => self.reregister_token(event_loop, token),
-            ConnectionResult::Errored  => self.handle_error(event_loop, token),
-            ConnectionResult::Finished => {
-                let connection = self.connections.remove(token).unwrap();
-                let (stream, info_hash, peer_id) = connection.destroy();
+        match connect_state {
+            ConnectionState::RegisterRead => {
+                let connection = self.slab.get_mut(InnerToken(token)).unwrap();
                 
-                self.forward_connection(stream, info_hash, peer_id);
+                let timeout = event_loop.timeout_ms(InnerToken(token), MAX_READ_TIMEOUT_MILLIS)
+                    .expect("bip_handshake: Failed To Set Timeout For Read");
+                connection.store_timeout(timeout);
+                    
+                event_loop.reregister(connection.get_evented(), token, EventSet::readable(), PollOpt::edge() | PollOpt::oneshot())
+                    .expect("bip_handshake: Failed To ReRegister Connection Readable");
+            },
+            ConnectionState::RegisterWrite => {
+                let connection = self.slab.get(InnerToken(token)).unwrap();
+                
+                event_loop.reregister(connection.get_evented(), token, EventSet::writable(), PollOpt::edge() | PollOpt::oneshot())
+                    .expect("bip_handshake: Failed To ReRegister Connection Writable");
+            },
+            ConnectionState::Disconnect => {
+                let connection = self.slab.remove(InnerToken(token)).unwrap();
+                
+                event_loop.deregister(connection.get_evented())
+                    .expect("bip_handshake: Failed To Deregister Connection");
+            },
+            ConnectionState::Completed => {
+                let connection = self.slab.remove(InnerToken(token)).unwrap();
+                
+                event_loop.deregister(connection.get_evented())
+                    .expect("bip_handshake: Failed To Deregister Connection");
+                    
+                let (tcp, hash, pid) = connection.destory();
+                let tcp_peer = BTPeer::new(tcp, hash, pid);
+                
+                self.chan.send(tcp_peer.into());
             }
         }
     }
     
-    /// Handles some error event that occured in our EventLoop.
-    pub fn handle_error(&mut self, event_loop: &mut EventLoop<HandshakeHandler<T>>, token: Token) {
-        if self.listener.0 == token {
-            event_loop.shutdown();
-        } else {
-            warn!("bip_handshake: A connection has been reset...");
-            self.connections.remove(token);
-        }
-    }
-    
-    /// Forward the TcpStream to all peer receivers.
-    fn forward_connection(&mut self, stream: TcpStream, info_hash: InfoHash, peer_id: PeerId) {
-        let should_remove = if let Some(senders) = self.interested.get_mut(&info_hash) {
-            senders.retain(|sender| {
-               let stream_clone = if let Ok(stream) = stream.try_clone() {
-                   stream
-               } else {
-                   warn!("bip_handshake: Failed to clone a peer connection to forward to receivers...");
-                   return true
-               };
-                
-               sender.send((T::from(stream_clone), peer_id)).is_ok()
-            });
-            
-            senders.is_empty()
-        } else {
-            false
-        };
+    fn notify(&mut self, event_loop: &mut EventLoop<HandshakeHandler<C, T>>, msg: Task<T>) {
+        self.msg_ack.ack_task();
         
-        if should_remove {
-            self.interested.remove(&info_hash);
-        }
-    }
-    
-    /// Reregister the given token with the event loop to receive its next event.
-    fn reregister_token(&mut self, event_loop: &mut EventLoop<HandshakeHandler<T>>, token: Token) {
-        let error_occurred = if self.listener.0 == token {
-            event_loop.reregister(&self.listener.1, token, EventSet::readable(), PollOpt::level() | PollOpt::oneshot()).is_err()
-        } else {
-            match self.connections.get(token) {
-                Some(connection) => {
-                    event_loop.reregister(connection.evented(), token, connection.event_set(), PollOpt::level() | PollOpt::oneshot()).is_err()
-                },
-                None => true
-            }
-        };
-        
-        if error_occurred {
-            self.handle_error(event_loop, token);
-        }
-    }
-}
-
-/// Returns true if the given address is being filtered.
-fn is_filtered(filters: &mut [Box<Fn(&SocketAddr) -> bool + Send>], addr: &SocketAddr) -> bool {
-    let should_connect = filters.iter_mut().fold(true, |prev, filter| prev && filter(addr));
-    
-    !should_connect
-}
-
-impl<T> Handler for HandshakeHandler<T> where T: From<TcpStream> + Send {
-    type Timeout = ();
-    type Message = HandlerTask<T>;
-    
-    fn notify(&mut self, event_loop: &mut EventLoop<HandshakeHandler<T>>, msg: HandlerTask<T>) {
         match msg {
-            HandlerTask::ConnectPeer(expected, info_hash, addr) => {
-                // Connect only if the peer is not being filtered
-                if is_filtered(&mut self.filters, &addr) {
+            Task::Connect(expect_pid, hash, addr) => {
+                // Check if we have no interest in the given hash
+                if !self.interest.read().unwrap().contains(&hash) {
                     return
                 }
                 
-                // Create the connection and add it to our list of connections
-                let successful = Connection::initiate(&addr, self.protocol, info_hash, self.peer_id, expected).ok().and_then(|c| {
-                    self.connections.insert(c).ok()
-                }).and_then(|t| {
-                    let connection = self.connections.get(t).unwrap();
-                    event_loop.register(connection.evented(), t, connection.event_set(), PollOpt::level() | PollOpt::oneshot()).ok()
-                }).is_some();
-                
-                if !successful {
-                    warn!("bip_handshake: Failed to initiate a connection with a peer...");
-                }
+                let (out_buffer, our_protocol) = (&self.out_buffer, self.our_protocol);
+                self.slab.vacant_entry().and_then(|entry| TcpStream::connect(&addr).ok().map(|stream| (stream, entry)) ).and_then(|(stream, entry)| {
+                    event_loop.register(&stream, entry.index().0, EventSet::writable(), PollOpt::edge() | PollOpt::oneshot())
+                        .expect("bip_handshake: Failed To Register Connection Writable");
+                    
+                    Some(entry.insert(Connection::new_initiate(stream, out_buffer.clone(), our_protocol, hash, expect_pid)))
+                });
             },
-            HandlerTask::RegisterFilter(filter) => {
-                self.filters.push(filter);
+            Task::Metadata(metadata) => {
+                self.chan.send(metadata);
             },
-            HandlerTask::RegisterSender(info_hash, sender) => {
-                match self.interested.entry(info_hash) {
-                    Entry::Occupied(mut occ) => { occ.get_mut().push(sender); },
-                    Entry::Vacant(vac)       => { vac.insert(vec![sender]); }
-                }
-            },
-            HandlerTask::Shutdown => {
-                event_loop.shutdown()
+            Task::Shutdown => {
+                event_loop.shutdown();
             }
         }
     }
     
-    fn ready(&mut self, event_loop: &mut EventLoop<HandshakeHandler<T>>, token: Token, events: EventSet) {
-        if events.is_error() || events.is_hup() {
-            self.handle_error(event_loop, token);
-        } else if events.is_readable() {
-            self.handle_read(event_loop, token);
-        } else if events.is_writable() {
-            self.handle_write(event_loop, token);
-        } else {
-            info!("bip_handshake: Receive an EventSet::none() event...");
+    fn timeout(&mut self, event_loop: &mut EventLoop<HandshakeHandler<C, T>>, timeout: InnerToken) {
+        if let Some(conn) = self.slab.remove(timeout) {
+            event_loop.deregister(conn.get_evented())
+                .expect("bip_handshake: Failed To Deregister Connection");
         }
+    }
+}
+
+fn premade_out_buffer(protocol: &'static str, info_hash: InfoHash, pid: PeerId) -> Vec<u8> {
+    let buffer_len = 1 + protocol.len() + RESERVED_BYTES_LEN + bt::INFO_HASH_LEN + bt::PEER_ID_LEN;
+    let mut buffer = Vec::with_capacity(buffer_len);
+    
+    buffer.write(&[protocol.len() as u8]).unwrap();
+    buffer.write(protocol.as_bytes()).unwrap();
+    buffer.write(&[0u8; RESERVED_BYTES_LEN]).unwrap();
+    buffer.write(info_hash.as_ref()).unwrap();
+    buffer.write(pid.as_ref()).unwrap();
+    
+    buffer
+}
+
+//----------------------------------------------------------------------------//
+
+enum ConnectionState {
+    RegisterRead,
+    RegisterWrite,
+    Disconnect,
+    Completed
+}
+
+struct Connection {
+    timeout:           Option<Timeout>,
+    out_buffer:        Cursor<Vec<u8>>,
+    in_buffer:         Cursor<Vec<u8>>,
+    remote_stream:     TcpStream,
+    expected_pid:      Option<PeerId>,
+    expected_hash:     InfoHash,
+    expected_protocol: &'static str,
+    // Whether or not we have flipped read/write states yet
+    // so we know when we can validate the complete handshake
+    flipped:           bool
+}
+
+impl Connection {
+    pub fn new_initiate(stream: TcpStream, mut out_buffer: Vec<u8>, expected_protocol: &'static str, expected_hash: InfoHash, expected_pid: Option<PeerId>)
+        -> Connection {
+        let in_buffer = Cursor::new(vec![0u8; out_buffer.len()]);
+        
+        rewrite_out_hash(&mut out_buffer[..], expected_protocol.len(), expected_hash);
+        
+        Connection{ timeout: None, out_buffer: Cursor::new(out_buffer), in_buffer: in_buffer, remote_stream: stream, expected_pid: expected_pid,
+            expected_hash: expected_hash, expected_protocol: expected_protocol, flipped: false }
+    }
+    
+    pub fn new_complete(stream: TcpStream, out_buffer: Vec<u8>, expected_protocol: &'static str) -> Connection {
+        let dummy_hash = [0u8; bt::INFO_HASH_LEN].into();
+        
+        Connection::new_initiate(stream, out_buffer, expected_protocol, dummy_hash, None)
+    }
+    
+    pub fn destory(self) -> (TcpStream, InfoHash, PeerId) {
+        (self.remote_stream, self.expected_hash, self.expected_pid.unwrap())
+    }
+    
+    pub fn store_timeout(&mut self, timeout: Timeout) {
+        self.timeout = Some(timeout);
+    }
+    
+    pub fn get_timeout(&self) -> Timeout {
+        self.timeout.expect("bip_handshake: Tried To Access Non-Existant Timeout In Connection")
+    }
+    
+    pub fn get_evented(&self) -> &TcpStream {
+        &self.remote_stream
+    }
+    
+    pub fn read<I>(&mut self, interested_hash: I) -> ConnectionState
+        where I: Fn(InfoHash) -> bool {
+        let total_buf_size = self.in_buffer.get_ref().len();
+        let mut read_position = self.in_buffer.position() as usize;
+        
+        // Read until we receive an error, we filled our buffer, or we read zero bytes
+        let mut read_result = Ok(1);
+        while read_result.is_ok() && *read_result.as_ref().unwrap() != 0 && read_position != total_buf_size {
+            let in_slice = &mut self.in_buffer.get_mut()[read_position..];
+                
+            read_result = self.remote_stream.read(in_slice);
+            if let Ok(bytes_read) = read_result {
+                read_position += bytes_read;
+            }
+        }
+        self.in_buffer.set_position(read_position as u64);
+        
+        // Try to parse whatever part of the message we currently have (see if we need to disconnect early)
+        let parse_status = {
+            let in_slice = &self.in_buffer.get_mut()[..read_position];
+            parse_remote_handshake(in_slice, self.expected_pid, self.expected_protocol)
+        };
+        // If we are flipping over to writing, that means we read first in which case we need to validate
+        // the hash against the passed closure, otherwise just use the expected hash since that has already
+        // been validated...and its cheaper!!!
+        match (parse_status, read_result) {
+            (ParseStatus::Valid(hash, pid), _) if self.flipped => {
+                self.expected_pid = Some(pid);
+                
+                if self.expected_hash == hash {
+                    ConnectionState::Completed
+                } else {
+                    ConnectionState::Disconnect
+                }
+            },
+            (ParseStatus::Valid(hash, pid), _) => {
+                self.expected_pid = Some(pid);
+                self.expected_hash = hash;
+                self.flipped = true;
+                
+                if interested_hash(hash) {
+                    rewrite_out_hash(self.out_buffer.get_mut(), self.expected_protocol.len(), self.expected_hash);
+                    
+                    ConnectionState::RegisterWrite
+                } else {
+                    ConnectionState::Disconnect
+                }
+            },
+            (ParseStatus::Invalid, _)       => ConnectionState::Disconnect,
+            (ParseStatus::More, Ok(_))      => ConnectionState::Disconnect,
+            (ParseStatus::More, Err(error)) => {
+                // If we received an interrupt, we can try again, if we received a would block, need to wait again, otherwise disconnect
+                match error.kind() {
+                    ErrorKind::Interrupted => self.read(interested_hash),
+                    ErrorKind::WouldBlock  => ConnectionState::RegisterRead,
+                    _                      => ConnectionState::Disconnect
+                }
+            }
+        }
+    }
+    
+    pub fn write(&mut self) -> ConnectionState {
+        let total_buf_size = self.out_buffer.get_ref().len();
+        let mut write_position = self.out_buffer.position() as usize;
+        
+        // Write until we receive an error, we wrote out buffer, or we wrote zero bytes
+        let mut write_result = Ok(1);
+        while write_result.is_ok() && *write_result.as_ref().unwrap() != 0 && write_position != total_buf_size {
+            let out_slice = &self.out_buffer.get_ref()[write_position..];
+            
+            write_result = self.remote_stream.write(out_slice);
+            if let Ok(bytes_wrote) = write_result {
+                write_position += bytes_wrote;
+            }
+        }
+        self.out_buffer.set_position(write_position as u64);
+        
+        // If we didnt write whole buffer but received an Ok (where wrote == 0), then we assume the peer disconnected
+        match (write_result, write_position == total_buf_size) {
+            (_, true) if self.flipped => ConnectionState::Completed,
+            (_, true)                 => {
+                self.flipped = true;
+                
+                ConnectionState::RegisterRead
+            },
+            (Ok(_), false)            => ConnectionState::Disconnect,
+            (Err(error), false)       => {
+                match error.kind() {
+                    ErrorKind::Interrupted => self.write(),
+                    ErrorKind::WouldBlock  => ConnectionState::RegisterWrite,
+                    _                      => ConnectionState::Disconnect
+                }
+            }
+        }
+    }
+}
+
+fn rewrite_out_hash(buffer: &mut [u8], prot_len: usize, hash: InfoHash) {
+    let hash_offset = 1 + prot_len + RESERVED_BYTES_LEN;
+    
+    for (dst, src) in buffer[hash_offset..].iter_mut().zip(hash.as_ref().iter()) {
+        *dst = *src;
+    }
+}
+
+enum ParseStatus {
+    Valid(InfoHash, PeerId),
+    Invalid,
+    More
+}
+
+/// Returns Some(true) if the remote handshake is valid, Some(false) if the remote handshake is invalid, or None if more bytes need to be read.
+fn parse_remote_handshake(bytes: &[u8], expected_pid: Option<PeerId>, expected_protocol: &'static str) -> ParseStatus {
+    let parse_result = chain!(bytes,
+        _unused_prot: call!(parse_remote_protocol, expected_protocol) ~
+        _unused_ext:  take!(RESERVED_BYTES_LEN) ~
+        hash:         call!(parse_remote_hash) ~
+        pid:          call!(parse_remote_pid, expected_pid) ,
+        || { (hash, pid) }
+    );
+    
+    match parse_result {
+        IResult::Done(_, (hash, pid)) => ParseStatus::Valid(hash, pid),
+        IResult::Error(_)             => ParseStatus::Invalid,
+        IResult::Incomplete(_)        => ParseStatus::More
+    }
+}
+
+fn parse_remote_protocol<'a>(bytes: &'a [u8], expected_protocol: &'static str) -> IResult<&'a [u8], &'a [u8]> {
+    let expected_length = expected_protocol.len() as u8;
+    
+    switch!(bytes, map!(be_u8, |len| len == expected_length),
+        true => tag!(expected_protocol.as_bytes())
+    )
+}
+
+fn parse_remote_hash(bytes: &[u8]) -> IResult<&[u8], InfoHash> {
+    map!(bytes, take!(bt::INFO_HASH_LEN), |hash| InfoHash::from_hash(hash).unwrap())
+}
+
+fn parse_remote_pid(bytes: &[u8], opt_expected_pid: Option<PeerId>) -> IResult<&[u8], PeerId> {
+    if let Some(expected_pid) = opt_expected_pid {
+        map!(bytes, tag!(expected_pid.as_ref()), |id| PeerId::from_hash(id).unwrap())
+    } else {
+        map!(bytes, take!(bt::PEER_ID_LEN), |id| PeerId::from_hash(id).unwrap())
     }
 }

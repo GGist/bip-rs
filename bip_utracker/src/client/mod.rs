@@ -10,12 +10,11 @@ use umio::external::{Sender};
 
 use announce::{AnnounceResponse, ClientState};
 use client::dispatcher::{DispatchMessage};
-use client::receiver::{ClientResponses};
+use client::error::{ClientResult};
 use scrape::{ScrapeResponse};
 
 mod dispatcher;
 pub mod error;
-pub mod receiver;
 
 /// Capacity of outstanding requests (assuming each request uses at most 1 timer at any time)
 const DEFAULT_CAPACITY: usize = 4096;
@@ -25,6 +24,30 @@ const DEFAULT_CAPACITY: usize = 4096;
 pub enum ClientRequest {
     Announce(InfoHash, ClientState),
     Scrape(InfoHash)
+}
+
+/// Response metadata from a request.
+#[derive(Debug)]
+pub struct ClientMetadata {
+    token:    ClientToken,
+    result: ClientResult<ClientResponse>
+}
+
+impl ClientMetadata {
+    /// Create a new ClientMetadata container.
+    pub fn new(token: ClientToken, result: ClientResult<ClientResponse>) -> ClientMetadata {
+        ClientMetadata{ token: token, result: result }
+    }
+    
+    /// Access the request token corresponding to this metadata.
+    pub fn token(&self) -> ClientToken {
+        self.token
+    }
+    
+    /// Access the result metadata for the request.
+    pub fn result(&self) -> &ClientResult<ClientResponse> {
+        &self.result
+    }
 }
 
 /// Response received by the TrackerClient.
@@ -69,7 +92,6 @@ impl ClientResponse {
 /// Client will shutdown on drop.
 pub struct TrackerClient {
     send:      Sender<DispatchMessage>,
-    recv:      ClientResponses,
     // We are in charge of incrementing this, background worker is in charge of decrementing
     limiter:   RequestLimiter,
     generator: TokenGenerator
@@ -78,7 +100,7 @@ pub struct TrackerClient {
 impl TrackerClient {
     /// Create a new TrackerClient.
     pub fn new<H>(bind: SocketAddr, handshaker: H) -> io::Result<TrackerClient>
-        where H: Handshaker + 'static {
+        where H: Handshaker + 'static, H::MetadataEnvelope: From<ClientMetadata> {
         TrackerClient::with_capacity(bind, handshaker, DEFAULT_CAPACITY)
     }
     
@@ -86,7 +108,7 @@ impl TrackerClient {
     ///
     /// Panics if capacity == usize::max_value().
     pub fn with_capacity<H>(bind: SocketAddr, handshaker: H, capacity: usize) -> io::Result<TrackerClient>
-        where H: Handshaker + 'static {
+        where H: Handshaker + 'static, H::MetadataEnvelope: From<ClientMetadata> {
         // Need channel capacity to be 1 more in case channel is saturated and client
         // is dropped so shutdown message can get through in the worst case
         let (chan_capacity, would_overflow) = capacity.overflowing_add(1);
@@ -96,13 +118,11 @@ impl TrackerClient {
         // Limit the capacity of messages (channel capacity - 1)
         let limiter = RequestLimiter::new(capacity);
         
-        let (res_send, res_recv) = receiver::new_client_responses();
-        
-        dispatcher::create_dispatcher(bind, handshaker, chan_capacity, limiter.clone(), res_send).map(|chan|
-            TrackerClient{ send: chan, recv: res_recv, limiter: limiter, generator: TokenGenerator::new() }
+        dispatcher::create_dispatcher(bind, handshaker, chan_capacity, limiter.clone()).map(|chan|
+            TrackerClient{ send: chan, limiter: limiter, generator: TokenGenerator::new() }
         )
     }
-
+    
     /// Execute an asynchronous request to the given tracker.
     ///
     /// If the maximum number of requests are currently in progress, return None.
@@ -116,11 +136,6 @@ impl TrackerClient {
         } else {
             None
         }
-    }
-    
-    /// Channel that receives the responses from the trackers queried.
-    pub fn responses(&self) -> ClientResponses {
-        self.recv.clone()
     }
 }
 
