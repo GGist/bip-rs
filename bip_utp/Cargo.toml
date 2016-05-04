@@ -1,0 +1,16 @@
+[package]
+name        = "bip_utp"
+version     = "0.0.0"
+description = "uTorrent Transport Protocol"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_utp"
+repository  = "https://github.com/GGist/bip-rs/bip_utp"
+
+keywords    = ["utp", "bittorrent", "transport"]
+
+license     = "MIT/Apache-2.0"
+
+[features]
+unstable = []
