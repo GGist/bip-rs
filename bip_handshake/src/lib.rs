@@ -10,8 +10,8 @@ mod bittorrent;
 mod channel;
 mod handshaker;
 
-pub use channel::{Channel};
-pub use handshaker::{Handshaker};
+pub use channel::Channel;
+pub use handshaker::Handshaker;
 pub use bittorrent::{BTHandshaker, BTPeer};
 
 pub use bip_util::bt::{PeerId, InfoHash};

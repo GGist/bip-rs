@@ -1,4 +1,4 @@
-use std::net::{SocketAddr};
+use std::net::SocketAddr;
 
 use bip_util::bt::{InfoHash, PeerId};
 

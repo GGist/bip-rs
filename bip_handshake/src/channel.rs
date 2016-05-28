@@ -1,8 +1,8 @@
 #![allow(unused)]
 
-use std::sync::mpsc::{self};
+use std::sync::mpsc;
 
-use mio::{self};
+use mio;
 
 /// Trait for handshakers to send data back to the client.
 pub trait Channel<T: Send>: Send {
