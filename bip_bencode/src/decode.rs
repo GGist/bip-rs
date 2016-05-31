@@ -4,7 +4,6 @@ use std::str::{self};
 
 use bencode::{Bencode};
 use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
-use dictionary::{Dictionary};
 
 // Storage for regular bencode as well as mappings (the invariant is that the
 // underlying recursive type is a dictionary, it is a programming error otherwise)

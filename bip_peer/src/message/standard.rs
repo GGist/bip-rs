@@ -4,6 +4,7 @@ use nom::{IResult, be_u32};
 
 const BITS_PER_BYTE: u32 = 8;
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct HaveMessage {
     piece_index: u32
 }
@@ -28,33 +29,31 @@ fn parse_have(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
 
 //----------------------------------------------------------------------------//
 
-pub struct BitFieldMessage<'a> {
-    bytes: Cow<'a, [u8]>
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct BitfieldMessage {
+    num_bytes: u32
 }
 
-impl<'a> BitFieldMessage<'a> {
-    pub fn new(total_pieces: u32) -> BitFieldMessage<'a> {
-        // total_pieces is the number of bits we expect
-        let bytes_needed = if total_pieces % BITS_PER_BYTE == 0 {
-            total_pieces / BITS_PER_BYTE
-        } else {
-            (total_pieces / BITS_PER_BYTE) + 1
-        };
-        
-        BitFieldMessage{ bytes: Cow::Owned(vec![0u8; bytes_needed as usize]) }
+impl BitfieldMessage {
+    pub fn new(num_bytes: u32) -> BitfieldMessage {
+        BitfieldMessage{ num_bytes: num_bytes }
     }
     
-    pub fn from_bytes(bytes: &'a [u8], len: u32) -> IResult<&'a [u8], BitFieldMessage<'a>> {
-        parse_bitfield(bytes, len)
+    pub fn from_pieces(num_pieces: u32) -> BitfieldMessage {
+        // num_pieces is the number of bits we expect
+        let bytes_needed = if num_pieces % BITS_PER_BYTE == 0 {
+            num_pieces / BITS_PER_BYTE
+        } else {
+            (num_pieces / BITS_PER_BYTE) + 1
+        };
+        
+        BitfieldMessage::new(bytes_needed)
     }
-}
-
-fn parse_bitfield<'a>(bytes: &'a [u8], len: u32) -> IResult<&'a [u8], BitFieldMessage<'a>> {
-    map!(bytes, take!(len as usize), |bytes| BitFieldMessage{ bytes: Cow::Borrowed(bytes) })
 }
 
 //----------------------------------------------------------------------------//
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct RequestMessage {
     piece_index:  u32,
     block_offset: u32,
@@ -80,34 +79,35 @@ fn parse_request(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
 
 //----------------------------------------------------------------------------//
 
-pub struct PieceMessage<'a> {
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct PieceMessage {
     piece_index:  u32,
     block_offset: u32,
-    block_data:   Cow<'a, [u8]>
+    block_length: u32
 }
 
-impl<'a> PieceMessage<'a> {
-    pub fn new(piece_index: u32, block_offset: u32, block_data: &'a [u8]) -> PieceMessage<'a> {
-        PieceMessage{ piece_index: piece_index, block_offset: block_offset,
-            block_data: Cow::Borrowed(block_data) }
+impl PieceMessage {
+    pub fn new(piece_index: u32, block_offset: u32, block_length: u32) -> PieceMessage {
+        PieceMessage{ piece_index: piece_index, block_offset: block_offset, block_length: block_length }
     }
     
-    pub fn from_bytes(bytes: &'a [u8], len: u32) -> IResult<&'a [u8], PieceMessage<'a>> {
+    pub fn from_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], PieceMessage> {
         parse_piece(bytes, len)
     }
 }
 
-fn parse_piece<'a>(bytes: &'a [u8], len: u32) -> IResult<&'a [u8], PieceMessage<'a>> {
+fn parse_piece(bytes: &[u8], len: u32) -> IResult<&[u8], PieceMessage> {
     chain!(bytes,
         piece_index:  be_u32 ~
         block_offset: be_u32 ~
-        block_data:   take!(len as usize) ,
-        || { PieceMessage::new(piece_index, block_offset, block_data) }
+        block_length: value!(len) ,
+        || { PieceMessage::new(piece_index, block_offset, block_length) }
     )
 }
 
 //----------------------------------------------------------------------------//
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct CancelMessage {
     piece_index:  u32,
     block_offset: u32,

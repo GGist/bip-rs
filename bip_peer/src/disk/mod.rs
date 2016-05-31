@@ -1,51 +1,73 @@
-use mio::{Sender};
+#![allow(unused)]
 
-enum EDiskResponse {
-    TestRequest
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{SyncSender};
+
+use bip_util::sender::{Sender};
+
+use disk::worker::{WorkerMessage};
+use token::{Token, TokenGenerator};
+
+mod worker;
+
+const DISK_MANAGER_WORKER_THREADS: usize = 4;
+
+/// Message that a disk manager will send in response to a request.
+pub enum ODiskResponse {
+    BlockReady(Token)
 }
 
-/// Manages memory used to hold pieces as well as storing and retrieving them from disk.
-///
-/// 
-struct DiskManager {
-    clients: Vec<Box<TDiskResponse>>
+//----------------------------------------------------------------------------//
+
+pub struct InactiveDiskManager {
+    inner: Arc<InnerDiskManager>
 }
 
-impl DiskManager {
-    pub fn new(region_len: u32, max_regions: u32) -> DiskManager {
+impl InactiveDiskManager {
+    pub fn new() -> InactiveDiskManager {
         unimplemented!();
     }
     
-    pub fn register(&mut self, sender: Box<TDiskResponse>) {
-        self.clients.push(sender);
-    }
-    
-    /*
-    pub fn request_block() -> TID
-    
-    pub fn access_block(id: TID)*/
-}
-
-//----------------------------------------------------------------------------//
-
-trait TDiskResponse {
-    fn send(&mut self, request: EDiskResponse);
-}
-
-struct SDiskResponse<T> where T: Send {
-    send: Sender<T>
-}
-
-impl<T> SDiskResponse<T> where T: Send {
-    pub fn new(send: Sender<T>) -> SDiskResponse<T> {
-        SDiskResponse{ send: send }
-    }
-}
-
-impl<T> TDiskResponse for SDiskResponse<T> where T: From<EDiskResponse> + Send {
-    fn send(&mut self, request: EDiskResponse) {
-        self.send.send(T::from(request));
+    pub fn activate(&self, send: Box<Sender<ODiskResponse>>) -> ActiveDiskManager {
+        unimplemented!();
     }
 }
 
 //----------------------------------------------------------------------------//
+
+pub struct ActiveDiskManager {
+    inner:       Arc<InnerDiskManager>,
+    request_gen: TokenGenerator,
+    response_id: u64
+}
+
+impl ActiveDiskManager {
+    pub fn request_load() -> Token {
+        unimplemented!();
+    }
+    
+    pub fn redeem_load() {
+        unimplemented!();
+    }
+    
+    pub fn request_reserve() -> Token {
+        unimplemented!();
+    }
+    
+    pub fn redeem_reserve() {
+        unimplemented!();
+    }
+}
+
+//----------------------------------------------------------------------------//
+
+struct InnerDiskManager {
+    manager_send: Mutex<SyncSender<WorkerMessage>>,
+    id_generator: Mutex<TokenGenerator> 
+}
+
+impl Drop for InnerDiskManager {
+    fn drop(&mut self) {
+        unimplemented!();
+    }
+}

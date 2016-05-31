@@ -3,7 +3,7 @@
 use nom::{IResult, be_u32, be_u8};
 
 use message::extension::{ExtensionType};
-use message::standard::{HaveMessage, BitFieldMessage, RequestMessage,
+use message::standard::{HaveMessage, BitfieldMessage, RequestMessage,
     PieceMessage, CancelMessage};
 
 const KEEP_ALIVE_MESSAGE_LEN:   u32 = 0;
@@ -25,25 +25,27 @@ const REQUEST_MESSAGE_ID:      u8 = 6;
 const PIECE_MESSAGE_ID:        u8 = 7;
 const CANCEL_MESSAGE_ID:       u8 = 8;
 
-mod extension;
-mod standard;
+pub mod extension;
+pub mod standard;
 
-pub enum MessageType<'a> {
+/// Enumeration of all message types. These types are shallow so they do not include
+/// variable length payload data; that data will have to be read in afterward.
+pub enum MessageType {
     KeepAlive,
     Choke,
     UnChoke,
     Interested,
     UnInterested,
     Have(HaveMessage),
-    BitField(BitFieldMessage<'a>),
+    BitField(BitfieldMessage),
     Request(RequestMessage),
-    Piece(PieceMessage<'a>),
+    Piece(PieceMessage),
     Cancel(CancelMessage),
     Extension(ExtensionType)
 }
 
-impl<'a> MessageType<'a> {
-    pub fn from_bytes(bytes: &'a [u8]) -> IResult<&'a [u8], MessageType<'a>> {
+impl MessageType {
+    pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], MessageType> {
         parse_message(bytes)
     }
 }
@@ -52,7 +54,7 @@ impl<'a> MessageType<'a> {
 // the number of bytes needed will be returned. However, that number of bytes is on a per parser
 // basis. If possible, we should return the number of bytes needed for the rest of the WHOLE message.
 // This allows clients to only re invoke the parser when it knows it has enough of the data.
-fn parse_message<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], MessageType<'a>> {
+fn parse_message(bytes: &[u8]) -> IResult<&[u8], MessageType> {
     // Attempt to parse a built in message type, otherwise, see if it is an extension type.
     alt!(bytes, 
         switch!(tuple!(be_u32, opt!(be_u8)),
@@ -75,9 +77,8 @@ fn parse_message<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], MessageType<'a>> {
                 call!(HaveMessage::from_bytes),
                 |have| MessageType::Have(have)
             ) |
-            (message_len, Some(BITFIELD_MESSAGE_ID)) => map!(
-                call!(BitFieldMessage::from_bytes, message_len - 1),
-                |bitfield| MessageType::BitField(bitfield)
+            (message_len, Some(BITFIELD_MESSAGE_ID)) => value!(
+                MessageType::BitField(BitfieldMessage::new(message_len - 1))
             ) |
             (REQUEST_MESSAGE_LEN, Some(REQUEST_MESSAGE_ID)) => map!(
                 call!(RequestMessage::from_bytes),

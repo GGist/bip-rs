@@ -1,4 +1,3 @@
-use std::io::{Read};
 use std::sync::{Arc};
 use std::sync::mpsc::{self, Sender, Receiver};
 use std::thread::{self};
