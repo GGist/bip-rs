@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use sender::Sender;
 
-/// PrioritySender allows non-blocking channels to forward both regular messages
+/// `PrioritySender` allows non-blocking channels to forward both regular messages
 /// and prioritized messages.
 ///
 /// When a regular message would exceed the un-acked capacity of the sender they
@@ -21,7 +21,7 @@ impl<S, T> PrioritySender<S, T>
     where S: Sender<T>,
           T: Send
 {
-    /// Create a new PrioritySender.
+    /// Create a new `PrioritySender`.
     ///
     /// It is advisable to set the capacity to SENDER_CAPACITY - PRIORITY_CAPACITY
     /// so that when you send a prioritized message, you don't overflow the actual
@@ -80,7 +80,7 @@ impl<S, T> PrioritySender<S, T>
 
 // ----------------------------------------------------------------------------//
 
-/// PrioritySenderAck allows a client to ack messages received from a PrioritySender.
+/// `PrioritySenderAck` allows a client to ack messages received from a `PrioritySender`.
 pub struct PrioritySenderAck {
     count: Arc<AtomicUsize>,
 }

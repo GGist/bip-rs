@@ -1,4 +1,4 @@
-/// Result type for a LengthError.
+/// Result type for a `LengthError`.
 pub type LengthResult<T> = Result<T, LengthError>;
 
 /// Enumeraters a set of length related errors.
@@ -21,7 +21,7 @@ pub struct LengthError {
 }
 
 impl LengthError {
-    /// Create a LengthError.
+    /// Create a `LengthError`.
     pub fn new(kind: LengthErrorKind, length: usize) -> LengthError {
         LengthError {
             kind: kind,
@@ -30,7 +30,7 @@ impl LengthError {
         }
     }
 
-    /// Create a LengthError for a given element index.
+    /// Create a `LengthError` for a given element index.
     pub fn with_index(kind: LengthErrorKind, length: usize, index: usize) -> LengthError {
         LengthError {
             kind: kind,

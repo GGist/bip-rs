@@ -16,7 +16,7 @@ pub fn eight_bytes_to_array(bytes: u64) -> [u8; 8] {
      (bytes >> 24) as u8,
      (bytes >> 16) as u8,
      (bytes >> 8) as u8,
-     (bytes >> 0) as u8]
+     bytes as u8]
 }
 
 /// Convert an ipv4 address to an array of 4 bytes big endian.
