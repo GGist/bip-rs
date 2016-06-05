@@ -17,6 +17,8 @@ pub struct PrioritySender<S, T> {
     _unused: PhantomData<T>,
 }
 
+unsafe impl<S, T> Sync for PrioritySender<S, T> where S: Sync { }
+
 impl<S, T> PrioritySender<S, T>
     where S: Sender<T>,
           T: Send

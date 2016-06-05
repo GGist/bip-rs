@@ -7,10 +7,8 @@ extern crate nom;
 extern crate slab;
 
 mod bittorrent;
-mod channel;
 mod handshaker;
 
-pub use channel::Channel;
 pub use handshaker::Handshaker;
 pub use bittorrent::{BTHandshaker, BTPeer};
 
