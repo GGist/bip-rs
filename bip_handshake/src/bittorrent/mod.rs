@@ -4,15 +4,14 @@ use std::sync::{Arc, RwLock};
 use std::net::SocketAddr;
 
 use bip_util::bt::{PeerId, InfoHash};
+use bip_util::sender::{Sender, PrioritySender};
+use mio;
 use mio::tcp::TcpStream;
 
 use bittorrent::handler::Task;
-use bittorrent::priority::PriorityChannel;
-use channel::Channel;
 use handshaker::Handshaker;
 
 mod handler;
-mod priority;
 
 const MAX_PROTOCOL_LEN: usize = 255;
 const BTP_10_PROTOCOL: &'static str = "BitTorrent protocol";
@@ -43,6 +42,25 @@ impl BTPeer {
 
 // ----------------------------------------------------------------------------//
 
+pub struct MioSender<T: Send> {
+    send: mio::Sender<T>
+}
+
+impl<T: Send> MioSender<T> {
+    pub fn new(send: mio::Sender<T>) -> MioSender<T> {
+        MioSender{ send: send }
+    }
+}
+
+impl<T: Send> Sender<T> for MioSender<T> {
+    #[allow(unused)]
+    fn send(&self, data: T) {
+        self.send.send(data);
+    }
+}
+
+// ----------------------------------------------------------------------------//
+
 /// Bittorrent TCP peer handshaker.
 pub struct BTHandshaker<T>
     where T: Send
@@ -65,7 +83,7 @@ pub struct InnerBTHandshaker<T>
     // afford to be lost. Generally the handler will set the capacity
     // on the channel to 1 less than the real capacity which gives us
     // room for a shutdown message in the absolute worst case.
-    chan: PriorityChannel<T>,
+    send: PrioritySender<MioSender<Task<T>>, Task<T>>,
     interest: Arc<RwLock<HashSet<InfoHash>>>,
     port: u16,
     pid: PeerId,
@@ -75,7 +93,7 @@ impl<T> Drop for InnerBTHandshaker<T>
     where T: Send
 {
     fn drop(&mut self) {
-        self.chan.send(Task::Shutdown, true);
+        self.send.prioritized_send(Task::Shutdown);
     }
 }
 
@@ -83,29 +101,29 @@ impl<T> BTHandshaker<T>
     where T: From<BTPeer> + Send + 'static
 {
     /// Create a new BTHandshaker with the given PeerId and bind address which will
-    /// forward metadata and handshaken connections onto the provided channel.
-    pub fn new<C>(chan: C, listen: SocketAddr, pid: PeerId) -> io::Result<BTHandshaker<T>>
-        where C: Channel<T> + 'static
+    /// forward metadata and handshaken connections onto the provided sender.
+    pub fn new<S>(send: S, listen: SocketAddr, pid: PeerId) -> io::Result<BTHandshaker<T>>
+        where S: Sender<T> + 'static
     {
-        BTHandshaker::with_protocol(chan, listen, pid, BTP_10_PROTOCOL)
+        BTHandshaker::with_protocol(send, listen, pid, BTP_10_PROTOCOL)
     }
 
     /// Similar to BTHandshaker::new() but allows a client to specify a custom protocol
     /// that the handshaker will specify during the handshake.
     ///
     /// Panics if the length of the provided protocol exceeds 255 bytes.
-    pub fn with_protocol<C>(chan: C, listen: SocketAddr, pid: PeerId, protocol: &'static str) -> io::Result<BTHandshaker<T>>
-        where C: Channel<T> + 'static
+    pub fn with_protocol<S>(send: S, listen: SocketAddr, pid: PeerId, protocol: &'static str) -> io::Result<BTHandshaker<T>>
+        where S: Sender<T> + 'static
     {
         if protocol.len() > MAX_PROTOCOL_LEN {
             panic!("bip_handshake: BTHandshaker Protocol Length Cannot Exceed {}", MAX_PROTOCOL_LEN);
         }
         let interest = Arc::new(RwLock::new(HashSet::new()));
-        let (chan, port) = try!(handler::spawn_handshaker(chan, listen, pid, protocol, interest.clone()));
+        let (send, port) = try!(handler::spawn_handshaker(send, listen, pid, protocol, interest.clone()));
 
         Ok(BTHandshaker {
             inner: Arc::new(InnerBTHandshaker {
-                chan: chan,
+                send: send,
                 interest: interest,
                 port: port,
                 pid: pid,
@@ -148,11 +166,11 @@ impl<T> Handshaker for BTHandshaker<T>
     }
 
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
-        self.inner.chan.send(Task::Connect(expected, hash, addr), false);
+        self.inner.send.send(Task::Connect(expected, hash, addr));
     }
 
     fn metadata(&mut self, data: Self::MetadataEnvelope) {
-        self.inner.chan.send(Task::Metadata(data), false);
+        self.inner.send.send(Task::Metadata(data));
     }
 }
 

@@ -4,7 +4,7 @@ use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4, Ipv6Addr};
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum IpAddr {
     V4(Ipv4Addr),
-    V6(Ipv6Addr)
+    V6(Ipv6Addr),
 }
 
 impl IpAddr {
@@ -12,7 +12,7 @@ impl IpAddr {
     pub fn from_socket_addr(sock_addr: SocketAddr) -> IpAddr {
         match sock_addr {
             SocketAddr::V4(v4_sock_addr) => IpAddr::V4(*v4_sock_addr.ip()),
-            SocketAddr::V6(v6_sock_addr) => IpAddr::V6(*v6_sock_addr.ip())
+            SocketAddr::V6(v6_sock_addr) => IpAddr::V6(*v6_sock_addr.ip()),
         }
     }
 }
@@ -21,6 +21,6 @@ impl IpAddr {
 pub fn default_route_v4() -> SocketAddr {
     let v4_addr = Ipv4Addr::new(0, 0, 0, 0);
     let v4_sock = SocketAddrV4::new(v4_addr, 0);
-    
+
     SocketAddr::V4(v4_sock)
 }
