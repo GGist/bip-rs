@@ -1,17 +1,23 @@
 #![allow(unused)]
 
-use std::net::{SocketAddr};
+use std::net::SocketAddr;
+use std::sync::mpsc::SyncSender;
 
-use bip_handshake::{BTPeer};
+use bip_handshake::BTPeer;
 use bip_util::bt::{PeerId, InfoHash};
-use bip_util::sender::{Sender};
+use bip_util::sender::{Sender, PrioritySender};
+use rotor::Notifier;
 
-use disk::{ODiskResponse};
-use message::standard::{HaveMessage, BitfieldMessage, RequestMessage, PieceMessage};
-use piece::{OPieceMessage};
-use token::{Token};
+use disk::ODiskMessage;
+use piece::{OSelectorMessage, OSelectorMessageKind};
+use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
+use token::Token;
 
-//----------------------------------------------------------------------------//
+mod error;
+mod tcp;
+mod machine;
+
+// ----------------------------------------------------------------------------//
 
 /// Since peers could be connected to us over multiple connections
 /// but may advertise the same peer id, we need to dis ambiguate
@@ -19,81 +25,102 @@ use token::{Token};
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PeerIdentifier {
     addr: SocketAddr,
-    pid:  PeerId
+    pid: PeerId,
 }
 
-//----------------------------------------------------------------------------//
+impl PeerIdentifier {
+    pub fn new(addr: SocketAddr, pid: PeerId) -> PeerIdentifier {
+        PeerIdentifier {
+            addr: addr,
+            pid: pid,
+        }
+    }
+}
 
-/// Incoming protocol message from some other component.
-///
-/// The value of P depends on the protocol in use as different
-/// protocols can talk to different types of peers.
-enum IProtocolMessage<P> {
-    /// Message from the handshaker to the protocol layer.
-    Handshaker(P),
+// ----------------------------------------------------------------------------//
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum IProtocolMessage {
     /// Message from the disk manager to the protocol layer.
-    DiskManager(ODiskResponse),
+    DiskManager(ODiskMessage),
     /// Message from the piece manager to the protocol layer.
-    PieceManager(OPieceMessage)
+    PieceManager(OSelectorMessage),
 }
 
-struct PeerSender {
-    send: Sender<IProtocolMessage<BTPeer>>
-}
-
-impl Sender<BTPeer> for PeerSender {
-    fn send(&self, data: BTPeer) {
-        self.send.send(IProtocolMessage::Handshaker(data));
+impl From<ODiskMessage> for IProtocolMessage {
+    fn from(data: ODiskMessage) -> IProtocolMessage {
+        IProtocolMessage::DiskManager(data)
     }
 }
 
-struct DiskSender {
-    send: Sender<IProtocolMessage<BTPeer>>
-}
-
-impl Sender<ODiskResponse> for DiskSender {
-    fn send(&self, data: ODiskResponse) {
-        self.send.send(IProtocolMessage::DiskManager(data));
+impl From<OSelectorMessage> for IProtocolMessage {
+    fn from(data: OSelectorMessage) -> IProtocolMessage {
+        IProtocolMessage::PieceManager(data)
     }
 }
 
-struct PieceSender {
-    send: Sender<IProtocolMessage<BTPeer>>
+// ----------------------------------------------------------------------------//
+
+pub struct ProtocolSender {
+    send: SyncSender<IProtocolMessage>,
+    noti: Notifier,
 }
 
-impl Sender<OPieceMessage> for PieceSender {
-    fn send(&self, data: OPieceMessage) {
-        self.send.send(IProtocolMessage::PieceManager(data))
+impl ProtocolSender {
+    pub fn new(send: SyncSender<IProtocolMessage>, noti: Notifier) -> ProtocolSender {
+        ProtocolSender {
+            send: send,
+            noti: noti,
+        }
     }
 }
 
-//----------------------------------------------------------------------------//
+impl<T: Send> Sender<T> for ProtocolSender
+    where T: Into<IProtocolMessage>
+{
+    fn send(&self, data: T) {
+        self.send
+            .send(data.into())
+            .expect("bip_peer: ProtocolSender failed to send message");
 
-/// Outgoing protocol message to some other component.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+        self.noti
+            .wakeup()
+            .expect("bip_peer: ProtocolSender failed to send wakup");
+    }
+}
+
+impl Clone for ProtocolSender {
+    fn clone(&self) -> ProtocolSender {
+        ProtocolSender {
+            send: self.send.clone(),
+            noti: self.noti.clone(),
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------//
+
 pub struct OProtocolMessage {
     kind: OProtocolMessageKind,
-    id:   PeerIdentifier
+    id: PeerIdentifier,
 }
 
 impl OProtocolMessage {
     pub fn new(id: PeerIdentifier, kind: OProtocolMessageKind) -> OProtocolMessage {
-        OProtocolMessage{ kind: kind, id: id }
+        OProtocolMessage {
+            kind: kind,
+            id: id,
+        }
     }
-    
-    pub fn id(&self) -> PeerIdentifier {
-        self.id
-    }
-    
-    pub fn kind(&self) -> OProtocolMessageKind {
-        self.kind
+
+    pub fn destroy(self) -> (PeerIdentifier, OProtocolMessageKind) {
+        (self.id, self.kind)
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum OProtocolMessageKind {
     /// Message that a peer has connected for the given InfoHash.
-    PeerConnect(InfoHash),
+    PeerConnect(Box<Sender<OSelectorMessage>>, InfoHash),
     /// Message that a peer has disconnected.
     PeerDisconnect,
     /// Message that a peer has choked us.
@@ -103,13 +130,15 @@ pub enum OProtocolMessageKind {
     /// Message that a peer is interested in us.
     PeerInterested,
     /// Message that a peer is not interested in us.
-    PeerNotInterested,
+    PeerUnInterested,
     /// Message that a peer has a specific piece.
     PeerHave(HaveMessage),
     /// Message that a peer has all pieces in the bitfield.
-    PeerBitfield(BitfieldMessage),
+    PeerBitField(BitFieldMessage),
     /// Message that a peer has request a block from us.
     PeerRequest(RequestMessage),
     /// Message that a peer has sent a block to us.
-    PeerPiece(Token, PieceMessage)
+    PeerPiece(Token, PieceMessage),
+    /// Message that a peer has cancelled a block request from us.
+    PeerCancel(CancelMessage)
 }

@@ -1,22 +1,19 @@
 
+use bip_util::sender::Sender;
 
-pub struct ProtocolSender {
-    id:   Token,
-    send: Sender<IPieceMessage>
-}
-
-impl Sender<OProtocolMessage> for ProtocolSender {
-    fn send(&self, data: OProtocolMessage) {
-        self.send.send(IPieceMessage::Protocol(self.id, data));
-    }
-}
-
-//----------------------------------------------------------------------------//
+use piece::{ISelectorMessage, OSelectorMessage, SelectorSender};
+use protocol::OProtocolMessage;
+use registration::LayerRegistration;
+use token::Token;
 
 pub struct PieceSelector;
 
-impl PieceSelector {
-    pub fn register_protocol(&self, send: PieceSender) -> ProtocolSender {
+impl<T> LayerRegistration<OSelectorMessage, T> for PieceSelector
+    where T: Into<ISelectorMessage> + Send
+{
+    type SS2 = SelectorSender;
+
+    fn register(&self, send: Box<Sender<OSelectorMessage>>) -> SelectorSender {
         unimplemented!();
     }
 }

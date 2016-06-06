@@ -1,35 +1,39 @@
 #![allow(unused)]
 
+use std::io::{self, Write};
+
 use nom::{IResult, be_u32, be_u8};
 
-use message::extension::{ExtensionType};
-use message::standard::{HaveMessage, BitfieldMessage, RequestMessage,
-    PieceMessage, CancelMessage};
+use message::extension::ExtensionType;
+use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
 
-const KEEP_ALIVE_MESSAGE_LEN:   u32 = 0;
-const CHOKE_MESSAGE_LEN:        u32 = 1;
-const UNCHOKE_MESSAGE_LEN:      u32 = 1;
-const INTERESTED_MESSAGE_LEN:   u32 = 1;
+const KEEP_ALIVE_MESSAGE_LEN: u32 = 0;
+const CHOKE_MESSAGE_LEN: u32 = 1;
+const UNCHOKE_MESSAGE_LEN: u32 = 1;
+const INTERESTED_MESSAGE_LEN: u32 = 1;
 const UNINTERESTED_MESSAGE_LEN: u32 = 1;
-const HAVE_MESSAGE_LEN:         u32 = 5;
-const REQUEST_MESSAGE_LEN:      u32 = 13;
-const CANCEL_MESSAGE_LEN:       u32 = 13;
+const HAVE_MESSAGE_LEN: u32 = 5;
+const REQUEST_MESSAGE_LEN: u32 = 13;
+const CANCEL_MESSAGE_LEN: u32 = 13;
 
-const CHOKE_MESSAGE_ID:        u8 = 0;
-const UNCHOKE_MESSAGE_ID:      u8 = 1;
-const INTERESTED_MESSAGE_ID:   u8 = 2;
+const CHOKE_MESSAGE_ID: u8 = 0;
+const UNCHOKE_MESSAGE_ID: u8 = 1;
+const INTERESTED_MESSAGE_ID: u8 = 2;
 const UNINTERESTED_MESSAGE_ID: u8 = 3;
-const HAVE_MESSAGE_ID:         u8 = 4;
-const BITFIELD_MESSAGE_ID:     u8 = 5;
-const REQUEST_MESSAGE_ID:      u8 = 6;
-const PIECE_MESSAGE_ID:        u8 = 7;
-const CANCEL_MESSAGE_ID:       u8 = 8;
+const HAVE_MESSAGE_ID: u8 = 4;
+const BITFIELD_MESSAGE_ID: u8 = 5;
+const REQUEST_MESSAGE_ID: u8 = 6;
+const PIECE_MESSAGE_ID: u8 = 7;
+const CANCEL_MESSAGE_ID: u8 = 8;
+
+pub const MESSAGE_LENGTH_LEN_BYTES: usize = 4;
 
 pub mod extension;
 pub mod standard;
 
 /// Enumeration of all message types. These types are shallow so they do not include
 /// variable length payload data; that data will have to be read in afterward.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum MessageType {
     KeepAlive,
     Choke,
@@ -37,17 +41,46 @@ pub enum MessageType {
     Interested,
     UnInterested,
     Have(HaveMessage),
-    BitField(BitfieldMessage),
+    BitField(BitFieldMessage),
     Request(RequestMessage),
     Piece(PieceMessage),
     Cancel(CancelMessage),
-    Extension(ExtensionType)
+    Extension(ExtensionType),
 }
 
 impl MessageType {
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], MessageType> {
         parse_message(bytes)
     }
+
+    pub fn write_bytes<W>(&self, writer: W) -> io::Result<()>
+        where W: Write
+    {
+        unimplemented!();
+    }
+}
+
+/// Parse the length portion of a message.
+///
+/// Panics if parsing failed for any reason.
+pub fn parse_message_length(bytes: &[u8]) -> usize {
+    if let IResult::Done(_, len) = be_u32(bytes) {
+        u32_to_usize(len)
+    } else {
+        panic!("bip_peer: Message Length Was Less Than 4 Bytes")
+    }
+}
+
+/// Called when a conversion from a u32 to a usize is necessary
+/// for the program to proceed in a valid state.
+///
+/// If the conversion is not valid, a panic will occur.
+pub fn u32_to_usize(value: u32) -> usize {
+    if value as usize as u32 != value {
+        panic!("bip_peer: Cannot Convert u32 To usize, usize Is Less Than 32-Bits")
+    }
+
+    value as usize
 }
 
 // Since these messages may come over a stream oriented protocol, if a message is incomplete
@@ -56,8 +89,8 @@ impl MessageType {
 // This allows clients to only re invoke the parser when it knows it has enough of the data.
 fn parse_message(bytes: &[u8]) -> IResult<&[u8], MessageType> {
     // Attempt to parse a built in message type, otherwise, see if it is an extension type.
-    alt!(bytes, 
-        switch!(tuple!(be_u32, opt!(be_u8)),
+    alt!(bytes,
+         switch!(tuple!(be_u32, opt!(be_u8)),
             (KEEP_ALIVE_MESSAGE_LEN, None) => value!(
                 MessageType::KeepAlive
             ) |
@@ -77,8 +110,9 @@ fn parse_message(bytes: &[u8]) -> IResult<&[u8], MessageType> {
                 call!(HaveMessage::from_bytes),
                 |have| MessageType::Have(have)
             ) |
-            (message_len, Some(BITFIELD_MESSAGE_ID)) => value!(
-                MessageType::BitField(BitfieldMessage::new(message_len - 1))
+            (message_len, Some(BITFIELD_MESSAGE_ID)) => map!(
+                call!(BitFieldMessage::from_bytes, message_len - 1),
+                |bitfield| MessageType::BitField(bitfield)
             ) |
             (REQUEST_MESSAGE_LEN, Some(REQUEST_MESSAGE_ID)) => map!(
                 call!(RequestMessage::from_bytes),
@@ -92,9 +126,5 @@ fn parse_message(bytes: &[u8]) -> IResult<&[u8], MessageType> {
                 call!(CancelMessage::from_bytes),
                 |cancel| MessageType::Cancel(cancel)
             )
-        ) |
-        map!(call!(ExtensionType::from_bytes), |ext_type| {
-            MessageType::Extension(ext_type)
-        })
-    )
+         ) | map!(call!(ExtensionType::from_bytes), |ext_type| MessageType::Extension(ext_type)))
 }

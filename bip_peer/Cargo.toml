@@ -16,7 +16,8 @@ license     = "MIT/Apache-2.0"
 bip_handshake = { path = "../bip_handshake", version = "0.4.0" }
 bip_metainfo  = { path = "../bip_metainfo", version = "0.4.0" }
 bip_util      = { path = "../bip_util", version = "0.4.0" }
-mio           = "0.5.0"
+rotor         = "0.6.0"
+rotor-stream  = "0.6.0"
 nom           = "1.2.0"
 
 [features]

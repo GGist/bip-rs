@@ -17,6 +17,12 @@ pub struct PrioritySender<S, T> {
     _unused: PhantomData<T>,
 }
 
+impl<S, T> Clone for PrioritySender<S, T> where S: Clone {
+    fn clone(&self) -> PrioritySender<S, T> {
+        PrioritySender{ send: self.send.clone(), count: self.count.clone(), capacity: self.capacity, _unused: PhantomData }
+    }
+}
+
 unsafe impl<S, T> Sync for PrioritySender<S, T> where S: Sync { }
 
 impl<S, T> PrioritySender<S, T>

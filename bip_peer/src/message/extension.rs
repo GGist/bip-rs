@@ -4,8 +4,9 @@ const PORT_MESSAGE_LEN: u32 = 3;
 
 const PORT_MESSAGE_ID: u8 = 9;
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum ExtensionType {
-    Port(PortMessage)
+    Port(PortMessage),
 }
 
 impl ExtensionType {
@@ -22,22 +23,23 @@ fn parse_extension(bytes: &[u8]) -> IResult<&[u8], ExtensionType> {
     )
 }
 
-//----------------------------------------------------------------------------//
+// ----------------------------------------------------------------------------//
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PortMessage {
-    port: u16
+    port: u16,
 }
 
 impl PortMessage {
     pub fn new(port: u16) -> PortMessage {
-        PortMessage{ port: port }
+        PortMessage { port: port }
     }
-    
+
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
         parse_port(bytes)
     }
 }
 
 fn parse_port(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
-    map!(bytes, be_u16, |port| PortMessage::new(port) )
+    map!(bytes, be_u16, |port| PortMessage::new(port))
 }
