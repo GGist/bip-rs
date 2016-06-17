@@ -1,7 +1,7 @@
 use std::sync::mpsc::{self, Receiver};
 use std::error::Error;
 use std::collections::{VecDeque, HashMap};
-use std::collections::hash_map::{Entry};
+use std::collections::hash_map::Entry;
 use std::time::Duration;
 
 use bip_util::bt::{PeerId, InfoHash};
@@ -9,7 +9,7 @@ use bip_util::sender::Sender;
 use rotor::{Scope, Time};
 use rotor::mio::tcp::TcpStream;
 use rotor_stream::{Protocol, Intent, Exception, Transport, Buf};
-use nom::{IResult};
+use nom::IResult;
 
 use disk::{ActiveDiskManager, IDiskMessage, ODiskMessage};
 use message::{self, MessageType};
@@ -194,7 +194,7 @@ impl PeerConnection {
                         if let Some(kind) = opt_kind {
                             sel_send(OProtocolMessage::new(self.id, kind));
                         }
-                    },
+                    }
                     Err(prot_error) => {
                         // Early return, peer gave us an invalid message
                         return self.advance_disconnect(sel_send, prot_error);
@@ -237,9 +237,7 @@ impl PeerConnection {
         // Figure our what intent we should return based on our CURRENT state, even if unchanged
         let self_timeout = self.self_timeout(now);
         match self.state {
-            PeerState::ReadLength => {
-                Intent::of(self).expect_bytes(message::MESSAGE_LENGTH_LEN_BYTES).deadline(self_timeout)
-            }
+            PeerState::ReadLength => Intent::of(self).expect_bytes(message::MESSAGE_LENGTH_LEN_BYTES).deadline(self_timeout),
             PeerState::ReadPayload(len) => Intent::of(self).expect_bytes(len).deadline(self_timeout),
             PeerState::DiskReserve(..) => Intent::of(self).sleep().deadline(self_timeout),
             PeerState::WritePayload => Intent::of(self).expect_flush().deadline(self_timeout),
@@ -251,7 +249,8 @@ impl PeerConnection {
 fn parse_kind_message(id: PeerIdentifier, bytes: &[u8], disk: &ActiveDiskManager) -> Result<Option<OProtocolMessageKind>, ProtocolError> {
     match MessageType::from_bytes(bytes) {
         IResult::Done(_, msg_type) => Ok(map_message_type(msg_type, disk)),
-        IResult::Error(_) | IResult::Incomplete(_) => Err(ProtocolError::new(id, ProtocolErrorKind::InvalidMessage))
+        IResult::Error(_) |
+        IResult::Incomplete(_) => Err(ProtocolError::new(id, ProtocolErrorKind::InvalidMessage)),
     }
 }
 
@@ -268,7 +267,7 @@ fn map_message_type(msg_type: MessageType, disk: &ActiveDiskManager) -> Option<O
         MessageType::Request(msg) => Some(OProtocolMessageKind::PeerRequest(msg)),
         MessageType::Piece(msg) => Some(OProtocolMessageKind::PeerPiece(disk.gen_request_token(), msg)),
         MessageType::Cancel(msg) => Some(OProtocolMessageKind::PeerCancel(msg)),
-        MessageType::Extension(_) => unimplemented!()
+        MessageType::Extension(_) => unimplemented!(),
     }
 }
 
@@ -297,7 +296,7 @@ impl Protocol for PeerConnection {
         } else {
             let (input, output) = transport.buffers();
 
-            self.advance_read(now, input, output, | msg | scope.send_selector(msg))
+            self.advance_read(now, input, output, |msg| scope.send_selector(msg))
         }
     }
 
@@ -357,7 +356,8 @@ impl Protocol for PeerConnection {
                     IProtocolMessage::PieceManager(sel_msg) => {
                         // If the selection layer sent us a disconnect message, handle it here
                         if self.process_message(now, sel_msg) {
-                            return self.advance_disconnect(|msg| scope.send_selector(msg), ProtocolError::new(id, ProtocolErrorKind::RemoteDisconnect));
+                            return self.advance_disconnect(|msg| scope.send_selector(msg),
+                                                           ProtocolError::new(id, ProtocolErrorKind::RemoteDisconnect));
                         }
                     }
                 }

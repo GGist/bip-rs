@@ -1,17 +1,20 @@
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
-use protocol::{PeerIdentifier};
+use protocol::PeerIdentifier;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ProtocolError {
     id: PeerIdentifier,
-    kind: ProtocolErrorKind
+    kind: ProtocolErrorKind,
 }
 
 impl ProtocolError {
     pub fn new(id: PeerIdentifier, kind: ProtocolErrorKind) -> ProtocolError {
-        ProtocolError{ id: id, kind: kind }
+        ProtocolError {
+            id: id,
+            kind: kind,
+        }
     }
 }
 
@@ -32,5 +35,5 @@ pub enum ProtocolErrorKind {
     InvalidMessage,
     RemoteTimeout,
     RemoteDisconnect,
-    RemoteError
+    RemoteError,
 }

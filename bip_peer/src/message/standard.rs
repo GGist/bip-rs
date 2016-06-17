@@ -93,7 +93,9 @@ impl RequestMessage {
 }
 
 fn parse_request(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
-    map!(bytes, tuple!(be_u32, be_u32, be_u32), |(index, offset, length)| RequestMessage::new(index, offset, message::u32_to_usize(length)))
+    map!(bytes,
+         tuple!(be_u32, be_u32, be_u32),
+         |(index, offset, length)| RequestMessage::new(index, offset, message::u32_to_usize(length)))
 }
 
 // ----------------------------------------------------------------------------//
@@ -176,5 +178,7 @@ impl CancelMessage {
 }
 
 fn parse_cancel(bytes: &[u8]) -> IResult<&[u8], CancelMessage> {
-    map!(bytes, tuple!(be_u32, be_u32, be_u32), |(index, offset, length)| CancelMessage::new(index, offset, message::u32_to_usize(length)))
+    map!(bytes,
+         tuple!(be_u32, be_u32, be_u32),
+         |(index, offset, length)| CancelMessage::new(index, offset, message::u32_to_usize(length)))
 }

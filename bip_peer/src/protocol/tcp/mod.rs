@@ -1,19 +1,19 @@
 use std::io;
 use std::sync::mpsc::{self, SyncSender};
-use std::thread::{self};
+use std::thread;
 
 use bip_handshake::BTPeer;
 use bip_util::bt::{PeerId, InfoHash};
 use bip_util::sender::{Sender, PrioritySender};
 use rotor::{Notifier, Loop, Config, Response};
-use rotor::mio::tcp::{TcpStream};
-use rotor_stream::{Stream};
+use rotor::mio::tcp::TcpStream;
+use rotor_stream::Stream;
 
 use disk::{InactiveDiskManager, ODiskMessage, IDiskMessage, ActiveDiskManager};
 use piece::{PieceSelector, OSelectorMessage};
 use protocol::{IProtocolMessage, ProtocolSender, OProtocolMessage};
 use protocol::machine::{ProtocolContext, AcceptPeer};
-use protocol::tcp::peer::{PeerConnection};
+use protocol::tcp::peer::PeerConnection;
 use registration::LayerRegistration;
 
 mod peer;
@@ -27,13 +27,14 @@ const MAX_PENDING_NEW_PEERS: usize = 64;
 
 struct TCPProtocol {
     shutdown: Notifier,
-    peer_send: PeerSender
+    peer_send: PeerSender,
 }
 
 impl TCPProtocol {
     pub fn new<D, S>(disk: D, selector: S) -> io::Result<TCPProtocol>
         where D: LayerRegistration<ODiskMessage, IDiskMessage, SS2 = ActiveDiskManager> + 'static + Send,
-              S: LayerRegistration<OSelectorMessage, OProtocolMessage> + 'static + Send {
+              S: LayerRegistration<OSelectorMessage, OProtocolMessage> + 'static + Send
+    {
         let mut config = Config::new();
         config.slab_capacity(MAX_CONNECTED_PEERS);
         // TODO: Figure our how rotor uses mio notify and timer capacities internally and set those
@@ -56,11 +57,12 @@ impl TCPProtocol {
             Response::ok(AcceptPeer::Incoming(p_recv))
         });
 
-        thread::spawn(move || {
-            eloop.run(context).expect("bip_peer: TCPProtocol Thread Shutdown Unexpectedly")
-        });
+        thread::spawn(move || eloop.run(context).expect("bip_peer: TCPProtocol Thread Shutdown Unexpectedly"));
 
-        Ok(TCPProtocol{ shutdown: s_noti.unwrap(), peer_send: PeerSender::new(p_send, p_noti.unwrap())})
+        Ok(TCPProtocol {
+            shutdown: s_noti.unwrap(),
+            peer_send: PeerSender::new(p_send, p_noti.unwrap()),
+        })
     }
 
     pub fn peer_sender(&self) -> Box<Sender<BTPeer>> {
@@ -79,12 +81,15 @@ impl Drop for TCPProtocol {
 #[derive(Clone)]
 struct PeerSender {
     send: SyncSender<(TcpStream, PeerId, InfoHash)>,
-    noti: Notifier
+    noti: Notifier,
 }
 
 impl PeerSender {
     fn new(send: SyncSender<(TcpStream, PeerId, InfoHash)>, noti: Notifier) -> PeerSender {
-        PeerSender{ send: send, noti: noti }
+        PeerSender {
+            send: send,
+            noti: noti,
+        }
     }
 }
 
@@ -92,7 +97,8 @@ impl Sender<BTPeer> for PeerSender {
     fn send(&self, data: BTPeer) {
         let (stream, id, hash) = data.destroy();
 
-        self.send.send((stream, id, hash))
+        self.send
+            .send((stream, id, hash))
             .expect("bip_peer: PeerSender Failed To Send Peer");
     }
 }

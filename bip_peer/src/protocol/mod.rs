@@ -140,5 +140,5 @@ pub enum OProtocolMessageKind {
     /// Message that a peer has sent a block to us.
     PeerPiece(Token, PieceMessage),
     /// Message that a peer has cancelled a block request from us.
-    PeerCancel(CancelMessage)
+    PeerCancel(CancelMessage),
 }
