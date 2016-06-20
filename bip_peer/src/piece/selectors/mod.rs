@@ -1,5 +1,5 @@
 
-use bip_util::sender::Sender;
+use bip_util::send::TrySender;
 
 use piece::{ISelectorMessage, OSelectorMessage, SelectorSender};
 use protocol::OProtocolMessage;
@@ -13,7 +13,7 @@ impl<T> LayerRegistration<OSelectorMessage, T> for PieceSelector
 {
     type SS2 = SelectorSender;
 
-    fn register(&self, send: Box<Sender<OSelectorMessage>>) -> SelectorSender {
+    fn register(&self, send: Box<TrySender<OSelectorMessage>>) -> SelectorSender {
         unimplemented!();
     }
 }

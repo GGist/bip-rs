@@ -5,7 +5,7 @@ use std::sync::mpsc::SyncSender;
 
 use bip_handshake::BTPeer;
 use bip_util::bt::{PeerId, InfoHash};
-use bip_util::sender::{Sender, PrioritySender};
+use bip_util::send::{TrySender, SplitSender};
 use rotor::Notifier;
 
 use disk::ODiskMessage;
@@ -47,9 +47,27 @@ pub enum IProtocolMessage {
     PieceManager(OSelectorMessage),
 }
 
+impl From<IProtocolMessage> for ODiskMessage {
+    fn from(data: IProtocolMessage) -> ODiskMessage {
+        match data {
+            IProtocolMessage::DiskManager(disk) => disk,
+            IProtocolMessage::PieceManager(_) => unreachable!()
+        }
+    }
+}
+
 impl From<ODiskMessage> for IProtocolMessage {
     fn from(data: ODiskMessage) -> IProtocolMessage {
         IProtocolMessage::DiskManager(data)
+    }
+}
+
+impl From<IProtocolMessage> for OSelectorMessage {
+    fn from(data: IProtocolMessage) -> OSelectorMessage {
+        match data {
+            IProtocolMessage::PieceManager(piece) => piece,
+            IProtocolMessage::DiskManager(_) => unreachable!()
+        }
     }
 }
 
@@ -75,17 +93,19 @@ impl ProtocolSender {
     }
 }
 
-impl<T: Send> Sender<T> for ProtocolSender
-    where T: Into<IProtocolMessage>
+impl<T> TrySender<T> for ProtocolSender
+    where T: Into<IProtocolMessage> + Send + From<IProtocolMessage>
 {
-    fn send(&self, data: T) {
-        self.send
-            .send(data.into())
-            .expect("bip_peer: ProtocolSender failed to send message");
+    fn try_send(&self, data: T) -> Option<T> {
+        let ret = TrySender::try_send(&self.send, data.into()).map(|data| data.into());
+        
+        if ret.is_none() {
+            self.noti
+                .wakeup()
+                .expect("bip_peer: ProtocolSender Failed To Send Wakeup");
+        }
 
-        self.noti
-            .wakeup()
-            .expect("bip_peer: ProtocolSender failed to send wakup");
+        ret
     }
 }
 
@@ -120,7 +140,7 @@ impl OProtocolMessage {
 
 pub enum OProtocolMessageKind {
     /// Message that a peer has connected for the given InfoHash.
-    PeerConnect(Box<Sender<OSelectorMessage>>, InfoHash),
+    PeerConnect(Box<TrySender<OSelectorMessage>>, InfoHash),
     /// Message that a peer has disconnected.
     PeerDisconnect,
     /// Message that a peer has choked us.

@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::SyncSender;
 
-use bip_util::sender::Sender;
+use bip_util::send::TrySender;
 
 use disk::worker::WorkerMessage;
 use registration::LayerRegistration;
@@ -27,21 +27,21 @@ pub enum ODiskMessage {
 
 // ----------------------------------------------------------------------------//
 
-pub struct InactiveDiskManager {
-    inner: Arc<InnerDiskManager>,
-}
+pub struct InactiveDiskManager; //{
+    //inner: Arc<InnerDiskManager>,
+//}
 
 impl InactiveDiskManager {
     pub fn new() -> InactiveDiskManager {
-        unimplemented!();
+        InactiveDiskManager
     }
 }
 
 impl LayerRegistration<ODiskMessage, IDiskMessage> for InactiveDiskManager {
     type SS2 = ActiveDiskManager;
 
-    fn register(&self, send: Box<Sender<ODiskMessage>>) -> ActiveDiskManager {
-        unimplemented!();
+    fn register(&self, send: Box<TrySender<ODiskMessage>>) -> ActiveDiskManager {
+        ActiveDiskManager::new()
     }
 }
 
@@ -60,12 +60,18 @@ impl LayerRegistration<ODiskMessage, IDiskMessage> for InactiveDiskManager {
 // to so and so InfoHash.
 
 pub struct ActiveDiskManager {
-    inner: Arc<InnerDiskManager>,
-    request_gen: TokenGenerator,
+    //inner: Arc<InnerDiskManager>,
+    //request_gen: TokenGenerator,
     id: u64,
 }
 
 impl ActiveDiskManager {
+    pub fn new() -> ActiveDiskManager {
+        ActiveDiskManager {
+            id: 5
+        }
+    }
+
     pub fn wait_load(&self, token: Token) {}
 
     pub fn redeem_load(&self, token: Token) -> &[u8] {
@@ -81,8 +87,8 @@ impl ActiveDiskManager {
     }
 }
 
-impl Sender<IDiskMessage> for ActiveDiskManager {
-    fn send(&self, data: IDiskMessage) {
+impl TrySender<IDiskMessage> for ActiveDiskManager {
+    fn try_send(&self, data: IDiskMessage) -> Option<IDiskMessage> {
         unimplemented!();
     }
 }

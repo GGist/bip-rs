@@ -1,7 +1,7 @@
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use bip_util::bt::{PeerId, InfoHash};
-use bip_util::sender::Sender;
+use bip_util::send::TrySender;
 use rotor::{Machine, Void, Scope, Response, EventSet};
 use rotor_stream::{Accepted, StreamSocket};
 
@@ -12,7 +12,7 @@ use registration::LayerRegistration;
 
 pub struct ProtocolContext {
     disk: Box<LayerRegistration<ODiskMessage, IDiskMessage, SS2 = ActiveDiskManager> + Send>,
-    sele: Box<Sender<OProtocolMessage> + Send>,
+    sele: Box<TrySender<OProtocolMessage> + Send>,
 }
 
 impl ProtocolContext {
@@ -32,12 +32,12 @@ impl ProtocolContext {
         }
     }
 
-    pub fn register_disk(&self, send: Box<Sender<ODiskMessage>>) -> ActiveDiskManager {
+    pub fn register_disk(&self, send: Box<TrySender<ODiskMessage>>) -> ActiveDiskManager {
         self.disk.register(send)
     }
 
     pub fn send_selector(&self, msg: OProtocolMessage) {
-        self.sele.send(msg);
+        assert!(self.sele.try_send(msg).is_none());
     }
 }
 
@@ -45,8 +45,8 @@ impl ProtocolContext {
 
 struct UnusedSender;
 
-impl Sender<OSelectorMessage> for UnusedSender {
-    fn send(&self, msg: OSelectorMessage) {
+impl TrySender<OSelectorMessage> for UnusedSender {
+    fn try_send(&self, msg: OSelectorMessage) -> Option<OSelectorMessage> {
         panic!("bip_peer: Selector Tried To Send Message Through UnusedSender")
     }
 }

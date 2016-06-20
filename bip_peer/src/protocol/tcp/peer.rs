@@ -5,7 +5,7 @@ use std::collections::hash_map::Entry;
 use std::time::Duration;
 
 use bip_util::bt::{PeerId, InfoHash};
-use bip_util::sender::Sender;
+use bip_util::send::{TrySender, SplitSender};
 use rotor::{Scope, Time};
 use rotor::mio::tcp::TcpStream;
 use rotor_stream::{Protocol, Intent, Exception, Transport, Buf};
@@ -14,6 +14,7 @@ use nom::IResult;
 use disk::{ActiveDiskManager, IDiskMessage, ODiskMessage};
 use message::{self, MessageType};
 use protocol::{PeerIdentifier, IProtocolMessage, ProtocolSender, OProtocolMessage, OProtocolMessageKind};
+use protocol::tcp;
 use protocol::machine::ProtocolContext;
 use protocol::error::{ProtocolError, ProtocolErrorKind};
 use piece::{OSelectorMessage, OSelectorMessageKind};
@@ -35,6 +36,7 @@ const MAX_SELF_TIMEOUT_MILLIS: u64 = (30 + 60) * 1000;
 pub struct PeerConnection {
     id: PeerIdentifier,
     disk: ActiveDiskManager,
+    send: SplitSender<ProtocolSender>,
     recv: Receiver<IProtocolMessage>,
     state: PeerState,
     // Any writes that can immediately be executed are
@@ -67,11 +69,12 @@ pub enum PeerState {
 
 impl PeerConnection {
     /// Create a new PeerConnection and returning the given Intent for the Protocol.
-    fn new(id: PeerIdentifier, disk: ActiveDiskManager, recv: Receiver<IProtocolMessage>, now: Time) -> Intent<PeerConnection> {
+    fn new(id: PeerIdentifier, disk: ActiveDiskManager, send: SplitSender<ProtocolSender>, recv: Receiver<IProtocolMessage>, now: Time) -> Intent<PeerConnection> {
         let connection = PeerConnection {
             id: id,
             state: PeerState::ReadLength,
             disk: disk,
+            send: send,
             recv: recv,
             write_queue: VecDeque::new(),
             block_queue: HashMap::new(),
@@ -121,7 +124,7 @@ impl PeerConnection {
             OSelectorMessageKind::PeerPiece(token, piece_msg) => {
                 // Sign up to receive a notification when the block associated with
                 // the token has been loaded and is ready to be read from the manager
-                self.disk.send(IDiskMessage::WaitBlock(token));
+                assert!(self.disk.try_send(IDiskMessage::WaitBlock(token)).is_none());
                 self.block_queue.insert(token, MessageType::Piece(piece_msg));
             }
             OSelectorMessageKind::PeerCancel(cancel_msg) => self.write_queue.push_back((MessageType::Cancel(cancel_msg), None)),
@@ -184,7 +187,7 @@ impl PeerConnection {
                         self.state = PeerState::DiskReserve(token, piece_msg.block_length());
 
                         // Disk manager will notify us when the memory is reserved
-                        self.disk.send(IDiskMessage::WaitBlock(token));
+                        assert!(self.disk.try_send(IDiskMessage::WaitBlock(token)).is_none());
                         sel_send(OProtocolMessage::new(self.id, OProtocolMessageKind::PeerPiece(token, piece_msg)));
                     }
                     Ok(opt_kind) => {
@@ -219,6 +222,9 @@ impl PeerConnection {
         if bytes_flushed {
             // "Reset" our state
             self.state = PeerState::ReadLength;
+
+            // Ack the write
+            self.send.sender_ack().ack();
         }
 
         // Next, check if we can transition to/back to a write event
@@ -278,13 +284,15 @@ impl Protocol for PeerConnection {
 
     fn create((pid, hash): Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
         let id = PeerIdentifier::new(sock.peer_addr().unwrap(), pid);
-        let (send, recv) = mpsc::sync_channel(MAX_INCOMING_MESSAGES);
+        let (send, recv) = mpsc::sync_channel(tcp::MAX_PEER_CHANNEL_CAPACITY);
         let prot_send = ProtocolSender::new(send, scope.notifier());
 
-        let disk = scope.register_disk(Box::new(prot_send.clone()));
-        scope.send_selector(OProtocolMessage::new(id, OProtocolMessageKind::PeerConnect(Box::new(prot_send), hash)));
+        let sele_send = SplitSender::new(prot_send.clone(), tcp::MAX_PEER_CHANNEL_CAPACITY / 2);
 
-        PeerConnection::new(id, disk, recv, scope.now())
+        let disk = scope.register_disk(Box::new(prot_send));
+        scope.send_selector(OProtocolMessage::new(id, OProtocolMessageKind::PeerConnect(Box::new(sele_send.clone()), hash)));
+        
+        PeerConnection::new(id, disk, sele_send, recv, scope.now())
     }
 
     fn bytes_read(self, transport: &mut Transport<Self::Socket>, end: usize, scope: &mut Scope<Self::Context>) -> Intent<Self> {
@@ -322,7 +330,8 @@ impl Protocol for PeerConnection {
             // for example, if we are still waiting on the disk manager. Also, we will update our message_sent whenever we push to the write
             // queue to make it easy for us to know what we mean when we talk about our write timeout.
             let id = self.id;
-            self.process_message(now, OSelectorMessage::new(id, OSelectorMessageKind::PeerKeepAlive));
+            // Don't care if it didnt go through, that means there are pending writes
+            self.send.try_send(OSelectorMessage::new(id, OSelectorMessageKind::PeerKeepAlive));
 
             self.advance_write(now, transport.output(), false)
         }

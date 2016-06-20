@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::SyncSender;
 
-use bip_util::sender::{Sender, PrioritySender};
+use bip_util::send::{TrySender, SplitSender};
 use rotor::Notifier;
 
 use disk::ODiskMessage;
@@ -37,30 +37,35 @@ pub struct SelectorSender {
     noti: Notifier,
 }
 
-impl<T> Sender<T> for SelectorSender
+impl<T> TrySender<T> for SelectorSender
     where T: Into<ISelectorMessage> + Send
 {
-    fn send(&self, data: T) {
+    fn try_send(&self, data: T) -> Option<T> {
         self.send
             .send(data.into())
-            .expect("bip_peer: SelectorSender failed to send message");
+            .expect("bip_peer: SelectorSender Failed To Send Message");
 
         self.noti
             .wakeup()
-            .expect("bip_peer: SelectorSender failed to send wakup");
+            .expect("bip_peer: SelectorSender Failed To Send Wakeup");
+
+        None
     }
 }
 
 // Have to specialize the impl for protocol messages so we can insert the token
-impl Sender<OProtocolMessage> for SelectorSender {
-    fn send(&self, data: OProtocolMessage) {
+impl TrySender<OProtocolMessage> for SelectorSender
+{
+    fn try_send(&self, data: OProtocolMessage) -> Option<OProtocolMessage> {
         self.send
             .send(ISelectorMessage::Protocol(self.id, data))
-            .expect("bip_peer: SelectorSender failed to send message");
+            .expect("bip_peer: SelectorSender Failed To Send Message");
 
         self.noti
             .wakeup()
-            .expect("bip_peer: SelectorSender failed to send wakup");
+            .expect("bip_peer: SelectorSender Failed To Send Wakeup");
+
+        None
     }
 }
 
