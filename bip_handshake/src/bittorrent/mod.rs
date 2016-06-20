@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock};
 use std::net::SocketAddr;
 
 use bip_util::bt::{PeerId, InfoHash};
-use bip_util::sender::{Sender, PrioritySender};
-use mio;
+use bip_util::send::{TrySender, SplitSender};
+use mio::{self, NotifyError};
 use mio::tcp::TcpStream;
 
 use bittorrent::handler::Task;
@@ -52,10 +52,19 @@ impl<T: Send> MioSender<T> {
     }
 }
 
-impl<T: Send> Sender<T> for MioSender<T> {
-    #[allow(unused)]
-    fn send(&self, data: T) {
-        self.send.send(data);
+impl<T: Send> TrySender<T> for MioSender<T> {
+    fn try_send(&self, data: T) -> Option<T> {
+        match self.send.send(data) {
+            Ok(_) => None,
+            Err(NotifyError::Full(data)) => Some(data),
+            Err(NotifyError::Io(_)) | Err(NotifyError::Closed(_)) => panic!("bip_handshake: MioSender Channel Hang Up")
+        }
+    }
+}
+
+impl<T: Send> Clone for MioSender<T> {
+    fn clone(&self) -> MioSender<T> {
+        MioSender{ send: self.send.clone() }
     }
 }
 
@@ -79,11 +88,8 @@ impl<T> Clone for BTHandshaker<T>
 pub struct InnerBTHandshaker<T>
     where T: Send
 {
-    // Using a priority channel because shutdown messages cannot
-    // afford to be lost. Generally the handler will set the capacity
-    // on the channel to 1 less than the real capacity which gives us
-    // room for a shutdown message in the absolute worst case.
-    send: PrioritySender<MioSender<Task<T>>, Task<T>>,
+    send: SplitSender<MioSender<Task<T>>>,
+    kill: SplitSender<MioSender<Task<T>>>,
     interest: Arc<RwLock<HashSet<InfoHash>>>,
     port: u16,
     pid: PeerId,
@@ -93,7 +99,7 @@ impl<T> Drop for InnerBTHandshaker<T>
     where T: Send
 {
     fn drop(&mut self) {
-        self.send.prioritized_send(Task::Shutdown);
+        assert!(self.kill.try_send(Task::Shutdown).is_none());
     }
 }
 
@@ -103,7 +109,7 @@ impl<T> BTHandshaker<T>
     /// Create a new BTHandshaker with the given PeerId and bind address which will
     /// forward metadata and handshaken connections onto the provided sender.
     pub fn new<S>(send: S, listen: SocketAddr, pid: PeerId) -> io::Result<BTHandshaker<T>>
-        where S: Sender<T> + 'static
+        where S: TrySender<T> + 'static
     {
         BTHandshaker::with_protocol(send, listen, pid, BTP_10_PROTOCOL)
     }
@@ -113,17 +119,18 @@ impl<T> BTHandshaker<T>
     ///
     /// Panics if the length of the provided protocol exceeds 255 bytes.
     pub fn with_protocol<S>(send: S, listen: SocketAddr, pid: PeerId, protocol: &'static str) -> io::Result<BTHandshaker<T>>
-        where S: Sender<T> + 'static
+        where S: TrySender<T> + 'static
     {
         if protocol.len() > MAX_PROTOCOL_LEN {
             panic!("bip_handshake: BTHandshaker Protocol Length Cannot Exceed {}", MAX_PROTOCOL_LEN);
         }
         let interest = Arc::new(RwLock::new(HashSet::new()));
-        let (send, port) = try!(handler::spawn_handshaker(send, listen, pid, protocol, interest.clone()));
+        let (msg_send, kill_send, port) = try!(handler::spawn_handshaker(send, listen, pid, protocol, interest.clone()));
 
         Ok(BTHandshaker {
             inner: Arc::new(InnerBTHandshaker {
-                send: send,
+                send: msg_send,
+                kill: kill_send,
                 interest: interest,
                 port: port,
                 pid: pid,
@@ -166,11 +173,11 @@ impl<T> Handshaker for BTHandshaker<T>
     }
 
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
-        self.inner.send.send(Task::Connect(expected, hash, addr));
+        self.inner.send.try_send(Task::Connect(expected, hash, addr));
     }
 
     fn metadata(&mut self, data: Self::MetadataEnvelope) {
-        self.inner.send.send(Task::Metadata(data));
+        self.inner.send.try_send(Task::Metadata(data));
     }
 }
 
