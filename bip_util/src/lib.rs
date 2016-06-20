@@ -15,7 +15,7 @@ pub mod convert;
 pub mod net;
 
 /// Generic sender utilities.
-pub mod sender;
+pub mod send;
 
 /// Hash primitives and helpers.
 pub mod sha;
