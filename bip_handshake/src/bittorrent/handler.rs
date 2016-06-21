@@ -6,7 +6,7 @@ use std::thread;
 use std::marker::PhantomData;
 
 use bip_util::bt::{self, PeerId, InfoHash};
-use bip_util::sender::{Sender, PrioritySender, PrioritySenderAck};
+use bip_util::send::{self, TrySender, SplitSender, SplitSenderAck};
 use mio::{EventLoop, EventSet, PollOpt, Token, Handler, EventLoopConfig, Timeout};
 use mio::tcp::{TcpListener, TcpStream};
 use nom::{IResult, be_u8};
@@ -34,8 +34,8 @@ pub fn spawn_handshaker<S, T>(send: S,
                               pid: PeerId,
                               protocol: &'static str,
                               interest: Arc<RwLock<HashSet<InfoHash>>>)
-                              -> io::Result<(PrioritySender<MioSender<Task<T>>, Task<T>>, u16)>
-    where S: Sender<T> + 'static,
+                              -> io::Result<(SplitSender<MioSender<Task<T>>>, SplitSender<MioSender<Task<T>>>, u16)>
+    where S: TrySender<T> + 'static,
           T: Send + 'static + From<BTPeer>
 {
     let tcp_listener = try!(TcpListener::bind(&listen));
@@ -49,12 +49,12 @@ pub fn spawn_handshaker<S, T>(send: S,
     try!(eloop.register(&tcp_listener, SERVER_READ_TOKEN.0, EventSet::readable(), PollOpt::edge()));
 
     // Subtract 1 to reserve one message slot for a high priority message
-    let priority_send = PrioritySender::new(MioSender::new(eloop.channel()), MAX_ELOOP_MESSAGE_CAPACITY - 1);
-    let mut handler = HandshakeHandler::new(tcp_listener, pid, protocol, send, interest, priority_send.sender_ack());
+    let (msg_send, kill_send) = send::split_sender(MioSender::new(eloop.channel()), MAX_ELOOP_MESSAGE_CAPACITY - 1, 1);
+    let mut handler = HandshakeHandler::new(tcp_listener, pid, protocol, send, interest, msg_send.sender_ack());
 
     thread::spawn(move || eloop.run(&mut handler).unwrap());
 
-    Ok((priority_send, listen_port))
+    Ok((msg_send, kill_send, listen_port))
 }
 
 // ----------------------------------------------------------------------------//
@@ -78,7 +78,7 @@ struct HandshakeHandler<S, T> {
     /// Pre-Made out buffer for connections to write out to peers.
     out_buffer: Vec<u8>,
     listener: TcpListener,
-    msg_ack: PrioritySenderAck,
+    msg_ack: SplitSenderAck,
     slab: Slab<Connection, InnerToken>,
     send: S,
     our_protocol: &'static str,
@@ -86,7 +86,7 @@ struct HandshakeHandler<S, T> {
 }
 
 impl<S, T> HandshakeHandler<S, T>
-    where S: Sender<T>,
+    where S: TrySender<T>,
           T: Send
 {
     pub fn new(listener: TcpListener,
@@ -94,7 +94,7 @@ impl<S, T> HandshakeHandler<S, T>
                protocol: &'static str,
                send: S,
                interest: Arc<RwLock<HashSet<InfoHash>>>,
-               msg_ack: PrioritySenderAck)
+               msg_ack: SplitSenderAck)
                -> HandshakeHandler<S, T> {
         let out_buffer = premade_out_buffer(protocol, [0u8; bt::INFO_HASH_LEN].into(), pid);
 
@@ -112,7 +112,7 @@ impl<S, T> HandshakeHandler<S, T>
 }
 
 impl<S, T> Handler for HandshakeHandler<S, T>
-    where S: Sender<T>,
+    where S: TrySender<T>,
           T: Send + From<BTPeer>
 {
     type Timeout = InnerToken;
@@ -198,7 +198,7 @@ impl<S, T> Handler for HandshakeHandler<S, T>
                 let (tcp, hash, pid) = connection.destory();
                 let tcp_peer = BTPeer::new(tcp, hash, pid);
 
-                self.send.send(tcp_peer.into());
+                self.send.try_send(tcp_peer.into());
             }
         }
     }
@@ -225,7 +225,7 @@ impl<S, T> Handler for HandshakeHandler<S, T>
                     });
             }
             Task::Metadata(metadata) => {
-                self.send.send(metadata);
+                self.send.try_send(metadata);
             }
             Task::Shutdown => {
                 event_loop.shutdown();
