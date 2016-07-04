@@ -20,9 +20,9 @@ enum CompleteState {
 }
 
 impl Protocol for HandshakeConnection {
-    type Context = ;
+    type Context = Void;
     type Socket = TcpStream;
-    type Seed = (HandshakeState, Rc<RefCell<(InfoHash, PeerId)>>);
+    type Seed = (HandshakeState, Rc<RefCell<BTSeed>>);
 
     fn create(seed: Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
 
