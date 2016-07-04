@@ -12,6 +12,7 @@ use bittorrent::handler::Task;
 use handshaker::Handshaker;
 
 mod handler;
+mod machine;
 
 const MAX_PROTOCOL_LEN: usize = 255;
 const BTP_10_PROTOCOL: &'static str = "BitTorrent protocol";
