@@ -1,5 +1,6 @@
 #![allow(unused)]
 
-// mod tcp;
-mod machine;
-mod seed;
+pub mod handshake;
+pub mod machine;
+pub mod seed;
+pub mod client;

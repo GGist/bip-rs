@@ -21,3 +21,7 @@ rotor-stream  = "0.6.0"
 
 [features]
 unstable      = []
+
+[[test]]
+name = "test"
+path = "test/mod.rs"

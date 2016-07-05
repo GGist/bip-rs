@@ -3,16 +3,18 @@ use std::net::SocketAddr;
 
 use rotor::mio::tcp::{TcpListener, TcpStream};
 
+/// Trait for non blocking accepts on socket listeners.
 pub trait TryAccept {
     type Output;
 
-    fn accept(&self) -> io::Result<Option<(Self::Output, SocketAddr)>>;
+    /// Attempt to accept a socket connection.
+    fn try_accept(&self) -> io::Result<Option<(Self::Output, SocketAddr)>>;
 }
 
 impl TryAccept for TcpListener {
     type Output = TcpStream;
 
-    fn accept(&self) -> io::Result<Option<(Self::Output, SocketAddr)>> {
+    fn try_accept(&self) -> io::Result<Option<(Self::Output, SocketAddr)>> {
         self.accept()
     }
 }

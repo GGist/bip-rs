@@ -47,7 +47,7 @@ impl<M, A> Machine for Accept<M, A>
     fn ready(self, events: EventSet, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Accept::Server(a) => {
-                match a.accept() {
+                match a.try_accept() {
                     Ok(Some((sock, addr))) => {
                         let seed = (sock, addr);
                         Response::spawn(Accept::Server(a), seed)
@@ -69,7 +69,7 @@ impl<M, A> Machine for Accept<M, A>
     fn spawned(self, _scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Accept::Server(a) => {
-                match a.accept() {
+                match a.try_accept() {
                     Ok(Some((sock, addr))) => {
                         let seed = (sock, addr);
                         Response::spawn(Accept::Server(a), seed)

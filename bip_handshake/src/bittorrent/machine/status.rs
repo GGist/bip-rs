@@ -1,21 +1,16 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::mpsc::{self, SyncSender, Receiver};
 
 use rotor::{Machine, Response, Scope, EventSet, Void};
 use rotor_stream::{Accepted, Protocol, Stream};
 
+use bittorrent::handshake::HandshakeSeed;
 use bittorrent::seed::{InitiateSeed, CompleteSeed};
 use try_clone::TryClone;
 
 // Final composed state machine should look something like:
 //
-// Accept<Initiate<PeerStatus<Stream<PeerHandshake<TcpStream>>, Stream<PeerConnection<TcpStream>>>>, TcpListener>
-// Accept<Initiate<PeerStatus<Stream<PeerHandshake<UtpStream>>, Stream<PeerConnection<UtpStream>>>>, UtpListener>
-
-pub enum HandshakeState {
-    Initiate(InitiateSeed),
-    Complete(CompleteSeed),
-}
+// Accept<Initiate<PeerHandshake<TcpStream, PeerConnection::Context>, PeerConnection<TcpStream>>, TcpListener>
+// Accept<Initiate<PeerHandshake<UtpStream, PeerConnection::Context>, PeerConnection<UtpStream>>, UtpListener>
 
 /// Holds either a handshaking state machine or a connected state machine.
 ///
@@ -23,49 +18,44 @@ pub enum HandshakeState {
 /// gives a done signal, the connection will migrate over to the connected protocol.
 pub enum PeerStatus<H, C>
     where H: Protocol,
-          C: Protocol
+          C: Protocol,
+          C::Seed: Copy
 {
     // Currently rotor will not allow us to pull the C::Socket out from
     // a state machine when it is shutting down, so to maintain the socket
     // when transitioning into C, we need to copy it and store it here.
-    Handshaking(Stream<H>, C::Socket, Rc<RefCell<C::Seed>>),
+    Handshaking(Stream<H>, C::Socket, Receiver<C::Seed>),
     Connected(Stream<C>),
 }
 
 impl<H, C> PeerStatus<H, C>
-    where H: Protocol<Context = C::Context, Seed = (HandshakeState, Rc<RefCell<C::Seed>>), Socket = C::Socket>,
+    where H: Protocol<Context = C::Context, Seed = (HandshakeSeed, SyncSender<C::Seed>), Socket = C::Socket>,
           C: Protocol,
-          C::Seed: Default,
+          C::Seed: Default + Copy,
           C::Socket: TryClone
 {
-    fn new(state: HandshakeState, sock: C::Socket, scope: &mut Scope<<Self as Machine>::Context>) -> Response<Self, Void> {
+    fn new(seed: HandshakeSeed, sock: C::Socket, scope: &mut Scope<<Self as Machine>::Context>) -> Response<Self, Void> {
         let sock_clone = clone_socket(&sock);
-        let rc_seed = Rc::new(RefCell::new(C::Seed::default()));
+        let (send, recv) = mpsc::sync_channel(1);
 
-        Stream::new(sock, (state, rc_seed.clone()), scope).wrap(|stream| PeerStatus::Handshaking(stream, sock_clone, rc_seed))
+        Stream::new(sock, (seed, send), scope).wrap(|stream| PeerStatus::Handshaking(stream, sock_clone, recv))
     }
 
     /// Creates a PeerStatus over the Connected protocol with the given arguments.
-    pub fn connected(sock: C::Socket,
-                     rc_seed: Rc<RefCell<C::Seed>>,
-                     scope: &mut Scope<<Self as Machine>::Context>)
-                     -> Response<Self, Void> {
-        let seed = Rc::try_unwrap(rc_seed)
-                       .map_err(|_| ())
-                       .expect("bip_peer: PeerStatus Failed To Own Rc PeerStatus::Connected Seed")
-                       .into_inner();
+    pub fn connected(sock: C::Socket, recv: Receiver<C::Seed>, scope: &mut Scope<<Self as Machine>::Context>) -> Response<Self, Void> {
+        let seed = recv.try_recv().expect("bip_handshake: Failed To Receive Seed From Finished Handshaker");
 
         Stream::connected(sock, seed, scope).wrap(PeerStatus::Connected)
     }
 
     /// Creates a PeerStatus over the Handshake protocol and tell the protocol that it is initiating the connection.
     pub fn initiate(seed: InitiateSeed, sock: C::Socket, scope: &mut Scope<<Self as Machine>::Context>) -> Response<Self, Void> {
-        PeerStatus::new(HandshakeState::Initiate(seed), sock, scope)
+        PeerStatus::new(HandshakeSeed::Initiate(seed), sock, scope)
     }
 
     /// Creates a PeerStatus over the Handshake protocol and tell the protocol that is is completing the connection.
     pub fn complete(seed: CompleteSeed, sock: C::Socket, scope: &mut Scope<<Self as Machine>::Context>) -> Response<Self, Void> {
-        PeerStatus::new(HandshakeState::Complete(seed), sock, scope)
+        PeerStatus::new(HandshakeSeed::Complete(seed), sock, scope)
     }
 }
 
@@ -82,9 +72,9 @@ fn clone_socket<T>(sock: &T) -> T
 // from Streams themselves. If a handshaker returns an error, we let the state machine handle shutting it down as that means something was wrong
 // with the handshaking process.
 impl<H, C> Machine for PeerStatus<H, C>
-    where H: Protocol<Context = C::Context, Seed = (HandshakeState, Rc<RefCell<C::Seed>>), Socket = C::Socket>,
+    where H: Protocol<Context = C::Context, Seed = (HandshakeSeed, SyncSender<C::Seed>), Socket = C::Socket>,
           C: Protocol,
-          C::Seed: Default,
+          C::Seed: Default + Copy,
           C::Socket: TryClone
 {
     type Context = H::Context;

@@ -1,13 +1,15 @@
-use std::io::Result;
+use std::io;
 
 use rotor::mio::tcp::TcpStream;
 
+/// Trait for cloning an object which may not be cloneable.
 pub trait TryClone: Sized {
-    fn try_clone(&self) -> Result<Self>;
+    /// Attempt to clone the object.
+    fn try_clone(&self) -> io::Result<Self>;
 }
 
 impl TryClone for TcpStream {
-    fn try_clone(&self) -> Result<Self> {
+    fn try_clone(&self) -> io::Result<Self> {
         self.try_clone()
     }
 }
