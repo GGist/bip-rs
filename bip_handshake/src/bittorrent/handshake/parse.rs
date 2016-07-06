@@ -14,7 +14,7 @@ pub fn parse_remote_handshake(bytes: &[u8],
         pid:          call!(parse_remote_pid, expected_pid) ,
         || { (hash, pid) }
     );
-
+    
     match parse_result {
         IResult::Done(_, (hash, pid)) => Ok((hash, pid)),
         IResult::Error(_) |

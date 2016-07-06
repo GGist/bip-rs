@@ -9,6 +9,11 @@ use try_accept::TryAccept;
 
 // Copied from https://github.com/tailhook/rotor-stream/blob/master/src/accept.rs and modified.
 
+pub enum SeedOrigin<A, M> {
+    Server(A),
+    Connection(M)
+}
+
 pub enum Accept<M, A: TryAccept + Sized>
     where A::Output: StreamSocket,
           M: Accepted<Socket = A::Output>
@@ -38,10 +43,13 @@ impl<M, A> Machine for Accept<M, A>
           M: Accepted<Seed = SocketAddr>
 {
     type Context = M::Context;
-    type Seed = (A::Output, SocketAddr);
+    type Seed = SeedOrigin<(A::Output, SocketAddr), <M as Machine>::Seed>;
 
-    fn create((sock, seed): Self::Seed, scope: &mut Scope<Self::Context>) -> Response<Self, Void> {
-        M::accepted(sock, seed, scope).wrap(Accept::Connection)
+    fn create(seed_origin: Self::Seed, scope: &mut Scope<Self::Context>) -> Response<Self, Void> {
+        match seed_origin {
+            SeedOrigin::Server((sock, seed)) => M::accepted(sock, seed, scope).wrap(Accept::Connection),
+            SeedOrigin::Connection(seed) => M::create(seed, scope).wrap(Accept::Connection)
+        }
     }
 
     fn ready(self, events: EventSet, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
@@ -49,7 +57,7 @@ impl<M, A> Machine for Accept<M, A>
             Accept::Server(a) => {
                 match a.try_accept() {
                     Ok(Some((sock, addr))) => {
-                        let seed = (sock, addr);
+                        let seed = SeedOrigin::Server((sock, addr));
                         Response::spawn(Accept::Server(a), seed)
                     }
                     Ok(None) => Response::ok(Accept::Server(a)),
@@ -66,12 +74,12 @@ impl<M, A> Machine for Accept<M, A>
         }
     }
 
-    fn spawned(self, _scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
+    fn spawned(self, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Accept::Server(a) => {
                 match a.try_accept() {
                     Ok(Some((sock, addr))) => {
-                        let seed = (sock, addr);
+                        let seed = SeedOrigin::Server((sock, addr));
                         Response::spawn(Accept::Server(a), seed)
                     }
                     Ok(None) => Response::ok(Accept::Server(a)),
@@ -81,9 +89,7 @@ impl<M, A> Machine for Accept<M, A>
                     }
                 }
             }
-            Accept::Connection(_) => {
-                unreachable!();
-            }
+            Accept::Connection(m) => m.spawned(scope).map(Accept::Connection, |s| SeedOrigin::Connection(s))
         }
     }
 
@@ -97,7 +103,7 @@ impl<M, A> Machine for Accept<M, A>
     fn wakeup(self, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             me @ Accept::Server(..) => Response::ok(me),
-            Accept::Connection(m) => m.wakeup(scope).map(Accept::Connection, |_| unreachable!()),
+            Accept::Connection(m) => m.wakeup(scope).map(Accept::Connection, |s| SeedOrigin::Connection(s)),
         }
     }
 }

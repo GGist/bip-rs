@@ -82,14 +82,12 @@ fn advance_initiate<C, T>(mut prot: PeerHandshake<T, C>,
             let prot_len = read[0] as usize;
             let our_prot_len = context::peer_context_protocol(context).len();
 
-            read.consume(1);
-
             if prot_len != our_prot_len {
                 Intent::error(Box::new(io::Error::new(io::ErrorKind::ConnectionAborted, "Protocol Length Mismatch")))
             } else {
                 prot.next_state = HandshakeState::Initiate(InitiateState::Done(partial_seed), exp_pid);
 
-                Intent::of(prot).expect_bytes(our_prot_len).deadline(now + Duration::from_millis(PEER_READ_TIMEOUT_MILLIS))
+                Intent::of(prot).expect_bytes(1 + our_prot_len + 48).deadline(now + Duration::from_millis(PEER_READ_TIMEOUT_MILLIS))
             }
         }
         InitiateState::Done(partial_seed) => {
@@ -132,14 +130,12 @@ fn advance_complete<C, T>(mut prot: PeerHandshake<T, C>,
             let prot_len = read[0] as usize;
             let our_prot_len = context::peer_context_protocol(context).len();
 
-            read.consume(1);
-
             if prot_len != our_prot_len {
                 Intent::error(Box::new(io::Error::new(io::ErrorKind::ConnectionAborted, "Protocol Length Mismatch")))
             } else {
                 prot.next_state = HandshakeState::Complete(CompleteState::WriteMessage(empty_seed));
 
-                Intent::of(prot).expect_bytes(our_prot_len).deadline(now + Duration::from_millis(PEER_READ_TIMEOUT_MILLIS))
+                Intent::of(prot).expect_bytes(1 + our_prot_len + 48).deadline(now + Duration::from_millis(PEER_READ_TIMEOUT_MILLIS))
             }
         }
         CompleteState::WriteMessage(empty_seed) => {
@@ -150,7 +146,7 @@ fn advance_complete<C, T>(mut prot: PeerHandshake<T, C>,
 
             let read_length = read.len();
             read.consume(read_length);
-
+            
             let bt_seed = match res_read {
                 Ok((hash, pid)) => empty_seed.found(hash).found(pid),
                 Err(err) => return Intent::error(Box::new(err)),

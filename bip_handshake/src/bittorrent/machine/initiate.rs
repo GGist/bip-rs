@@ -33,7 +33,7 @@ impl<S, T> TrySender<T> for InitiateSender<S>
     fn try_send(&self, data: T) -> Option<T> {
         let ret = self.send.try_send(data);
 
-        if ret.is_some() {
+        if ret.is_none() {
             self.noti.wakeup().expect("bip_handshake: Failed To Wakeup State Machine To Initiate Connection")
         }
         ret

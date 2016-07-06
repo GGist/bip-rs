@@ -1,5 +1,6 @@
 use std::sync::mpsc::{self, SyncSender, Receiver};
 
+use rotor::mio::{PollOpt};
 use rotor::{Machine, Response, Scope, EventSet, Void};
 use rotor_stream::{Accepted, Protocol, Stream};
 
@@ -43,9 +44,12 @@ impl<H, C> PeerStatus<H, C>
 
     /// Creates a PeerStatus over the Connected protocol with the given arguments.
     pub fn connected(sock: C::Socket, recv: Receiver<C::Seed>, scope: &mut Scope<<Self as Machine>::Context>) -> Response<Self, Void> {
-        let seed = recv.try_recv().expect("bip_handshake: Failed To Receive Seed From Finished Handshaker");
+        let seed = recv.recv().expect("bip_handshake: Failed To Receive Seed From Finished Handshaker");
 
-        Stream::connected(sock, seed, scope).wrap(PeerStatus::Connected)
+        let response = Stream::new(sock, seed, scope).wrap(PeerStatus::Connected);
+        println!("{:?}", response.cause());
+
+        response
     }
 
     /// Creates a PeerStatus over the Handshake protocol and tell the protocol that it is initiating the connection.
