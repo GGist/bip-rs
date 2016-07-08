@@ -69,7 +69,7 @@ impl<M, A> Machine for Accept<M, A>
             }
             Accept::Connection(m) => {
                 m.ready(events, scope)
-                 .map(Accept::Connection, |_| unreachable!())
+                 .map(Accept::Connection, |s| SeedOrigin::Connection(s))
             }
         }
     }
@@ -96,7 +96,7 @@ impl<M, A> Machine for Accept<M, A>
     fn timeout(self, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Accept::Server(..) => unreachable!(),
-            Accept::Connection(m) => m.timeout(scope).map(Accept::Connection, |_| unreachable!()),
+            Accept::Connection(m) => m.timeout(scope).map(Accept::Connection, |s| SeedOrigin::Connection(s)),
         }
     }
 

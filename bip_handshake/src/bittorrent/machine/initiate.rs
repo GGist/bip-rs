@@ -34,7 +34,8 @@ impl<S, T> TrySender<T> for InitiateSender<S>
         let ret = self.send.try_send(data);
 
         if ret.is_none() {
-            self.noti.wakeup().expect("bip_handshake: Failed To Wakeup State Machine To Initiate Connection")
+            self.noti.wakeup()
+                .expect("bip_handshake: Failed To Wakeup State Machine To Initiate Connection")
         }
         ret
     }

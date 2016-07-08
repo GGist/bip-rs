@@ -6,6 +6,7 @@ use std::sync::mpsc::{self, Sender, Receiver};
 use std::error::{Error};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::io::Write;
+use std::time::Duration;
 
 use rotor::{Scope};
 use rotor::mio::tcp::{TcpStream, TcpListener};
@@ -32,21 +33,22 @@ impl Protocol for HelloWorldProtocol {
     type Seed = BTSeed;
 
     fn create(seed: Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
-        println!("ASD");
         scope.notifier().wakeup().unwrap();
 
         Intent::of(HelloWorldProtocol).sleep()
     }
 
     fn bytes_read(self, transport: &mut Transport<Self::Socket>, end: usize, scope: &mut Scope<Self::Context>) -> Intent<Self> {
+        
+        println!("ASDASDASD");
         let message = String::from_utf8(transport.input()[..].to_vec()).unwrap();
         scope.send.send(message).unwrap();
 
-        Intent::done()
+        Intent::of(HelloWorldProtocol).sleep().deadline(scope.now() + Duration::from_millis(5000))
     }
 
     fn bytes_flushed(self, transport: &mut Transport<Self::Socket>, scope: &mut Scope<Self::Context>) -> Intent<Self> {
-        Intent::of(HelloWorldProtocol).expect_delimiter(b"\n", 128)
+        Intent::of(HelloWorldProtocol).expect_bytes(12)
     }
 
     fn timeout(self, transport: &mut Transport<Self::Socket>, scope: &mut Scope<Self::Context>) -> Intent<Self> {
@@ -54,7 +56,8 @@ impl Protocol for HelloWorldProtocol {
     }
 
     fn exception(self, _transport: &mut Transport<Self::Socket>, reason: Exception, _scope: &mut Scope<Self::Context>) -> Intent<Self> {
-        unimplemented!()
+        println!("{:?}", reason);
+        Intent::of(HelloWorldProtocol).expect_bytes(12)
     }
 
     fn fatal(self, reason: Exception, scope: &mut Scope<Self::Context>) -> Option<Box<Error>> {
