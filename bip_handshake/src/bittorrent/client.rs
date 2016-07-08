@@ -78,7 +78,7 @@ impl<S, M> BTHandshaker<S, M> {
 
     /// Register interest for the given InfoHash allowing connections for the given InfoHash to succeed.
     /// Connections already in the handshaking process may not be affected by this call.
-    /// 
+    ///
     /// Connections already in the handshaking process MAY NOT be affected by this call.
     /// If a peer connection with an inactive InfoHash is spun up, you should handle it in the PeerProtocol.
     ///
@@ -169,17 +169,17 @@ fn spawn_state_machine<P>(listen: SocketAddr,
     // Grabbing this after the bind so that we can resolve '0' port numbers
     let port = try!(listener.local_address()).port();
     eloop.add_machine_with(|early| Accept::new(listener, early))
-         .expect("bip_handshake: Failed To Start TcpListener State Machine");
+        .expect("bip_handshake: Failed To Start TcpListener State Machine");
 
     // Startup Connection Initiation State Machine
     let (send, recv) = mpsc::channel();
     let mut peer_send = None;
     eloop.add_machine_with(|early| {
-             peer_send = Some(InitiateSender::new(send, early.notifier()));
+            peer_send = Some(InitiateSender::new(send, early.notifier()));
 
-             Response::ok(Accept::Connection(Initiate::Recv(recv)))
-         })
-         .expect("bip_handshake: Failed To Start Connection Initiation State Machine");
+            Response::ok(Accept::Connection(Initiate::Recv(recv)))
+        })
+        .expect("bip_handshake: Failed To Start Connection Initiation State Machine");
 
     thread::spawn(move || {
         eloop.run(context).expect("bip_handshake: State Machines Failed Unexpectedly");

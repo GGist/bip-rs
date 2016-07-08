@@ -11,7 +11,7 @@ use try_accept::TryAccept;
 
 pub enum SeedOrigin<A, M> {
     Server(A),
-    Connection(M)
+    Connection(M),
 }
 
 pub enum Accept<M, A: TryAccept + Sized>
@@ -48,7 +48,7 @@ impl<M, A> Machine for Accept<M, A>
     fn create(seed_origin: Self::Seed, scope: &mut Scope<Self::Context>) -> Response<Self, Void> {
         match seed_origin {
             SeedOrigin::Server((sock, seed)) => M::accepted(sock, seed, scope).wrap(Accept::Connection),
-            SeedOrigin::Connection(seed) => M::create(seed, scope).wrap(Accept::Connection)
+            SeedOrigin::Connection(seed) => M::create(seed, scope).wrap(Accept::Connection),
         }
     }
 
@@ -69,7 +69,7 @@ impl<M, A> Machine for Accept<M, A>
             }
             Accept::Connection(m) => {
                 m.ready(events, scope)
-                 .map(Accept::Connection, |s| SeedOrigin::Connection(s))
+                    .map(Accept::Connection, |s| SeedOrigin::Connection(s))
             }
         }
     }
@@ -89,7 +89,7 @@ impl<M, A> Machine for Accept<M, A>
                     }
                 }
             }
-            Accept::Connection(m) => m.spawned(scope).map(Accept::Connection, |s| SeedOrigin::Connection(s))
+            Accept::Connection(m) => m.spawned(scope).map(Accept::Connection, |s| SeedOrigin::Connection(s)),
         }
     }
 

@@ -1,4 +1,4 @@
-use std::sync::mpsc::{SyncSender, Receiver};
+use std::sync::mpsc::{Sender, Receiver};
 use std::net::SocketAddr;
 
 use bip_util::send::TrySender;
@@ -9,7 +9,6 @@ use rotor_stream::{Protocol, Accepted};
 use bittorrent::handshake::HandshakeSeed;
 use bittorrent::machine::status::PeerStatus;
 use bittorrent::seed::{CompleteSeed, InitiateSeed};
-use try_clone::TryClone;
 use try_connect::TryConnect;
 
 pub struct InitiateSender<S> {
@@ -34,7 +33,8 @@ impl<S, T> TrySender<T> for InitiateSender<S>
         let ret = self.send.try_send(data);
 
         if ret.is_none() {
-            self.noti.wakeup()
+            self.noti
+                .wakeup()
                 .expect("bip_handshake: Failed To Wakeup State Machine To Initiate Connection")
         }
         ret
@@ -56,8 +56,7 @@ impl<S> Clone for InitiateSender<S>
 
 pub enum Initiate<H, C>
     where H: Protocol,
-          C: Protocol,
-          C::Seed: Copy
+          C: Protocol
 {
     Peer(PeerStatus<H, C>),
     Recv(Receiver<InitiateSeed>),
@@ -66,8 +65,7 @@ pub enum Initiate<H, C>
 impl<H, C> Initiate<H, C>
     where H: Protocol,
           C: Protocol,
-          C::Socket: TryConnect,
-          C::Seed: Copy
+          C::Socket: TryConnect
 {
     /// Try to receive an initiation seed from the given receiver.
     ///
@@ -86,10 +84,9 @@ impl<H, C> Initiate<H, C>
 }
 
 impl<H, C> Accepted for Initiate<H, C>
-    where H: Protocol<Context = C::Context, Seed = (HandshakeSeed, SyncSender<C::Seed>), Socket = C::Socket>,
+    where H: Protocol<Context = C::Context, Seed = (HandshakeSeed, Sender<C::Seed>), Socket = C::Socket>,
           C: Protocol,
-          C::Seed: Default + Copy,
-          C::Socket: TryClone + TryConnect
+          C::Socket: TryConnect
 {
     type Seed = SocketAddr;
     type Socket = C::Socket;
@@ -100,10 +97,9 @@ impl<H, C> Accepted for Initiate<H, C>
 }
 
 impl<H, C> Machine for Initiate<H, C>
-    where H: Protocol<Context = C::Context, Seed = (HandshakeSeed, SyncSender<C::Seed>), Socket = C::Socket>,
+    where H: Protocol<Context = C::Context, Seed = (HandshakeSeed, Sender<C::Seed>), Socket = C::Socket>,
           C: Protocol,
-          C::Seed: Default + Copy,
-          C::Socket: TryClone + TryConnect
+          C::Socket: TryConnect
 {
     type Context = H::Context;
     type Seed = (C::Socket, InitiateSeed);

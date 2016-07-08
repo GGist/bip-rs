@@ -8,7 +8,6 @@ use bittorrent::seed::BTSeed;
 use local_address::LocalAddress;
 use try_accept::TryAccept;
 use try_bind::TryBind;
-use try_clone::TryClone;
 use try_connect::TryConnect;
 
 /// Trait for plugging in custom peer protocols.
@@ -23,5 +22,5 @@ pub trait PeerProtocol {
     type Listener: LocalAddress + TryBind + TryAccept<Output = Self::Socket> + Evented + Any + Send;
 
     /// Socket that is stream oriented and can be cloned.
-    type Socket: TryConnect + TryClone + StreamSocket + Send;
+    type Socket: TryConnect + StreamSocket + Send;
 }

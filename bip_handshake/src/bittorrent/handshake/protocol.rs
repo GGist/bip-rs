@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::sync::mpsc::SyncSender;
+use std::sync::mpsc::Sender;
 use std::io::{self, Write};
 use std::error::Error;
 use std::time::Duration;
@@ -17,7 +17,7 @@ use bittorrent::seed::{BTSeed, EmptyBTSeed, PartialBTSeed};
 const PEER_READ_TIMEOUT_MILLIS: u64 = 5000;
 
 pub struct PeerHandshake<T, C> {
-    send: SyncSender<BTSeed>,
+    send: Sender<BTSeed>,
     next_state: HandshakeState,
     _transport: PhantomData<T>,
     _context: PhantomData<C>,
@@ -26,7 +26,7 @@ pub struct PeerHandshake<T, C> {
 impl<T, C> PeerHandshake<T, C>
     where T: StreamSocket
 {
-    pub fn new(seed: HandshakeSeed, send: SyncSender<BTSeed>) -> PeerHandshake<T, C> {
+    pub fn new(seed: HandshakeSeed, send: Sender<BTSeed>) -> PeerHandshake<T, C> {
         let next_state = match seed {
             HandshakeSeed::Initiate(init_seed) => HandshakeState::Initiate(InitiateState::WriteMessage(init_seed.0), init_seed.1),
             HandshakeSeed::Complete(comp_seed) => HandshakeState::Complete(CompleteState::ReadLength(comp_seed.0)),
@@ -60,10 +60,8 @@ fn advance_initiate<C, T>(mut prot: PeerHandshake<T, C>,
                           -> Intent<PeerHandshake<T, C>> {
     match next {
         InitiateState::WriteMessage(partial_seed) => {
-            let res_write = write_handshake(write,
-                                            context::peer_context_protocol(context),
-                                            partial_seed.hash(),
-                                            context::peer_context_pid(context));
+            let res_write =
+                write_handshake(write, context::peer_context_protocol(context), partial_seed.hash(), context::peer_context_pid(context));
 
             if let Err(write_err) = res_write {
                 Intent::error(Box::new(write_err))
@@ -105,7 +103,7 @@ fn advance_initiate<C, T>(mut prot: PeerHandshake<T, C>,
                         .send(partial_seed.found(pid))
                         .expect("bip_handshake: Failed To Send Seed From Finished Handshaker");
 
-                    Intent::done()
+                    Intent::of(prot).sleep()
                 }
                 Err(err) => Intent::error(Box::new(err)),
             }
@@ -146,16 +144,14 @@ fn advance_complete<C, T>(mut prot: PeerHandshake<T, C>,
 
             let read_length = read.len();
             read.consume(read_length);
-            
+
             let bt_seed = match res_read {
                 Ok((hash, pid)) => empty_seed.found(hash).found(pid),
                 Err(err) => return Intent::error(Box::new(err)),
             };
 
-            let res_write = write_handshake(write,
-                                            context::peer_context_protocol(context),
-                                            bt_seed.hash(),
-                                            context::peer_context_pid(context));
+            let res_write =
+                write_handshake(write, context::peer_context_protocol(context), bt_seed.hash(), context::peer_context_pid(context));
 
             if let Err(write_err) = res_write {
                 Intent::error(Box::new(write_err))
@@ -170,7 +166,7 @@ fn advance_complete<C, T>(mut prot: PeerHandshake<T, C>,
                 .send(bt_seed)
                 .expect("bip_handshake: Failed To Send Seed From Finished Handshaker");
 
-            Intent::done()
+            Intent::of(prot).sleep()
         }
     }
 }
@@ -208,7 +204,7 @@ impl<T, C> Protocol for PeerHandshake<T, C>
 {
     type Context = BTContext<C>;
     type Socket = T;
-    type Seed = (HandshakeSeed, SyncSender<BTSeed>);
+    type Seed = (HandshakeSeed, Sender<BTSeed>);
 
     fn create((handshake_seed, peer_seed): Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
         if scope.notifier().wakeup().is_ok() {

@@ -17,7 +17,7 @@ license       = "MIT/Apache-2.0"
 bip_util      = { path = "../bip_util", version = "0.4.0" }
 nom           = "1.2.0"
 rotor         = "0.6.0"
-rotor-stream  = "0.6.0"
+rotor-stream  = { git = "https://github.com/GGist/rotor-stream.git", branch = "reclaim_stream_socket" }
 
 [features]
 unstable      = []
