@@ -108,13 +108,19 @@ impl<S, M> Handshaker for BTHandshaker<S, M>
     }
 
     fn connect(&mut self, expected: Option<PeerId>, hash: InfoHash, addr: SocketAddr) {
-        let init_seed = match expected {
-            Some(pid) => InitiateSeed::expect_pid(addr, hash, pid),
-            None => InitiateSeed::new(addr, hash),
-        };
+        // If this becomes a performance problem, we can move this to the state machine,
+        // however, the benefit for checking here is that we can check before setting
+        // up the actual transport, otherwise, that transport may get setup and immediately
+        // torn down.
+        if self.interest.read().expect("bip_handshake: Client Failed To Read Interest").contains(&hash) {
+            let init_seed = match expected {
+                Some(pid) => InitiateSeed::expect_pid(addr, hash, pid),
+                None => InitiateSeed::new(addr, hash),
+            };
 
-        if let Some(_) = self.peer_send.try_send(init_seed) {
-            // TODO: Add logging?
+            if let Some(_) = self.peer_send.try_send(init_seed) {
+                // TODO: Add logging?
+            }
         }
     }
 

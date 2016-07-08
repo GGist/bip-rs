@@ -16,10 +16,14 @@ pub use handshaker::Handshaker;
 pub use bittorrent::client::BTHandshaker;
 pub use bittorrent::handshake::context::BTContext;
 pub use bittorrent::seed::BTSeed;
-pub use local_address::LocalAddress;
-pub use peer_protocol::PeerProtocol;
-pub use try_accept::TryAccept;
-pub use try_bind::TryBind;
-pub use try_connect::TryConnect;
+
+/// Traits for providing handshakers with custom peer protocols.
+pub mod protocol {
+    pub use local_address::LocalAddress;
+    pub use peer_protocol::PeerProtocol;
+    pub use try_accept::TryAccept;
+    pub use try_bind::TryBind;
+    pub use try_connect::TryConnect;
+}
 
 pub use bip_util::bt::{PeerId, InfoHash};

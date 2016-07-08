@@ -11,7 +11,8 @@ use rotor::{Scope};
 use rotor::mio::tcp::{TcpStream, TcpListener};
 use rotor_stream::{Protocol, Intent, Transport, Exception};
 
-use bip_handshake::{PeerProtocol, Handshaker, BTSeed, BTContext, BTHandshaker};
+use bip_handshake::{Handshaker, BTSeed, BTContext, BTHandshaker};
+use bip_handshake::protocol::{PeerProtocol};
 
 /// Context that we can create and pass in to access from within our protocol.
 struct HelloWorldContext {
