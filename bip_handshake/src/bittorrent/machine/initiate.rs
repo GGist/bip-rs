@@ -3,7 +3,6 @@ use std::net::SocketAddr;
 
 use bip_util::send::TrySender;
 use rotor::{Void, Scope, Response, Machine, EventSet, Notifier};
-use rotor::mio::tcp::TcpStream;
 use rotor_stream::{Protocol, Accepted};
 
 use bittorrent::handshake::HandshakeSeed;
@@ -115,7 +114,7 @@ impl<H, C> Machine for Initiate<H, C>
         }
     }
 
-    fn spawned(self, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
+    fn spawned(self, _scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Initiate::Peer(_) => unreachable!(),
             Initiate::Recv(r) => Initiate::try_receive(r),

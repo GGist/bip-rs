@@ -1,8 +1,7 @@
 use std::sync::mpsc::{self, Sender, Receiver};
 
-use rotor::mio::PollOpt;
 use rotor::{Machine, Response, Scope, EventSet, Void};
-use rotor_stream::{Accepted, Protocol, Stream, MigrateProtocol};
+use rotor_stream::{Protocol, Stream, MigrateProtocol};
 
 use bittorrent::handshake::HandshakeSeed;
 use bittorrent::seed::{InitiateSeed, CompleteSeed};

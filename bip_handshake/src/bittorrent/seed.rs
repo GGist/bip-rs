@@ -41,10 +41,6 @@ impl EmptyBTSeed {
         EmptyBTSeed { addr: addr }
     }
 
-    pub fn addr(&self) -> SocketAddr {
-        self.addr
-    }
-
     pub fn found(self, hash: InfoHash) -> PartialBTSeed {
         PartialBTSeed {
             addr: self.addr,

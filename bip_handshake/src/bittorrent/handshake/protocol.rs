@@ -4,15 +4,14 @@ use std::io::{self, Write};
 use std::error::Error;
 use std::time::Duration;
 
-use bip_util::bt::{self, PeerId, InfoHash};
+use bip_util::bt::{PeerId, InfoHash};
 use rotor::{Scope, Time};
 use rotor_stream::{StreamSocket, Intent, Transport, Buf, Protocol, Exception};
-use nom::{IResult, be_u8};
 
 use bittorrent::handshake::{HandshakeSeed, HandshakeState, InitiateState, CompleteState};
 use bittorrent::handshake::context::{self, BTContext};
 use bittorrent::handshake::parse;
-use bittorrent::seed::{BTSeed, EmptyBTSeed, PartialBTSeed};
+use bittorrent::seed::BTSeed;
 
 const PEER_READ_TIMEOUT_MILLIS: u64 = 5000;
 
@@ -206,7 +205,7 @@ impl<T, C> Protocol for PeerHandshake<T, C>
     type Socket = T;
     type Seed = (HandshakeSeed, Sender<BTSeed>);
 
-    fn create((handshake_seed, peer_seed): Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
+    fn create((handshake_seed, peer_seed): Self::Seed, _sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
         if scope.notifier().wakeup().is_ok() {
             Intent::of(PeerHandshake::new(handshake_seed, peer_seed)).sleep()
         } else {
@@ -214,7 +213,7 @@ impl<T, C> Protocol for PeerHandshake<T, C>
         }
     }
 
-    fn bytes_read(self, transport: &mut Transport<Self::Socket>, end: usize, scope: &mut Scope<Self::Context>) -> Intent<Self> {
+    fn bytes_read(self, transport: &mut Transport<Self::Socket>, _end: usize, scope: &mut Scope<Self::Context>) -> Intent<Self> {
         let (read, write) = transport.buffers();
         let now = scope.now();
 
@@ -228,15 +227,15 @@ impl<T, C> Protocol for PeerHandshake<T, C>
         self.advance(now, &**scope, read, write)
     }
 
-    fn timeout(self, transport: &mut Transport<Self::Socket>, scope: &mut Scope<Self::Context>) -> Intent<Self> {
+    fn timeout(self, _transport: &mut Transport<Self::Socket>, _scope: &mut Scope<Self::Context>) -> Intent<Self> {
         Intent::error(Box::new(io::Error::new(io::ErrorKind::TimedOut, "Remote Peer Handshake Timed Out")))
     }
 
-    fn exception(self, _transport: &mut Transport<Self::Socket>, reason: Exception, _scope: &mut Scope<Self::Context>) -> Intent<Self> {
+    fn exception(self, _transport: &mut Transport<Self::Socket>, _reason: Exception, _scope: &mut Scope<Self::Context>) -> Intent<Self> {
         Intent::error(Box::new(io::Error::new(io::ErrorKind::ConnectionAborted, "Remote Peer Aborted The Handshake")))
     }
 
-    fn fatal(self, reason: Exception, scope: &mut Scope<Self::Context>) -> Option<Box<Error>> {
+    fn fatal(self, _reason: Exception, _scope: &mut Scope<Self::Context>) -> Option<Box<Error>> {
         None
     }
 

@@ -9,12 +9,10 @@ use std::marker::PhantomData;
 use bip_util::bt::{InfoHash, PeerId};
 use bip_util::send::TrySender;
 use rotor::{Loop, Config, Response};
-use rotor::mio::tcp::{TcpStream, TcpListener};
-use rotor_stream::{Protocol, Stream};
 
-use bittorrent::seed::{InitiateSeed, BTSeed};
+use bittorrent::seed::InitiateSeed;
 use bittorrent::handshake::protocol::PeerHandshake;
-use bittorrent::handshake::context::{self, BTContext};
+use bittorrent::handshake::context;
 use bittorrent::machine::accept::Accept;
 use bittorrent::machine::initiate::{Initiate, InitiateSender};
 use handshaker::Handshaker;
@@ -140,12 +138,6 @@ impl<S, M> Clone for BTHandshaker<S, M>
             _metadata: PhantomData,
         }
     }
-}
-
-enum ProxyResult<T, E, P> {
-    Ok(T),
-    Err(E),
-    Panic(P),
 }
 
 fn spawn_state_machine<P>(listen: SocketAddr,
