@@ -15,6 +15,8 @@ use bip_handshake::protocol::{PeerProtocol};
 mod test_connect;
 mod test_connect_any_pid;
 mod test_custom_protocol;
+mod test_drop;
+mod test_drop_clone;
 mod test_initiate_wrong_hash;
 mod test_receive_wrong_hash;
 mod test_wrong_pid;

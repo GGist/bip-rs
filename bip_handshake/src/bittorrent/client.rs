@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::net::SocketAddr;
 use std::io;
@@ -14,7 +15,7 @@ use bittorrent::seed::InitiateSeed;
 use bittorrent::handshake::protocol::PeerHandshake;
 use bittorrent::handshake::context;
 use bittorrent::machine::accept::Accept;
-use bittorrent::machine::initiate::{Initiate, InitiateSender};
+use bittorrent::machine::initiate::{Initiate, InitiateSender, InitiateMessage};
 use handshaker::Handshaker;
 use peer_protocol::PeerProtocol;
 use try_bind::TryBind;
@@ -27,10 +28,11 @@ const MAXIMUM_ACTIVE_CONNECTIONS: usize = 8192;
 /// Bittorrent handshaker that can compose with a `PeerProtocol`.
 pub struct BTHandshaker<S, M> {
     meta_send: S,
-    peer_send: InitiateSender<Sender<InitiateSeed>>,
+    peer_send: InitiateSender<Sender<InitiateMessage>>,
     interest: Arc<RwLock<HashSet<InfoHash>>>,
     pid: PeerId,
     port: u16,
+    ref_check: Arc<AtomicUsize>,
     _metadata: PhantomData<M>,
 }
 
@@ -70,6 +72,7 @@ impl<S, M> BTHandshaker<S, M> {
             interest: interest,
             pid: pid,
             port: port,
+            ref_check: Arc::new(AtomicUsize::new(1)),
             _metadata: PhantomData,
         })
     }
@@ -90,6 +93,18 @@ impl<S, M> BTHandshaker<S, M> {
     /// See `BTHandshaker::register` for more information.
     pub fn deregister(&self, hash: InfoHash) {
         self.interest.write().unwrap().remove(&hash);
+    }
+}
+
+impl<S, M> Drop for BTHandshaker<S, M> {
+    fn drop(&mut self) {
+        // Returns the previous stored value, subtract 1 to get the currently stored value after the fetch_sub
+        let active_refs = self.ref_check.fetch_sub(1, Ordering::SeqCst) - 1;
+
+        if active_refs == 0 {
+            // TODO: Use a SplitSender here in the future to guarantee there is space
+            assert!(self.peer_send.try_send(InitiateMessage::Shutdown).is_none());
+        }
     }
 }
 
@@ -118,7 +133,7 @@ impl<S, M> Handshaker for BTHandshaker<S, M>
                 None => InitiateSeed::new(addr, hash),
             };
 
-            if let Some(_) = self.peer_send.try_send(init_seed) {
+            if let Some(_) = self.peer_send.try_send(InitiateMessage::Initiate(init_seed)) {
                 // TODO: Add logging?
             }
         }
@@ -135,12 +150,15 @@ impl<S, M> Clone for BTHandshaker<S, M>
     where S: Clone
 {
     fn clone(&self) -> BTHandshaker<S, M> {
+        self.ref_check.fetch_add(1, Ordering::SeqCst);
+
         BTHandshaker {
             meta_send: self.meta_send.clone(),
             peer_send: self.peer_send.clone(),
             interest: self.interest.clone(),
             pid: self.pid,
             port: self.port,
+            ref_check: self.ref_check.clone(),
             _metadata: PhantomData,
         }
     }
@@ -151,7 +169,7 @@ fn spawn_state_machine<P>(listen: SocketAddr,
                           context: P::Context,
                           interest: Arc<RwLock<HashSet<InfoHash>>>,
                           protocol: &'static str)
-                          -> io::Result<(InitiateSender<Sender<InitiateSeed>>, u16)>
+                          -> io::Result<(InitiateSender<Sender<InitiateMessage>>, u16)>
     where P: PeerProtocol + 'static,
           P::Context: Send + 'static
 {

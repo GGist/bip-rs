@@ -10,6 +10,13 @@ use bittorrent::machine::status::PeerStatus;
 use bittorrent::seed::{CompleteSeed, InitiateSeed};
 use try_connect::TryConnect;
 
+pub enum InitiateMessage {
+    Initiate(InitiateSeed),
+    Shutdown
+}
+
+// ----------------------------------------------------------------------------//
+
 pub struct InitiateSender<S> {
     send: S,
     noti: Notifier,
@@ -58,7 +65,7 @@ pub enum Initiate<H, C>
           C: Protocol
 {
     Peer(PeerStatus<H, C>),
-    Recv(Receiver<InitiateSeed>),
+    Recv(Receiver<InitiateMessage>),
 }
 
 impl<H, C> Initiate<H, C>
@@ -70,14 +77,23 @@ impl<H, C> Initiate<H, C>
     ///
     /// If a seed is received, a connection will be attempted and
     /// if successful, a new Peer state machine will be spawned.
-    fn try_receive(recv: Receiver<InitiateSeed>) -> Response<Self, (C::Socket, InitiateSeed)> {
-        let opt_seed = recv.try_recv().ok().and_then(|init| C::Socket::try_connect(init.addr()).ok().map(|stream| (stream, init)));
+    fn try_receive(recv: Receiver<InitiateMessage>, scope: &mut Scope<H::Context>) -> Response<Self, (C::Socket, InitiateSeed)> {
+        let opt_message = recv.try_recv().ok();
 
-        let self_recv = Initiate::Recv(recv);
-        if let Some(seed) = opt_seed {
-            Response::spawn(self_recv, seed)
-        } else {
-            Response::ok(self_recv)
+        let self_variant = Initiate::Recv(recv);
+        match opt_message {
+            Some(InitiateMessage::Initiate(init)) => {
+                match C::Socket::try_connect(init.addr()).ok() {
+                    Some(stream) => Response::spawn(self_variant, (stream, init)),
+                    None => Response::ok(self_variant)
+                }
+            },
+            Some(InitiateMessage::Shutdown) => {
+                scope.shutdown_loop();
+
+                Response::done()
+            },
+            None => Response::ok(self_variant)
         }
     }
 }
@@ -114,10 +130,10 @@ impl<H, C> Machine for Initiate<H, C>
         }
     }
 
-    fn spawned(self, _scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
+    fn spawned(self, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Initiate::Peer(_) => unreachable!(),
-            Initiate::Recv(r) => Initiate::try_receive(r),
+            Initiate::Recv(r) => Initiate::try_receive(r, scope),
         }
     }
 
@@ -131,7 +147,7 @@ impl<H, C> Machine for Initiate<H, C>
     fn wakeup(self, scope: &mut Scope<Self::Context>) -> Response<Self, Self::Seed> {
         match self {
             Initiate::Peer(p) => p.wakeup(scope).map(Initiate::Peer, |_| unreachable!()),
-            Initiate::Recv(r) => Initiate::try_receive(r),
+            Initiate::Recv(r) => Initiate::try_receive(r, scope),
         }
     }
 }
