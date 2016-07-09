@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use bip_util::bt::{InfoHash, PeerId};
 
-/// Trait for peer discovery services to forward peer contact information and metadata.
+/// Trait for forwarding peer contact information and metadata.
 pub trait Handshaker: Send {
     /// Type that metadata will be passed back to the client as.
     type MetadataEnvelope: Send;
