@@ -68,14 +68,15 @@ impl MessageType {
             &MessageType::Request(ref msg) => msg.write_bytes(writer),
             &MessageType::Piece(ref msg) => msg.write_bytes(writer),
             &MessageType::Cancel(ref msg) => msg.write_bytes(writer),
-            &MessageType::Extension(ref ext) => ext.write_bytes(writer)
+            &MessageType::Extension(ref ext) => ext.write_bytes(writer),
         }
     }
 }
 
 /// Write a length and optional id out to the given writer.
 pub fn write_length_id_pair<W>(mut writer: W, length: u32, opt_id: Option<u8>) -> io::Result<()>
-    where W: Write {
+    where W: Write
+{
     try!(writer.write_u32::<BigEndian>(length));
 
     if let Some(id) = opt_id {

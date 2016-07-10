@@ -272,8 +272,8 @@ mod tests {
                 assert_eq!(hash.as_ref(), &[0u8; 20]);
 
                 (peer_ident, peer_send)
-            },
-            _ => panic!("Failed To Receive OProtocolMessageKind::PeerConnect")
+            }
+            _ => panic!("Failed To Receive OProtocolMessageKind::PeerConnect"),
         }
     }
 
@@ -321,12 +321,12 @@ mod tests {
 
         let (buffer, recv_first_message) = match MessageType::from_bytes(&recv_buffer) {
             IResult::Done(buffer, msg) => (buffer, msg),
-            _ => panic!("Failed To Parse First Message")
+            _ => panic!("Failed To Parse First Message"),
         };
 
         let recv_second_message = match MessageType::from_bytes(buffer) {
             IResult::Done(_, msg) => msg,
-            _ => panic!("Failed To Parse Second Message")
+            _ => panic!("Failed To Parse Second Message"),
         };
 
         assert_eq!(recv_first_message, MessageType::Have(have_message));
@@ -352,15 +352,15 @@ mod tests {
         assert_eq!(first_peer_ident, peer_ident);
         match recv_first_message {
             OProtocolMessageKind::PeerHave(recv_have_message) => assert_eq!(recv_have_message, have_message),
-            _ => panic!("Failed To Receive Have Message")
+            _ => panic!("Failed To Receive Have Message"),
         }
 
         assert_eq!(second_peer_ident, peer_ident);
         match recv_second_message {
             OProtocolMessageKind::PeerRequest(recv_request_message) => assert_eq!(recv_request_message, request_message),
-            _ => panic!("Failed To Receive Request Message")
+            _ => panic!("Failed To Receive Request Message"),
         }
-        
+
         assert!(peer_send.try_send(OSelectorMessage::new(peer_ident, OSelectorMessageKind::PeerDisconnect)).is_none());
     }
 }

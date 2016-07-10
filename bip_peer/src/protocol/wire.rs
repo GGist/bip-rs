@@ -393,8 +393,7 @@ impl<L> Protocol for WireProtocol<L>
                         // If the selection layer sent us a disconnect message, handle it here
                         if self.process_message(now, sel_msg) {
                             // Since the selection layer initiated the disconnect, dont send the disconnect to them
-                            return self.advance_disconnect(|_| (),
-                                                           ProtocolError::new(id, ProtocolErrorKind::RemoteDisconnect));
+                            return self.advance_disconnect(|_| (), ProtocolError::new(id, ProtocolErrorKind::RemoteDisconnect));
                         }
                     }
                 }

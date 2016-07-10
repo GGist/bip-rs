@@ -23,7 +23,7 @@ impl ExtensionType {
         where W: Write
     {
         match self {
-            &ExtensionType::Port(msg) => msg.write_bytes(writer)
+            &ExtensionType::Port(msg) => msg.write_bytes(writer),
         }
     }
 }
