@@ -1,7 +1,7 @@
 
 use bip_util::send::TrySender;
 
-use piece::{ISelectorMessage, OSelectorMessage, SelectorSender};
+use selector::{ISelectorMessage, OSelectorMessage, SelectorSender};
 use protocol::OProtocolMessage;
 use registration::LayerRegistration;
 use token::Token;

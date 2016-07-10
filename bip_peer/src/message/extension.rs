@@ -1,4 +1,9 @@
+use std::io::{self, Write};
+
+use byteorder::{WriteBytesExt, BigEndian};
 use nom::{IResult, be_u32, be_u8, be_u16};
+
+use message;
 
 const PORT_MESSAGE_LEN: u32 = 3;
 
@@ -12,6 +17,14 @@ pub enum ExtensionType {
 impl ExtensionType {
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], ExtensionType> {
         parse_extension(bytes)
+    }
+
+    pub fn write_bytes<W>(&self, writer: W) -> io::Result<()>
+        where W: Write
+    {
+        match self {
+            &ExtensionType::Port(msg) => msg.write_bytes(writer)
+        }
     }
 }
 
@@ -37,6 +50,14 @@ impl PortMessage {
 
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
         parse_port(bytes)
+    }
+
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write
+    {
+        try!(message::write_length_id_pair(&mut writer, PORT_MESSAGE_LEN, Some(PORT_MESSAGE_ID)));
+
+        writer.write_u16::<BigEndian>(self.port)
     }
 }
 

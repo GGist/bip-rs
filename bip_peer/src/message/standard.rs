@@ -1,8 +1,10 @@
 use std::borrow::ToOwned;
+use std::io::{self, Write};
+
+use byteorder::{WriteBytesExt, BigEndian};
+use nom::{IResult, be_u32};
 
 use message;
-
-use nom::{IResult, be_u32};
 
 const BITS_PER_BYTE: u32 = 8;
 
@@ -18,6 +20,14 @@ impl HaveMessage {
 
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
         parse_have(bytes)
+    }
+
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write
+    {
+        try!(message::write_length_id_pair(&mut writer, message::HAVE_MESSAGE_LEN, Some(message::HAVE_MESSAGE_ID)));
+
+        writer.write_u32::<BigEndian>(self.piece_index)
     }
 
     pub fn piece_index(&self) -> u32 {
@@ -51,6 +61,15 @@ impl BitFieldMessage {
     pub fn from_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], BitFieldMessage> {
         parse_bitfield(bytes, message::u32_to_usize(len))
     }
+
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write
+    {
+        let actual_length = (1 + self.bytes.len()) as u32;
+        try!(message::write_length_id_pair(&mut writer, actual_length, Some(message::BITFIELD_MESSAGE_ID)));
+
+        writer.write_all(&self.bytes)
+    }
 }
 
 fn parse_bitfield(bytes: &[u8], len: usize) -> IResult<&[u8], BitFieldMessage> {
@@ -77,6 +96,16 @@ impl RequestMessage {
 
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
         parse_request(bytes)
+    }
+
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write
+    {
+        try!(message::write_length_id_pair(&mut writer, message::REQUEST_MESSAGE_LEN, Some(message::REQUEST_MESSAGE_ID)));
+
+        try!(writer.write_u32::<BigEndian>(self.piece_index));
+        try!(writer.write_u32::<BigEndian>(self.block_offset));
+        writer.write_u32::<BigEndian>(self.block_length as u32)
     }
 
     pub fn piece_index(&self) -> u32 {
@@ -118,6 +147,16 @@ impl PieceMessage {
 
     pub fn from_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], PieceMessage> {
         parse_piece(bytes, message::u32_to_usize(len))
+    }
+
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write
+    {
+        let actual_length = (9 + self.block_length) as u32;
+        try!(message::write_length_id_pair(&mut writer, actual_length, Some(message::PIECE_MESSAGE_ID)));
+
+        try!(writer.write_u32::<BigEndian>(self.piece_index));
+        writer.write_u32::<BigEndian>(self.block_offset)
     }
 
     pub fn piece_index(&self) -> u32 {
@@ -162,6 +201,16 @@ impl CancelMessage {
 
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], CancelMessage> {
         parse_cancel(bytes)
+    }
+
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
+        where W: Write
+    {
+        try!(message::write_length_id_pair(&mut writer, message::CANCEL_MESSAGE_LEN, Some(message::CANCEL_MESSAGE_ID)));
+
+        try!(writer.write_u32::<BigEndian>(self.piece_index));
+        try!(writer.write_u32::<BigEndian>(self.block_offset));
+        writer.write_u32::<BigEndian>(self.block_length as u32)
     }
 
     pub fn piece_index(&self) -> u32 {

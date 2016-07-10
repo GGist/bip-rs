@@ -3,21 +3,25 @@ use std::error::Error;
 use std::collections::{VecDeque, HashMap};
 use std::collections::hash_map::Entry;
 use std::time::Duration;
+use std::marker::PhantomData;
+use std::any::Any;
 
+use bip_handshake::{BTContext, BTSeed};
+use bip_handshake::protocol::{PeerProtocol, LocalAddress, TryBind, TryAccept, TryConnect};
 use bip_util::bt::{PeerId, InfoHash};
 use bip_util::send::{TrySender, SplitSender};
 use rotor::{Scope, Time};
+use rotor::mio::Evented;
 use rotor::mio::tcp::TcpStream;
-use rotor_stream::{Protocol, Intent, Exception, Transport, Buf};
+use rotor_stream::{Protocol, Intent, Exception, Transport, Buf, StreamSocket, SocketError};
 use nom::IResult;
 
 use disk::{ActiveDiskManager, IDiskMessage, ODiskMessage};
 use message::{self, MessageType};
 use protocol::{PeerIdentifier, IProtocolMessage, ProtocolSender, OProtocolMessage, OProtocolMessageKind};
-use protocol::tcp;
-use protocol::machine::ProtocolContext;
+use protocol::context::WireContext;
 use protocol::error::{ProtocolError, ProtocolErrorKind};
-use piece::{OSelectorMessage, OSelectorMessageKind};
+use selector::{OSelectorMessage, OSelectorMessageKind};
 use token::Token;
 
 // Max messages incoming to our connection from both the selection thread and disk thread.
@@ -30,15 +34,12 @@ pub const MAX_INCOMING_MESSAGES: usize = 8;
 const MAX_PEER_TIMEOUT_MILLIS: u64 = 2 * 60 * 1000;
 const MAX_SELF_TIMEOUT_MILLIS: u64 = (30 + 60) * 1000;
 
-/// PeerConnection that stores information related to the messages being
-/// sent and received which will propogate both out to the remote peer as
-/// well as the upper, local, piece selection layer.
-pub struct PeerConnection {
+pub struct WireProtocol<L> {
     id: PeerIdentifier,
     disk: ActiveDiskManager,
     send: SplitSender<ProtocolSender>,
     recv: Receiver<IProtocolMessage>,
-    state: PeerState,
+    state: WireState,
     // Any writes that can immediately be executed are
     // placed inside of this queue, during a state transition
     // this queue will be checked and popped from.
@@ -48,13 +49,14 @@ pub struct PeerConnection {
     // When the disk manager responds, the message will be taken
     // out of this queue and placed at the end of the write queue.
     block_queue: HashMap<Token, MessageType>,
-    message_sent: Time,
-    message_recvd: Time,
+    last_sent: Time,
+    last_recvd: Time,
+    _listener: PhantomData<L>,
 }
 
 /// Enumeration for all states that a peer can be in in terms of messages being sent or received.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub enum PeerState {
+pub enum WireState {
     /// Read the message length; default state.
     ///
     /// Valid to transition from this state to either ReadPayload or WritePayload.
@@ -67,19 +69,25 @@ pub enum PeerState {
     WritePayload,
 }
 
-impl PeerConnection {
-    /// Create a new PeerConnection and returning the given Intent for the Protocol.
-    fn new(id: PeerIdentifier, disk: ActiveDiskManager, send: SplitSender<ProtocolSender>, recv: Receiver<IProtocolMessage>, now: Time) -> Intent<PeerConnection> {
-        let connection = PeerConnection {
+impl<L> WireProtocol<L> {
+    /// Create a new WireConnection and return an Intent.
+    fn new(id: PeerIdentifier,
+           disk: ActiveDiskManager,
+           send: SplitSender<ProtocolSender>,
+           recv: Receiver<IProtocolMessage>,
+           now: Time)
+           -> Intent<WireProtocol<L>> {
+        let connection = WireProtocol {
             id: id,
-            state: PeerState::ReadLength,
+            state: WireState::ReadLength,
             disk: disk,
             send: send,
             recv: recv,
             write_queue: VecDeque::new(),
             block_queue: HashMap::new(),
-            message_sent: now,
-            message_recvd: now,
+            last_sent: now,
+            last_recvd: now,
+            _listener: PhantomData,
         };
 
         let self_timeout = connection.self_timeout(now);
@@ -90,8 +98,8 @@ impl PeerConnection {
     fn peer_timeout(&self, now: Time) -> bool {
         let max_peer_timeout = Duration::from_millis(MAX_PEER_TIMEOUT_MILLIS);
 
-        // Since Time does not implement Sub, we convert (now - recvd > timeout) to (now < recvd + timeout)
-        now < self.message_recvd + max_peer_timeout
+        // Since Time does not implement Sub, we convert (now - recvd > timeout) to (now > recvd + timeout)
+        now > self.last_recvd + max_peer_timeout
     }
 
     /// Returns the timeout for ourselves at which point we will send a keep alive message.
@@ -109,7 +117,7 @@ impl PeerConnection {
                    msg.id(),
                    self.id);
         }
-        self.message_sent = now;
+        self.last_sent = now;
 
         match msg.kind() {
             OSelectorMessageKind::PeerKeepAlive => self.write_queue.push_back((MessageType::KeepAlive, None)),
@@ -142,20 +150,20 @@ impl PeerConnection {
                 // Disk manager has loaded a block for us to write to the peer, move the message to our write_queue
                 self.write_queue.push_back((occ.remove(), Some(token)));
             }
-            (Entry::Vacant(_), PeerState::DiskReserve(tok, len)) if tok == token => {
+            (Entry::Vacant(_), WireState::DiskReserve(tok, len)) if tok == token => {
                 // Disk manager has reserved a block for us to write our received block to
                 self.disk.redeem_reserve(tok, &in_buffer[..len]);
 
                 in_buffer.consume(len);
-                self.state = PeerState::ReadLength;
+                self.state = WireState::ReadLength;
             }
-            (Entry::Vacant(_), PeerState::DiskReserve(tok, len)) => unreachable!("bip_peer: Token Returned By DiskManager Was Not Expected"),
+            (Entry::Vacant(_), WireState::DiskReserve(tok, len)) => unreachable!("bip_peer: Token Returned By DiskManager Was Not Expected"),
             _ => unreachable!("bip_peer: Called ProcessDisk In An Invalid State {:?}", curr_state),
         };
     }
 
     /// Transition our state into a disconnected state.
-    fn advance_disconnect<F>(self, sel_send: F, error: ProtocolError) -> Intent<PeerConnection>
+    fn advance_disconnect<F>(self, sel_send: F, error: ProtocolError) -> Intent<WireProtocol<L>>
         where F: Fn(OProtocolMessage)
     {
         sel_send(OProtocolMessage::new(self.id, OProtocolMessageKind::PeerDisconnect));
@@ -164,18 +172,18 @@ impl PeerConnection {
     }
 
     /// Attempts to advance our state from a read event.
-    fn advance_read<F>(mut self, now: Time, in_buffer: &mut Buf, out_buffer: &mut Buf, sel_send: F) -> Intent<PeerConnection>
+    fn advance_read<F>(mut self, now: Time, in_buffer: &mut Buf, out_buffer: &mut Buf, sel_send: F) -> Intent<WireProtocol<L>>
         where F: Fn(OProtocolMessage)
     {
         let curr_state = self.state;
 
         match curr_state {
-            PeerState::ReadLength => {
+            WireState::ReadLength => {
                 // Don't consume the bytes that make up the length, add that back into the expected length
                 let expected_len = message::parse_message_length(&in_buffer[..]) + message::MESSAGE_LENGTH_LEN_BYTES;
-                self.state = PeerState::ReadPayload(expected_len);
+                self.state = WireState::ReadPayload(expected_len);
             }
-            PeerState::ReadPayload(len) => {
+            WireState::ReadPayload(len) => {
                 let res_opt_kind_msg = parse_kind_message(self.id, &in_buffer[..len], &self.disk);
 
                 // For whatever message we received, propogate it up a layer (it is impossible to
@@ -184,7 +192,7 @@ impl PeerConnection {
                 match res_opt_kind_msg {
                     Ok(Some(OProtocolMessageKind::PeerPiece(token, piece_msg))) => {
                         in_buffer.consume(len - piece_msg.block_length());
-                        self.state = PeerState::DiskReserve(token, piece_msg.block_length());
+                        self.state = WireState::DiskReserve(token, piece_msg.block_length());
 
                         // Disk manager will notify us when the memory is reserved
                         assert!(self.disk.try_send(IDiskMessage::WaitBlock(token)).is_none());
@@ -192,7 +200,7 @@ impl PeerConnection {
                     }
                     Ok(opt_kind) => {
                         in_buffer.consume(len);
-                        self.state = PeerState::ReadLength;
+                        self.state = WireState::ReadLength;
 
                         if let Some(kind) = opt_kind {
                             sel_send(OProtocolMessage::new(self.id, kind));
@@ -212,23 +220,23 @@ impl PeerConnection {
 
     /// Attempts to advance our state to/from a write event.
     ///
-    /// Since we are working with a half duplex abstraction, anytime we transition from some state back to PeerState::ReadLength,
+    /// Since we are working with a half duplex abstraction, anytime we transition from some state back to WireState::ReadLength,
     /// we should attempt to transition into a write state (we aggressively try to transition to a write) because that is the only
     /// time we can take control of the stream and write to the peer. The upper layer will have to make sure that it doesn't starve
     /// ourselves of reads (since there is no notion of "flow" control provided back to that layer). We may want to look at this again
     /// in the future and provide the upper layer with feedback for when writes succeeded, although it would be preferrable to not do so.
-    fn advance_write(mut self, now: Time, mut out_buffer: &mut Buf, bytes_flushed: bool) -> Intent<PeerConnection> {
+    fn advance_write(mut self, now: Time, mut out_buffer: &mut Buf, bytes_flushed: bool) -> Intent<WireProtocol<L>> {
         // First, check if this was called from a bytes flushed event
         if bytes_flushed {
             // "Reset" our state
-            self.state = PeerState::ReadLength;
+            self.state = WireState::ReadLength;
 
             // Ack the write
             self.send.sender_ack().ack();
         }
 
         // Next, check if we can transition to/back to a write event
-        if !self.write_queue.is_empty() && self.state == PeerState::ReadLength {
+        if !self.write_queue.is_empty() && self.state == WireState::ReadLength {
             let (msg, opt_token) = self.write_queue.pop_front().unwrap();
 
             // We can write out this message, and an optional payload from disk
@@ -237,16 +245,16 @@ impl PeerConnection {
                 out_buffer.extend(self.disk.redeem_load(token));
             }
 
-            self.state = PeerState::WritePayload;
+            self.state = WireState::WritePayload;
         }
 
         // Figure our what intent we should return based on our CURRENT state, even if unchanged
         let self_timeout = self.self_timeout(now);
         match self.state {
-            PeerState::ReadLength => Intent::of(self).expect_bytes(message::MESSAGE_LENGTH_LEN_BYTES).deadline(self_timeout),
-            PeerState::ReadPayload(len) => Intent::of(self).expect_bytes(len).deadline(self_timeout),
-            PeerState::DiskReserve(..) => Intent::of(self).sleep().deadline(self_timeout),
-            PeerState::WritePayload => Intent::of(self).expect_flush().deadline(self_timeout),
+            WireState::ReadLength => Intent::of(self).expect_bytes(message::MESSAGE_LENGTH_LEN_BYTES).deadline(self_timeout),
+            WireState::ReadPayload(len) => Intent::of(self).expect_bytes(len).deadline(self_timeout),
+            WireState::DiskReserve(..) => Intent::of(self).sleep().deadline(self_timeout),
+            WireState::WritePayload => Intent::of(self).expect_flush().deadline(self_timeout),
         }
     }
 }
@@ -277,22 +285,41 @@ fn map_message_type(msg_type: MessageType, disk: &ActiveDiskManager) -> Option<O
     }
 }
 
-impl Protocol for PeerConnection {
-    type Context = ProtocolContext;
-    type Socket = TcpStream;
-    type Seed = (PeerId, InfoHash);
+impl<L> PeerProtocol for WireProtocol<L>
+    where L: LocalAddress + TryBind + TryAccept + Evented + Any + Send,
+          L::Output: TryConnect + StreamSocket + Send
+{
+    type Context = WireContext;
 
-    fn create((pid, hash): Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
-        let id = PeerIdentifier::new(sock.peer_addr().unwrap(), pid);
-        let (send, recv) = mpsc::sync_channel(tcp::MAX_PEER_CHANNEL_CAPACITY);
-        let prot_send = ProtocolSender::new(send, scope.notifier());
+    type Protocol = Self;
 
-        let sele_send = SplitSender::new(prot_send.clone(), tcp::MAX_PEER_CHANNEL_CAPACITY / 2);
+    type Listener = L;
 
-        let disk = scope.register_disk(Box::new(prot_send));
-        scope.send_selector(OProtocolMessage::new(id, OProtocolMessageKind::PeerConnect(Box::new(sele_send.clone()), hash)));
-        
-        PeerConnection::new(id, disk, sele_send, recv, scope.now())
+    type Socket = L::Output;
+}
+
+impl<L> Protocol for WireProtocol<L>
+    where L: LocalAddress + TryBind + TryAccept + Evented + Any + Send,
+          L::Output: TryConnect + StreamSocket + Send
+{
+    type Context = BTContext<WireContext>;
+    type Socket = L::Output;
+    type Seed = BTSeed;
+
+    fn create(bt_seed: Self::Seed, sock: &mut Self::Socket, scope: &mut Scope<Self::Context>) -> Intent<Self> {
+        let id = PeerIdentifier::new(bt_seed.addr(), bt_seed.pid());
+
+        // Create a ProtocolSender for layers to send messages and wake us up
+        let (send, recv) = mpsc::sync_channel(MAX_INCOMING_MESSAGES);
+        let protocol_send = ProtocolSender::new(send, scope.notifier());
+
+        // Using a SplitSender for the sender here so that we can defer message acking until the message is queued and written
+        let select_send = SplitSender::new(protocol_send.clone(), MAX_INCOMING_MESSAGES);
+        scope.send_selector(OProtocolMessage::new(id, OProtocolMessageKind::PeerConnect(Box::new(select_send.clone()), bt_seed.hash())));
+
+        let active_disk = scope.register_disk(Box::new(protocol_send));
+
+        WireProtocol::new(id, active_disk, select_send, recv, scope.now())
     }
 
     fn bytes_read(self, transport: &mut Transport<Self::Socket>, end: usize, scope: &mut Scope<Self::Context>) -> Intent<Self> {
@@ -365,7 +392,8 @@ impl Protocol for PeerConnection {
                     IProtocolMessage::PieceManager(sel_msg) => {
                         // If the selection layer sent us a disconnect message, handle it here
                         if self.process_message(now, sel_msg) {
-                            return self.advance_disconnect(|msg| scope.send_selector(msg),
+                            // Since the selection layer initiated the disconnect, dont send the disconnect to them
+                            return self.advance_disconnect(|_| (),
                                                            ProtocolError::new(id, ProtocolErrorKind::RemoteDisconnect));
                         }
                     }

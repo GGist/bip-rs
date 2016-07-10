@@ -60,16 +60,14 @@ impl LayerRegistration<ODiskMessage, IDiskMessage> for InactiveDiskManager {
 // to so and so InfoHash.
 
 pub struct ActiveDiskManager {
-    //inner: Arc<InnerDiskManager>,
-    //request_gen: TokenGenerator,
+    // inner: Arc<InnerDiskManager>,
+    // request_gen: TokenGenerator,
     id: u64,
 }
 
 impl ActiveDiskManager {
     pub fn new() -> ActiveDiskManager {
-        ActiveDiskManager {
-            id: 5
-        }
+        ActiveDiskManager { id: 5 }
     }
 
     pub fn wait_load(&self, token: Token) {}
