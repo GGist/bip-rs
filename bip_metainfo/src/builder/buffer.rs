@@ -4,7 +4,7 @@ use crossbeam::sync::{MsQueue};
 
 // Ensures that we have enough buffers to keep workers busy.
 const TOTAL_BUFFERS_MULTIPLICATIVE: usize = 2;
-const TOTAL_BUFFERS_ADDITIVE:       usize = 4;
+const TOTAL_BUFFERS_ADDITIVE:       usize = 0;
 
 /// Stores a set number of piece buffers to be used and re-used.
 pub struct PieceBuffers {
