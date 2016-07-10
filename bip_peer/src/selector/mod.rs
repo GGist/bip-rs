@@ -10,9 +10,9 @@ use protocol::{PeerIdentifier, OProtocolMessage};
 use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
 use token::Token;
 
-mod selectors;
+mod strategy;
 
-pub use piece::selectors::PieceSelector;
+pub use selector::strategy::PieceSelector;
 
 pub enum ISelectorMessage {
     /// Message from the disk manager to the piece selector.
@@ -54,8 +54,7 @@ impl<T> TrySender<T> for SelectorSender
 }
 
 // Have to specialize the impl for protocol messages so we can insert the token
-impl TrySender<OProtocolMessage> for SelectorSender
-{
+impl TrySender<OProtocolMessage> for SelectorSender {
     fn try_send(&self, data: OProtocolMessage) -> Option<OProtocolMessage> {
         self.send
             .send(ISelectorMessage::Protocol(self.id, data))

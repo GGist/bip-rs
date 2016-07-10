@@ -2,29 +2,30 @@
 
 use std::io::{self, Write};
 
+use byteorder::{WriteBytesExt, BigEndian};
 use nom::{IResult, be_u32, be_u8};
 
 use message::extension::ExtensionType;
 use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
 
-const KEEP_ALIVE_MESSAGE_LEN: u32 = 0;
-const CHOKE_MESSAGE_LEN: u32 = 1;
-const UNCHOKE_MESSAGE_LEN: u32 = 1;
-const INTERESTED_MESSAGE_LEN: u32 = 1;
-const UNINTERESTED_MESSAGE_LEN: u32 = 1;
-const HAVE_MESSAGE_LEN: u32 = 5;
-const REQUEST_MESSAGE_LEN: u32 = 13;
-const CANCEL_MESSAGE_LEN: u32 = 13;
+pub const KEEP_ALIVE_MESSAGE_LEN: u32 = 0;
+pub const CHOKE_MESSAGE_LEN: u32 = 1;
+pub const UNCHOKE_MESSAGE_LEN: u32 = 1;
+pub const INTERESTED_MESSAGE_LEN: u32 = 1;
+pub const UNINTERESTED_MESSAGE_LEN: u32 = 1;
+pub const HAVE_MESSAGE_LEN: u32 = 5;
+pub const REQUEST_MESSAGE_LEN: u32 = 13;
+pub const CANCEL_MESSAGE_LEN: u32 = 13;
 
-const CHOKE_MESSAGE_ID: u8 = 0;
-const UNCHOKE_MESSAGE_ID: u8 = 1;
-const INTERESTED_MESSAGE_ID: u8 = 2;
-const UNINTERESTED_MESSAGE_ID: u8 = 3;
-const HAVE_MESSAGE_ID: u8 = 4;
-const BITFIELD_MESSAGE_ID: u8 = 5;
-const REQUEST_MESSAGE_ID: u8 = 6;
-const PIECE_MESSAGE_ID: u8 = 7;
-const CANCEL_MESSAGE_ID: u8 = 8;
+pub const CHOKE_MESSAGE_ID: u8 = 0;
+pub const UNCHOKE_MESSAGE_ID: u8 = 1;
+pub const INTERESTED_MESSAGE_ID: u8 = 2;
+pub const UNINTERESTED_MESSAGE_ID: u8 = 3;
+pub const HAVE_MESSAGE_ID: u8 = 4;
+pub const BITFIELD_MESSAGE_ID: u8 = 5;
+pub const REQUEST_MESSAGE_ID: u8 = 6;
+pub const PIECE_MESSAGE_ID: u8 = 7;
+pub const CANCEL_MESSAGE_ID: u8 = 8;
 
 pub const MESSAGE_LENGTH_LEN_BYTES: usize = 4;
 
@@ -53,10 +54,35 @@ impl MessageType {
         parse_message(bytes)
     }
 
-    pub fn write_bytes<W>(&self, writer: W) -> io::Result<()>
+    pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write
     {
-        unimplemented!();
+        match self {
+            &MessageType::KeepAlive => write_length_id_pair(writer, KEEP_ALIVE_MESSAGE_LEN, None),
+            &MessageType::Choke => write_length_id_pair(writer, CHOKE_MESSAGE_LEN, Some(CHOKE_MESSAGE_ID)),
+            &MessageType::UnChoke => write_length_id_pair(writer, UNCHOKE_MESSAGE_LEN, Some(UNCHOKE_MESSAGE_ID)),
+            &MessageType::Interested => write_length_id_pair(writer, INTERESTED_MESSAGE_LEN, Some(INTERESTED_MESSAGE_ID)),
+            &MessageType::UnInterested => write_length_id_pair(writer, UNINTERESTED_MESSAGE_LEN, Some(UNINTERESTED_MESSAGE_ID)),
+            &MessageType::Have(ref msg) => msg.write_bytes(writer),
+            &MessageType::BitField(ref msg) => msg.write_bytes(writer),
+            &MessageType::Request(ref msg) => msg.write_bytes(writer),
+            &MessageType::Piece(ref msg) => msg.write_bytes(writer),
+            &MessageType::Cancel(ref msg) => msg.write_bytes(writer),
+            &MessageType::Extension(ref ext) => ext.write_bytes(writer),
+        }
+    }
+}
+
+/// Write a length and optional id out to the given writer.
+pub fn write_length_id_pair<W>(mut writer: W, length: u32, opt_id: Option<u8>) -> io::Result<()>
+    where W: Write
+{
+    try!(writer.write_u32::<BigEndian>(length));
+
+    if let Some(id) = opt_id {
+        writer.write_u8(id)
+    } else {
+        Ok(())
     }
 }
 
