@@ -1,7 +1,7 @@
 mod sequential;
 mod locally_shuffled;
 
-trait TransactionIds<T> {
+pub trait TransactionIds<T> {
     fn generate(&mut self) -> T;
 }
 
