@@ -1,4 +1,4 @@
-use std::sync::RwLock;
+use std::sync::{RwLock, Mutex};
 use std::collections::HashMap;
 
 use bip_util::send::TrySender;
@@ -8,7 +8,7 @@ use token::Token;
 
 /// Struct for holding channels to send messages back to clients.
 pub struct Clients {
-    clients: RwLock<HashMap<Token, Box<TrySender<ODiskMessage>>>>
+    clients: RwLock<HashMap<Token, Mutex<Box<TrySender<ODiskMessage>>>>>
 }
 
 impl Clients {
@@ -21,7 +21,7 @@ impl Clients {
     pub fn add(&self, client_token: Token, client: Box<TrySender<ODiskMessage>>) {
         let mut map = self.clients.write().expect("bip_peer: Clients::add Poisoned Lock Detected");
 
-        if map.insert(client_token, client).is_some() {
+        if map.insert(client_token, Mutex::new(client)).is_some() {
             panic!("bip_peer: Clients::add Token Already In Map");
         }
     }
@@ -38,9 +38,11 @@ impl Clients {
     /// Send a message to the client associated with the given token.
     pub fn message(&self, client_token: Token, message: ODiskMessage) {
         let map = self.clients.read().expect("bip_peer: Clients::message Poisoned Lock Detected");
+        
         let sender = map.get(&client_token).expect("bip_peer: Clients::message Token Not Found In Map");
+        let unlocked_sender = sender.lock().expect("bip_peer: Clients::message Poisoned Mutex Detected");
 
-        if sender.try_send(message).is_some() {
+        if unlocked_sender.try_send(message).is_some() {
             panic!("bip_peer: Clients::message Failed To Send Message To Client");
         }
     }

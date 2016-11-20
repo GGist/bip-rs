@@ -117,7 +117,7 @@ pub enum OSelectorMessageKind {
     /// Message to send a peer block request.
     PeerRequest(RequestMessage),
     /// Message to send a block to a peer.
-    PeerPiece(Token, PieceMessage),
+    PeerPiece(PieceMessage),
     /// Message to send a block cancel to a peer.
     PeerCancel(CancelMessage),
 }

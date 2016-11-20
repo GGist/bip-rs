@@ -15,7 +15,7 @@ const MAX_FREE_COUNT_SIZE: usize = 100;   // With 16KB block size, we are at ~1.
 const MAX_TOTAL_COUNT_SIZE: usize = 1000; // With 16KB block size, we are at ~15.6MB
 
 /// Thread safe storage for re-usable blocks of memory that can be combined or broken up.
-struct Blocks {
+pub struct Blocks {
     free:        MsQueue<ContiguousBuffers<Vec<u8>>>,
     used:        RwLock<HashMap<Token, Mutex<HashMap<Token, ContiguousBuffers<Vec<u8>>>>>>,
     free_count:  AtomicUsize,
@@ -226,57 +226,6 @@ mod tests {
     use super::Blocks;
     use token::{Token, TokenGenerator};
 
-    //pub fn allocate_block(&self, namespace: Token, request: Token, num_bytes: usize) {
-
-/*
-/// Register's a new namespace (defined as a token) with the Blocks structure.
-    pub fn register_namespace(&self, namespace: Token) {
-        self.run_with_namespace_map(|namespace_map| {
-            if namespace_map.insert(namespace, Mutex::new(HashMap::new())).is_some() {
-                panic!("bip_peer: Blocks::register_namespace Found Existing Token");
-            }
-        });
-    }
-
-    /// Unregister's an existing namespace (defined as a token) from the Blocks structure.
-    ///
-    /// This call will implicitly reclaim any active used blocks under the namespace.
-    pub fn unregister_namespace(&self, namespace: Token) {
-        self.run_with_namespace_map(|namespace_map| {
-            if namespace_map.remove(&namespace).is_none() {
-                panic!("bip_peer: Blocks::unregister_namespace Failed To Remove Existing Token");
-            }
-        });
-    }
-
-    /// Allocate a block with AT LEAST the given number of bytes under the namespace and
-    /// assocaited with the given request id (token).
-    ///
-    /// This function will block until the block can be reserved.
-    pub fn allocate_block(&self, namespace: Token, request: Token, num_bytes: usize) {
-        let blocks_required = self.calcualte_blocks_required(num_bytes);
-        let contiguous_block = self.allocate_contiguous_blocks(blocks_required);
-
-        self.add_used_block(namespace, request, contiguous_block);
-    }
-
-    /// Access a block under the given namespace, corresponding to the given request id.
-    pub fn access_block<F>(&self, namespace: Token, request: Token, access: F)
-        where F: FnOnce(&mut ContiguousBuffers<Vec<u8>>) {
-        self.run_with_request_map(namespace, |request_map| {
-            let contiguous_block = request_map.get_mut(&request)
-                .expect("bip_peer: Blocks::access_block Failed To Find Request For Id");
-
-            access(contiguous_block);
-        });
-    }
-
-    /// Reclaim a block under the given namespace, corresponding to the given request id.
-    pub fn reclaim_block(&self, namespace: Token, request: Token) {
-        self.remove_used_block(namespace, request);
-    }
-*/
-
     #[test]
     fn positive_create_blocks_non_zero_block_size() {
         Blocks::new(1024);
@@ -452,5 +401,36 @@ mod tests {
         });
 
         assert_eq!(b"testing", &read_bytes[..]);
+    }
+
+    #[test]
+    fn positive_reclaim_block() {
+        let blocks = Blocks::new(1);
+        let mut generator = TokenGenerator::new();
+        
+        let namespace = generator.generate();
+        blocks.register_namespace(namespace);
+        
+        let request = generator.generate();
+        blocks.allocate_block(namespace, request, 0);
+
+        blocks.reclaim_block(namespace, request);
+    }
+
+    #[test]
+    #[should_panic]
+    fn negative_reclaim_block_then_access() {
+        let blocks = Blocks::new(1);
+        let mut generator = TokenGenerator::new();
+        
+        let namespace = generator.generate();
+        blocks.register_namespace(namespace);
+        
+        let request = generator.generate();
+        blocks.allocate_block(namespace, request, 0);
+
+        blocks.reclaim_block(namespace, request);
+
+        blocks.access_block(namespace, request, |contiguous_buffers| {});
     }
 }
