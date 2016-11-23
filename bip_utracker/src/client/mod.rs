@@ -3,10 +3,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use bip_handshake::Handshaker;
-use bip_util::bt::InfoHash;
-use bip_util::trans::TIDGenerator;
-use umio::external::Sender;
+use bip_handshake::{Handshaker};
+use bip_util::bt::{InfoHash};
+use bip_util::trans::{TransactionIds, LocallyShuffledIds};
+use umio::external::{Sender};
 
 use announce::{AnnounceResponse, ClientState};
 use client::dispatcher::DispatchMessage;
@@ -171,13 +171,13 @@ pub struct ClientToken(u32);
 
 /// Generates tokens which double as transaction ids.
 struct TokenGenerator {
-    generator: TIDGenerator<u32>,
+    generator: LocallyShuffledIds<u32>
 }
 
 impl TokenGenerator {
     /// Create a new TokenGenerator.
     pub fn new() -> TokenGenerator {
-        TokenGenerator { generator: TIDGenerator::<u32>::new() }
+        TokenGenerator{ generator: LocallyShuffledIds::<u32>::new() }
     }
 
     /// Generate a new ClientToken.
