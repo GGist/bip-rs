@@ -25,16 +25,26 @@ pub enum DiskMessage {
     AddTorrent(Token, MetainfoFile, PathBuf),
     RemoveTorrent(Token, InfoHash),
     LoadBlock(Token, Token, InfoHash, PieceMessage),
-    ProcessBlock(Token, Token, InfoHash, PieceMessage)
+    ProcessBlock(Token, Token)
 }
 
-pub enum BlockMessage {
+pub enum SyncBlockMessage {
     ReserveBlock(Token, Token, InfoHash, PieceMessage)
+}
+
+pub enum AsyncBlockMessage {
+    ReclaimBlock(Token, Token)
+}
+
+pub struct ReserveBlockClientMetadata {
+    hash:    InfoHash,
+    message: PieceMessage
 }
 
 // ----------------------------------------------------------------------------//
 
-pub fn create_workers<F>(fs: F, clients: Arc<Clients>, blocks: Arc<Blocks>) -> (Sender<DiskMessage>, Sender<BlockMessage>)
+pub fn create_workers<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>)
+    -> (Sender<DiskMessage>, Sender<SyncBlockMessage>, Sender<AsyncBlockMessage>)
     where F: FileSystem + Send + Sync + 'static {
     unimplemented!()
 }

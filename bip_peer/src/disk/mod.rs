@@ -12,7 +12,7 @@ use bip_util::send::TrySender;
 use bip_util::contiguous::ContiguousBuffer;
 use chan::{Sender};
 
-use disk::worker::{DiskMessage, BlockMessage};
+use disk::worker::{DiskMessage, SyncBlockMessage, AsyncBlockMessage, ReserveBlockClientMetadata};
 use disk::worker::shared::clients::Clients;
 use disk::worker::shared::blocks::Blocks;
 use disk::error::{RequestError, TorrentError};
@@ -113,11 +113,12 @@ pub fn peer_recv_queue_length(max_outgoing: usize) -> usize {
 
 /// Central place for clients to register themselves to access a DiskManager.
 pub struct DiskManagerRegistration {
-    namespace_gen: TokenGenerator,
-    clients:       Arc<Clients>,
-    blocks:        Arc<Blocks>,
-    disk_sender:   Sender<DiskMessage>,
-    block_sender:  Sender<BlockMessage>
+    namespace_gen:      TokenGenerator,
+    clients:            Arc<Clients<ReserveBlockClientMetadata>>,
+    blocks:             Arc<Blocks>,
+    disk_sender:        Sender<DiskMessage>,
+    sync_block_sender:  Sender<SyncBlockMessage>,
+    async_block_sender: Sender<AsyncBlockMessage>,
 }
 
 impl DiskManagerRegistration {
@@ -129,14 +130,15 @@ impl DiskManagerRegistration {
         let blocks = Arc::new(Blocks::new(DEFAULT_BLOCK_SIZE));
 
         // Spin up new worker threads for allocating blocks and writing them to disk.
-        let (disk_sender, block_sender) = worker::create_workers(fs, clients.clone(), blocks.clone());
+        let (disk_sender, sb_sender, ab_sender) = worker::create_workers(fs, clients.clone(), blocks.clone());
 
         DiskManagerRegistration {
             namespace_gen: TokenGenerator::new(),
             clients: clients,
             blocks: blocks,
             disk_sender: disk_sender,
-            block_sender: block_sender
+            sync_block_sender: sb_sender,
+            async_block_sender: ab_sender
         }
     }
 }
@@ -150,7 +152,8 @@ impl LayerRegistration<ODiskMessage, IDiskMessage> for DiskManagerRegistration {
         // The token we used to resgister will be our token "namespace", all messages we
         // send will have an associated id, these ids will be namespace by this token.
         DiskManager::new(registration_token, self.clients.clone(), self.blocks.clone(),
-                         self.disk_sender.clone(), self.block_sender.clone(), send)
+                         self.disk_sender.clone(), self.sync_block_sender.clone(),
+                         self.async_block_sender.clone(), send)
     }
 }
 
@@ -171,20 +174,21 @@ pub trait DiskManagerAccess {
 /// DiskManager that allows clients to send messages to workers in charge
 /// of allocating blocks of memory, as well as writing blocks to disk.
 pub struct DiskManager {
-    namespace:     Token,
-    request_gen:   TokenGenerator,
-    clients:       Arc<Clients>,
-    blocks:        Arc<Blocks>,
-    disk_sender:   Sender<DiskMessage>,
-    block_sender:  Sender<BlockMessage>
+    namespace:          Token,
+    request_gen:        TokenGenerator,
+    clients:            Arc<Clients<ReserveBlockClientMetadata>>,
+    blocks:             Arc<Blocks>,
+    disk_sender:        Sender<DiskMessage>,
+    sync_block_sender:  Sender<SyncBlockMessage>,
+    async_block_sender: Sender<AsyncBlockMessage>,
 }
 
 impl DiskManager {
     /// Create a new DiskManager.
-    pub fn new(namespace: Token, clients: Arc<Clients>, blocks: Arc<Blocks>,
-               disk_sender: Sender<DiskMessage>, block_sender: Sender<BlockMessage>,
+    pub fn new(namespace: Token, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>,
+               disk_sender: Sender<DiskMessage>, sb_sender: Sender<SyncBlockMessage>, ab_sender: Sender<AsyncBlockMessage>,
                client_sender: Box<TrySender<ODiskMessage>>) -> DiskManager {
-        clients.add(namespace, client_sender);
+        clients.add_client(namespace, client_sender);
         blocks.register_namespace(namespace);
 
         DiskManager {
@@ -193,7 +197,8 @@ impl DiskManager {
             clients: clients,
             blocks: blocks,
             disk_sender: disk_sender,
-            block_sender: block_sender
+            sync_block_sender: sb_sender,
+            async_block_sender: ab_sender
         }
     }
 }
@@ -229,7 +234,7 @@ impl TrySender<IDiskMessage> for DiskManager {
 
 impl Drop for DiskManager {
     fn drop(&mut self) {
-        self.clients.remove(self.namespace);
+        self.clients.remove_client(self.namespace);
         self.blocks.unregister_namespace(self.namespace);
     }
 }
