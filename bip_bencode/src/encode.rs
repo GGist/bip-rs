@@ -1,14 +1,14 @@
 use bencode::{Bencode, BencodeKind};
-use dictionary::{Dictionary};
+use dictionary::Dictionary;
 
 use std::iter::Extend;
 
 pub fn encode<'a>(val: &Bencode<'a>) -> Vec<u8> {
     match val.kind() {
-        BencodeKind::Int(n)   => encode_int(n),
+        BencodeKind::Int(n) => encode_int(n),
         BencodeKind::Bytes(n) => encode_bytes(&n),
-        BencodeKind::List(n)  => encode_list(n),
-        BencodeKind::Dict(n)  => encode_dict(n)
+        BencodeKind::List(n) => encode_list(n),
+        BencodeKind::Dict(n) => encode_dict(n),
     }
 }
 

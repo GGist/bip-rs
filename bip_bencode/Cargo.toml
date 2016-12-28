@@ -13,5 +13,8 @@ keywords      = ["bencode", "bittorrent"]
 
 license       = "MIT/Apache-2.0"
 
+[dependencies]
+error-chain = "0.7.0"
+
 [features]
 unstable      = []
