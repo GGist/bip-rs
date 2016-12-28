@@ -13,7 +13,7 @@
 //!         let data = b"d12:lucky_numberi7ee";
 //!         let bencode = Bencode::decode(data).unwrap();
 //!
-//!         assert_eq!(7, bencode.dict().unwrap().lookup("lucky_number")
+//!         assert_eq!(7, bencode.dict().unwrap().lookup("lucky_number".as_bytes())
 //!             .unwrap().int().unwrap());
 //!     }
 //! ```

@@ -87,16 +87,16 @@ pub enum BencodeConvertErrorKind {
 pub struct BencodeConvertError {
     kind: BencodeConvertErrorKind,
     desc: &'static str,
-    key: Cow<'static, str>
+    key: Cow<'static, [u8]>
 }
 
 impl BencodeConvertError {
     pub fn new(kind: BencodeConvertErrorKind, desc: &'static str) -> BencodeConvertError {
-        BencodeConvertError::with_key(kind, desc, "")
+        BencodeConvertError::with_key(kind, desc, "".as_bytes())
     }
 
     pub fn with_key<T>(kind: BencodeConvertErrorKind, desc: &'static str, key: T)
-        -> BencodeConvertError where T: Into<Cow<'static, str>> {
+        -> BencodeConvertError where T: Into<Cow<'static, [u8]>> {
         BencodeConvertError{ kind: kind, desc: desc, key: key.into() }
     }
     
@@ -108,7 +108,7 @@ impl BencodeConvertError {
         self.desc
     }
     
-    pub fn key(&self) -> &str {
+    pub fn key(&self) -> &[u8] {
         &self.key
     }
 }
@@ -119,7 +119,7 @@ impl Display for BencodeConvertError {
         
         try!(f.write_fmt(format_args!(", Description: {}", self.desc)));
         
-        try!(f.write_fmt(format_args!(", Key: {}", self.key)));
+        try!(f.write_fmt(format_args!(", Key: {:?}", self.key)));
         
         Ok(())
     }   

@@ -9,7 +9,7 @@ use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 // underlying recursive type is a dictionary, it is a programming error otherwise)
 enum IBencodeType<'a> {
     Bencode(Bencode<'a>),
-    BencodeMapping(&'a str, Bencode<'a>)
+    BencodeMapping(&'a [u8], Bencode<'a>)
 }
 
 /// Decodes the given list of bytes at the given position into a bencoded structures.
@@ -337,17 +337,10 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8]
 }
 
 /// Returns the key reference as well as the starting byte of the next type.
-fn decode_key<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a str, usize)> {
+fn decode_key<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8], usize)> {
     let (key_bytes, next_pos) = try!(decode_bytes(bytes, pos));
-    let key = match str::from_utf8(key_bytes) {
-        Ok(n)  => n,
-        Err(_) => {
-            return Err(BencodeParseError::with_pos(BencodeParseErrorKind::InvalidByte,
-                "Invalid UTF-8 Key Found For Dictionar", Some(next_pos)))
-        }
-    };
     
-    Ok((key, next_pos))
+    Ok((key_bytes, next_pos))
 }
 
 fn peek_byte(bytes: &[u8], pos: usize, err_msg: &'static str) -> BencodeParseResult<u8> {
@@ -388,12 +381,12 @@ mod tests {
         let bencode = Bencode::decode(GENERAL).unwrap();
         
         let ben_dict = bencode.dict().unwrap();
-        assert_eq!(ben_dict.lookup("").unwrap().str().unwrap(), "zero_len_key");
-        assert_eq!(ben_dict.lookup("location").unwrap().str().unwrap(), "udp://test.com:80");
-        assert_eq!(ben_dict.lookup("number").unwrap().int().unwrap(), 500500i64);
+        assert_eq!(ben_dict.lookup("".as_bytes()).unwrap().str().unwrap(), "zero_len_key");
+        assert_eq!(ben_dict.lookup("location".as_bytes()).unwrap().str().unwrap(), "udp://test.com:80");
+        assert_eq!(ben_dict.lookup("number".as_bytes()).unwrap().int().unwrap(), 500500i64);
         
-        let nested_dict = ben_dict.lookup("nested dict").unwrap().dict().unwrap();
-        let nested_list = nested_dict.lookup("list").unwrap().list().unwrap();
+        let nested_dict = ben_dict.lookup("nested dict".as_bytes()).unwrap().dict().unwrap();
+        let nested_list = nested_dict.lookup("list".as_bytes()).unwrap().list().unwrap();
         assert_eq!(nested_list[0].int().unwrap(), -500500i64);
    }
     
@@ -415,12 +408,12 @@ mod tests {
     fn positive_decode_dict() {
         let bencode = Bencode::decode(DICTIONARY).unwrap();
         let dict = bencode.dict().unwrap();
-        assert_eq!(dict.lookup("test_key").unwrap().str().unwrap(), "test_value");
+        assert_eq!(dict.lookup("test_key".as_bytes()).unwrap().str().unwrap(), "test_value");
         
-        let nested_dict = dict.lookup("test_dict").unwrap().dict().unwrap();
-        assert_eq!(nested_dict.lookup("nested_key").unwrap().str().unwrap(), "nested_value");
+        let nested_dict = dict.lookup("test_dict".as_bytes()).unwrap().dict().unwrap();
+        assert_eq!(nested_dict.lookup("nested_key".as_bytes()).unwrap().str().unwrap(), "nested_value");
         
-        let nested_list = nested_dict.lookup("nested_list").unwrap().list().unwrap();
+        let nested_list = nested_dict.lookup("nested_list".as_bytes()).unwrap().list().unwrap();
         assert_eq!(nested_list[0].int().unwrap(), 500i64);
         assert_eq!(nested_list[1].int().unwrap(), -500i64);
         assert_eq!(nested_list[2].int().unwrap(), 0i64);
@@ -440,7 +433,7 @@ mod tests {
         assert_eq!(nested_list[0].str().unwrap(), "nested_bytes");
         
         let nested_dict = list[5].dict().unwrap();
-        assert_eq!(nested_dict.lookup("test_key").unwrap().str().unwrap(), "test_value");
+        assert_eq!(nested_dict.lookup("test_key".as_bytes()).unwrap().str().unwrap(), "test_value");
     }
    
     #[test]

@@ -54,7 +54,7 @@ fn encode_dict<'a>(dict: &Dictionary<'a, Bencode<'a>>) -> Vec<u8> {
     bytes.push(::DICT_START);
     // Iterate And Dictionary Encode The (String, Bencode) Pairs
     for &(ref key, ref value) in sort_dict.iter() {
-        bytes.extend(encode_bytes(key.as_bytes()));
+        bytes.extend(encode_bytes(key));
         bytes.extend(encode(*value));
     }
     bytes.push(::BEN_END);

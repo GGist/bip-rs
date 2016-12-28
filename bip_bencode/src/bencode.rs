@@ -28,7 +28,7 @@ pub enum Bencode<'a> {
     /// Bencode List.
     List(Vec<Bencode<'a>>),
     /// Bencode Dictionary.
-    Dict(BTreeMap<&'a str, Bencode<'a>>)
+    Dict(BTreeMap<&'a [u8], Bencode<'a>>)
 }
 
 impl<'a> Bencode<'a> {
