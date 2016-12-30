@@ -1,14 +1,14 @@
 use bencode::{Bencode, BencodeKind};
-use dictionary::{Dictionary};
+use dictionary::Dictionary;
 
 use std::iter::Extend;
 
 pub fn encode<'a>(val: &Bencode<'a>) -> Vec<u8> {
     match val.kind() {
-        BencodeKind::Int(n)   => encode_int(n),
+        BencodeKind::Int(n) => encode_int(n),
         BencodeKind::Bytes(n) => encode_bytes(&n),
-        BencodeKind::List(n)  => encode_list(n),
-        BencodeKind::Dict(n)  => encode_dict(n)
+        BencodeKind::List(n) => encode_list(n),
+        BencodeKind::Dict(n) => encode_dict(n),
     }
 }
 
@@ -54,7 +54,7 @@ fn encode_dict<'a>(dict: &Dictionary<'a, Bencode<'a>>) -> Vec<u8> {
     bytes.push(::DICT_START);
     // Iterate And Dictionary Encode The (String, Bencode) Pairs
     for &(ref key, ref value) in sort_dict.iter() {
-        bytes.extend(encode_bytes(key.as_bytes()));
+        bytes.extend(encode_bytes(key));
         bytes.extend(encode(*value));
     }
     bytes.push(::BEN_END);

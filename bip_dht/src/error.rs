@@ -1,95 +1,41 @@
-use std::borrow::{Cow};
-use std::error::{Error};
-use std::fmt::{self, Display, Formatter};
-use std::io::{self};
+use std::io;
 
-use message::error::{ErrorMessage};
+use bip_bencode::BencodeConvertError;
 
-pub type DhtResult<T> = Result<T, DhtError>;
+use message::error::ErrorMessage;
 
-/// A list specifying the types of DhtErrors that may occur.
-#[derive(Debug)]
-pub enum DhtErrorKind {
-    /// A Node Sent Us An Invalid Message.
-    InvalidMessage,
-    /// A Node Sent Us An Invalid Request.
-    InvalidRequest(ErrorMessage<'static>),
-    /// A Node Sent Us An Invalid Response.
-    InvalidResponse,
-    /// A Node Sent Us An Unexpected Response.
-    UnsolicitedResponse,
-    /// An IO Error Occurred.
-    IoError(io::Error)
-}
-
-#[derive(Debug)]
-pub struct DhtError {
-    kind: DhtErrorKind,
-    desc: &'static str,
-    detail: Option<Cow<'static, str>>
-}
-
-impl DhtError {
-    pub fn new(kind: DhtErrorKind, desc: &'static str) -> DhtError {
-        DhtError{ kind: kind, desc: desc, detail: None }
+error_chain! {
+    types {
+        DhtError, DhtErrorKind, DhtResultExt, DhtResult;
     }
-    
-    pub fn with_detail<T>(kind: DhtErrorKind, desc: &'static str, detail: T)
-        -> DhtError where T: Into<Cow<'static, str>> {
-        DhtError{ kind: kind, desc: desc, detail: Some(detail.into()) }
-    }
-    
-    #[allow(unused)]
-    pub fn kind(&self) -> &DhtErrorKind {
-        &self.kind
-    }
-    
-    #[allow(unused)]
-    pub fn detail(&self) -> Option<&str> {
-        self.detail.as_ref().map(|x| &**x)
-    }
-}
 
-impl Display for DhtError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        try!(f.write_fmt(format_args!("Kind: {:?}", self.kind)));
-        
-        try!(f.write_fmt(format_args!(", Description: {}", self.desc)));
-        
-        if let Some(detail) = self.detail.as_ref() {
-            try!(f.write_fmt(format_args!(", Detail: {}", detail)));
+    foreign_links {
+        Bencode(BencodeConvertError);
+        Io(io::Error);
+    }
+
+    errors {
+        InvalidMessage {
+            code: String
+        } {
+            description("Node Sent An Invalid Message")
+            display("Node Sent An Invalid Message With Message Code {}", code)
         }
-        
-        Ok(())
-    }   
-}
-
-impl From<io::Error> for DhtError {
-    fn from(error: io::Error) -> DhtError {
-        DhtError::new(DhtErrorKind::IoError(error), "An io::Error Occurred.")
+        InvalidResponse {
+            details: String
+        } {
+            description("Node Sent Us An Invalid Response")
+            display("Node Sent Us An Invalid Response: {}", details)
+        }
+        UnsolicitedResponse {
+            description("Node Sent Us An Unsolicited Response")
+            display("Node Sent Us An Unsolicited Response")
+        }
+        InvalidRequest {
+            msg: ErrorMessage<'static>
+        } {
+            description("Node Sent Us An Invalid Request Message")
+            display("Node Sent Us An Invalid Request Message With Code {:?} And Message {}", msg.error_code(), msg.error_message())
+        }
     }
-}
-/*
-impl From<BencodeError> for DhtError {
-    fn from(error: BencodeError) -> DhtError {
-        DhtError::with_detail(DhtErrorKind::Other,
-            "A BencodeError Occurred, See detail",
-            error.to_string()
-        )
-    }
-}
-
-impl From<BencodeConvertError> for DhtError {
-    fn from(error: BencodeConvertError) -> DhtError {
-        DhtError::with_detail(DhtErrorKind::Other,
-            "A BencodeConvertError Occurred, See detail",
-            error.to_string()
-        )
-    }
-}*/
-
-impl Error for DhtError {
-    fn description(&self) -> &str { self.desc }
-    
-    fn cause(&self) -> Option<&Error> { None }
 }

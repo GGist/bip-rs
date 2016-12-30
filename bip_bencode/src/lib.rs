@@ -13,7 +13,7 @@
 //!         let data = b"d12:lucky_numberi7ee";
 //!         let bencode = Bencode::decode(data).unwrap();
 //!
-//!         assert_eq!(7, bencode.dict().unwrap().lookup("lucky_number")
+//!         assert_eq!(7, bencode.dict().unwrap().lookup("lucky_number".as_bytes())
 //!             .unwrap().int().unwrap());
 //!     }
 //! ```
@@ -35,6 +35,9 @@
 //!     }
 //! ```
 
+#[macro_use]
+extern crate error_chain;
+
 mod bencode;
 mod convert;
 mod decode;
@@ -43,19 +46,19 @@ mod encode;
 mod error;
 
 pub use bencode::{Bencode, BencodeKind};
-pub use convert::{BencodeConvert};
-pub use dictionary::{Dictionary};
+pub use convert::BencodeConvert;
+pub use dictionary::Dictionary;
 pub use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 pub use error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
 
-const BEN_END:    u8 = b'e';
+const BEN_END: u8 = b'e';
 const DICT_START: u8 = b'd';
 const LIST_START: u8 = b'l';
-const INT_START:  u8 = b'i';
+const INT_START: u8 = b'i';
 
-const BYTE_LEN_LOW:  u8 = b'0';
+const BYTE_LEN_LOW: u8 = b'0';
 const BYTE_LEN_HIGH: u8 = b'9';
-const BYTE_LEN_END:  u8 = b':';
+const BYTE_LEN_END: u8 = b':';
 
 /// Construct a Bencode map by supplying string references as keys and Bencode as values.
 #[macro_export]

@@ -14,9 +14,9 @@ extern crate rand;
 extern crate umio;
 
 // Action ids used in both requests and responses.
-const CONNECT_ACTION_ID:       u32 = 0;
+const CONNECT_ACTION_ID: u32 = 0;
 const ANNOUNCE_IPV4_ACTION_ID: u32 = 1;
-const SCRAPE_ACTION_ID:        u32 = 2;
+const SCRAPE_ACTION_ID: u32 = 2;
 const ANNOUNCE_IPV6_ACTION_ID: u32 = 4;
 
 pub mod request;
@@ -34,8 +34,8 @@ mod server;
 pub use client::{TrackerClient, ClientRequest, ClientResponse, ClientToken, ClientMetadata};
 pub use client::error::{ClientResult, ClientError};
 
-pub use server::{TrackerServer};
+pub use server::TrackerServer;
 pub use server::handler::{ServerResult, ServerHandler};
 
-pub use bip_handshake::{Handshaker};
+pub use bip_handshake::Handshaker;
 pub use bip_util::bt::{InfoHash, PeerId};

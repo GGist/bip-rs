@@ -1,132 +1,92 @@
-use std::borrow::{Cow};
-use std::error::{Error};
-use std::fmt::{self, Display, Formatter};
-
-//----------------------------------------------------------------------------//
-
-/// Result of parsing bencoded data.
-pub type BencodeParseResult<T> = Result<T, BencodeParseError>;
-
-/// Enumerates all bencode parse errors.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum BencodeParseErrorKind {
-    /// An Incomplete Number Of Bytes.
-    BytesEmpty,
-    /// An Invalid Byte Was Found.
-    InvalidByte,
-    /// An Invalid Integer Was Found.
-    InvalidInt,
-    /// An Invalid Key Was Found.
-    InvalidKey,
-    /// An Invalid Byte Length Was Found.
-    InvalidLength
-}
-
-/// Error type generated when parsing bencoded data.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct BencodeParseError {
-    kind: BencodeParseErrorKind,
-    desc: &'static str,
-    pos:  Option<usize>
-}
-
-impl BencodeParseError {
-    pub fn new(kind: BencodeParseErrorKind, desc: &'static str) -> BencodeParseError {
-        BencodeParseError::with_pos(kind, desc, None)
+error_chain! {
+    types {
+        BencodeParseError, BencodeParseErrorKind, BencodeParseResultExt, BencodeParseResult;
     }
-    
-    pub fn with_pos(kind: BencodeParseErrorKind, desc: &'static str, pos: Option<usize>) -> BencodeParseError {
-        BencodeParseError{ kind: kind, desc: desc, pos: pos }
-    }
-    
-    pub fn kind(&self) -> BencodeParseErrorKind {
-        self.kind
-    }
-    
-    pub fn position(&self) -> Option<usize> {
-        self.pos
-    }
-}
 
-impl Display for BencodeParseError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        try!(f.write_fmt(format_args!("Kind: {:?}", self.kind)));
-        
-        try!(f.write_fmt(format_args!(", Description: {}", self.desc)));
-        
-        if let Some(n) = self.pos {
-            try!(f.write_fmt(format_args!(", Position: {}", n)));
+    errors {
+        BytesEmpty {
+            pos: Option<usize>
+         } {
+            description("Incomplete Number Of Bytes")
+            display("Incomplete Number Of Bytes At {:?}", pos)
         }
-
-        Ok(())
-    }   
+        InvalidByte {
+            pos: Option<usize>
+         } {
+            description("Invalid Byte Found")
+            display("Invalid Byte Found At {:?}", pos)
+        }
+        InvalidIntNoDelimiter {
+            pos: Option<usize>
+         } {
+            description("Invalid Integer Found With No Delimiter")
+            display("Invalid Integer Found With No Delimiter At {:?}", pos)
+        }
+        InvalidIntNegativeZero {
+            pos: Option<usize>
+         } {
+            description("Invalid Integer Found As Negative Zero")
+            display("Invalid Integer Found As Negative Zero At {:?}", pos)
+        }
+        InvalidIntZeroPadding {
+            pos: Option<usize>
+         } {
+            description("Invalid Integer Found With Zero Padding")
+            display("Invalid Integer Found With Zero Padding At {:?}", pos)
+        }
+        InvalidIntParseError {
+            pos: Option<usize>
+         } {
+            description("Invalid Integer Found To Fail Parsing")
+            display("Invalid Integer Found To Fail Parsing At {:?}", pos)
+        }
+        InvalidKeyOrdering {
+            pos: Option<usize>,
+            key: Vec<u8>
+         } {
+            description("Invalid Dictionary Key Ordering Found")
+            display("Invalid Dictionary Key Ordering Found At {:?} For Key {:?}", pos, key)
+        }
+        InvalidKeyDuplicates {
+            pos: Option<usize>,
+            key: Vec<u8>
+         } {
+            description("Invalid Dictionary Duplicate Keys Found")
+            display("Invalid Dictionary Key Found At {:?} For Key {:?}", pos, key)
+        }
+        InvalidLengthNegative {
+            pos: Option<usize>
+         } {
+            description("Invalid Byte Length Found As Negative")
+            display("Invalid Byte Length Found As Negative At {:?}", pos)
+        }
+        InvalidLengthOverflow {
+            pos: Option<usize>
+         } {
+            description("Invalid Byte Length Found To Overflow Native Size")
+            display("Invalid Byte Length Found To Overflow Native Size At {:?}", pos)
+        }
+    }
 }
 
-impl Error for BencodeParseError {
-    fn description(&self) -> &str { self.desc }
-    
-    fn cause(&self) -> Option<&Error> { None }
-}
-
-//----------------------------------------------------------------------------//
-
-/// Result of converting a bencode object.
-pub type BencodeConvertResult<T> = Result<T, BencodeConvertError>;
-
-/// Enumerates all bencode conversion errors.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum BencodeConvertErrorKind {
-    /// A key is missing in the bencode dictionary.
-    MissingKey,
-    /// A bencode value has the wrong type.
-    WrongType
-}
-
-/// Error type generated when converting bencode objects.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct BencodeConvertError {
-    kind: BencodeConvertErrorKind,
-    desc: &'static str,
-    key: Cow<'static, str>
-}
-
-impl BencodeConvertError {
-    pub fn new(kind: BencodeConvertErrorKind, desc: &'static str) -> BencodeConvertError {
-        BencodeConvertError::with_key(kind, desc, "")
+error_chain! {
+    types {
+        BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResultExt, BencodeConvertResult;
     }
 
-    pub fn with_key<T>(kind: BencodeConvertErrorKind, desc: &'static str, key: T)
-        -> BencodeConvertError where T: Into<Cow<'static, str>> {
-        BencodeConvertError{ kind: kind, desc: desc, key: key.into() }
+    errors {
+        MissingKey {
+            key: Vec<u8>
+         } {
+            description("Missing Key In Bencode")
+            display("Missing Key In Bencode For {:?}", key)
+        }
+        WrongType {
+            key: Vec<u8>,
+            expected_type: String
+         } {
+            description("Wrong Type In Bencode")
+            display("Wrong Type In Bencode For {:?} Expected Type {}", key, expected_type)
+        }
     }
-    
-    pub fn kind(&self) -> BencodeConvertErrorKind {
-        self.kind
-    }
-    
-    pub fn desc(&self) -> &'static str {
-        self.desc
-    }
-    
-    pub fn key(&self) -> &str {
-        &self.key
-    }
-}
-
-impl Display for BencodeConvertError {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        try!(f.write_fmt(format_args!("Kind: {:?}", self.kind)));
-        
-        try!(f.write_fmt(format_args!(", Description: {}", self.desc)));
-        
-        try!(f.write_fmt(format_args!(", Key: {}", self.key)));
-        
-        Ok(())
-    }   
-}
-
-impl Error for BencodeConvertError {
-    fn description(&self) -> &str { self.desc }
-    
-    fn cause(&self) -> Option<&Error> { None }
 }

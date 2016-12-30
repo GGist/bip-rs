@@ -1,10 +1,10 @@
-use std::io::{self};
-use std::net::{SocketAddr};
+use std::io;
+use std::net::SocketAddr;
 
-use umio::external::{Sender};
+use umio::external::Sender;
 
-use server::dispatcher::{DispatchMessage};
-use server::handler::{ServerHandler};
+use server::dispatcher::DispatchMessage;
+use server::handler::ServerHandler;
 
 mod dispatcher;
 pub mod handler;
@@ -13,22 +13,22 @@ pub mod handler;
 ///
 /// Server will shutdown on drop.
 pub struct TrackerServer {
-    send: Sender<DispatchMessage>
+    send: Sender<DispatchMessage>,
 }
 
 impl TrackerServer {
     /// Run a new TrackerServer.
     pub fn run<H>(bind: SocketAddr, handler: H) -> io::Result<TrackerServer>
-        where H: ServerHandler + 'static {
-        dispatcher::create_dispatcher(bind, handler).map(|send| {
-            TrackerServer{ send: send }
-        })
+        where H: ServerHandler + 'static
+    {
+        dispatcher::create_dispatcher(bind, handler).map(|send| TrackerServer { send: send })
     }
 }
 
 impl Drop for TrackerServer {
     fn drop(&mut self) {
-        self.send.send(DispatchMessage::Shutdown)
+        self.send
+            .send(DispatchMessage::Shutdown)
             .expect("bip_utracker: TrackerServer Failed To Send Shutdown Message");
     }
 }
