@@ -64,6 +64,8 @@ extern crate bip_util;
 extern crate chrono;
 extern crate crossbeam;
 extern crate walkdir;
+#[macro_use]
+extern crate error_chain;
 
 #[cfg(test)]
 extern crate rand;

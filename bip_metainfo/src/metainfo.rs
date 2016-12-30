@@ -67,9 +67,7 @@ impl MetainfoFile {
 
 /// Parses the given bytes and builds a MetainfoFile from them.
 fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
-    let root_bencode = try!(Bencode::decode(bytes).map_err(|_| {
-        ParseError::new(ParseErrorKind::CorruptData, "Specified File Is Not Valid Bencode")
-    }));
+    let root_bencode = try!(Bencode::decode(bytes));
     let root_dict = try!(parse::parse_root_dict(&root_bencode));
     
     let announce = parse::parse_announce_url(root_dict).map(|e| e.to_owned());
@@ -182,7 +180,7 @@ fn is_multi_file_torrent<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> bool {
 fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
     if pieces.len() % sha::SHA_HASH_LEN != 0 {
         let error_msg = format!("Piece Hash Length Of {} Is Invalid", pieces.len());
-        Err(ParseError::new(ParseErrorKind::MissingData, error_msg))
+        Err(ParseError::from_kind(ParseErrorKind::MissingData{ details: error_msg }))
     } else {
         let mut hash_buffers = Vec::with_capacity(pieces.len() / sha::SHA_HASH_LEN);
         let mut hash_bytes = [0u8; sha::SHA_HASH_LEN];
@@ -596,9 +594,4 @@ mod tests {
         validate_parse_from_params(Some(tracker), None, None, None, None, Some(piece_len),
             Some(&pieces), None, None, Some(vec![(Some(file_len), None, None)]));
     }
-    
-        /*
-        fn validate_parse_from_params(tracker: Option<&str>, create_date: Option<i64>, comment: Option<&str>,
-        create_by: Option<&str>, encoding: Option<&str>, piece_length: Option<i64>, pieces: Option<&[u8]>,
-        private: Option<i64>, directory: Option<&str>, files: Option<Vec<(Option<i64>, Option<&[u8]>, Option<Vec<String>>)>>) {*/
 }

@@ -53,8 +53,8 @@ pub enum PieceLength {
 
 /// Builder for generating a torrent file from some accessor.
 pub struct MetainfoBuilder<'a> {
-    root:         BTreeMap<&'a str, Bencode<'a>>,
-    info:         BTreeMap<&'a str, Bencode<'a>>,
+    root:         BTreeMap<&'a [u8], Bencode<'a>>,
+    info:         BTreeMap<&'a [u8], Bencode<'a>>,
     // Stored outside of root as some of the variants need the total
     // file sizes in order for the final piece length to be calculated.
     piece_length: PieceLength

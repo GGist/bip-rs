@@ -1,7 +1,7 @@
-use bip_bencode::{Bencode, Dictionary, BencodeConvert, BencodeConvertError, BencodeConvertErrorKind};
+use bip_bencode::{Bencode, Dictionary, BencodeConvert, BencodeConvertError};
 use bip_util::bt::{InfoHash};
 
-use error::{ParseError, ParseErrorKind, ParseResult};
+use error::{ParseError, ParseResult};
 
 /// Struct implemented the BencodeConvert trait for decoding the metainfo file.
 struct MetainfoConverter;
@@ -10,12 +10,7 @@ impl BencodeConvert for MetainfoConverter {
     type Error = ParseError;
     
     fn handle_error(&self, error: BencodeConvertError) -> ParseError {
-        let detail_msg = match error.kind() {
-            BencodeConvertErrorKind::MissingKey => format!("Required Data Missing: {}", error.key()),
-            BencodeConvertErrorKind::WrongType  => format!("Invalid Type For Data: {}", error.key())
-        };
-        
-        ParseError::new(ParseErrorKind::MissingData, detail_msg)
+        error.into()
     }
 }
 
@@ -23,27 +18,27 @@ impl BencodeConvert for MetainfoConverter {
 const CONVERT: MetainfoConverter = MetainfoConverter;
 
 /// Used as an error key to refer to the root bencode object.
-pub const ROOT_ERROR_KEY: &'static str = "root";
+pub const ROOT_ERROR_KEY: &'static [u8] = b"root";
 
 /// Keys found within the root dictionary of a metainfo file.
-pub const ANNOUNCE_URL_KEY:  &'static str = "announce";
-pub const CREATION_DATE_KEY: &'static str = "creation date";
-pub const COMMENT_KEY:       &'static str = "comment";
-pub const CREATED_BY_KEY:    &'static str = "created by";
-pub const ENCODING_KEY:      &'static str = "encoding";
-pub const INFO_KEY:          &'static str = "info";
+pub const ANNOUNCE_URL_KEY:  &'static [u8] = b"announce";
+pub const CREATION_DATE_KEY: &'static [u8] = b"creation date";
+pub const COMMENT_KEY:       &'static [u8] = b"comment";
+pub const CREATED_BY_KEY:    &'static [u8] = b"created by";
+pub const ENCODING_KEY:      &'static [u8] = b"encoding";
+pub const INFO_KEY:          &'static [u8] = b"info";
 
 /// Keys found within the info dictionary of a metainfo file.
-pub const PIECE_LENGTH_KEY: &'static str = "piece length";
-pub const PIECES_KEY:       &'static str = "pieces";
-pub const PRIVATE_KEY:      &'static str = "private";
-pub const NAME_KEY:         &'static str = "name";
-pub const FILES_KEY:        &'static str = "files";
+pub const PIECE_LENGTH_KEY: &'static [u8] = b"piece length";
+pub const PIECES_KEY:       &'static [u8] = b"pieces";
+pub const PRIVATE_KEY:      &'static [u8] = b"private";
+pub const NAME_KEY:         &'static [u8] = b"name";
+pub const FILES_KEY:        &'static [u8] = b"files";
 
 /// Keys found within the files dictionary of a metainfo file.
-pub const LENGTH_KEY: &'static str = "length";
-pub const MD5SUM_KEY: &'static str = "md5sum";
-pub const PATH_KEY:   &'static str = "path";
+pub const LENGTH_KEY: &'static [u8] = b"length";
+pub const MD5SUM_KEY: &'static [u8] = b"md5sum";
+pub const PATH_KEY:   &'static [u8] = b"path";
 
 /// Parses the root bencode as a dictionary.
 pub fn parse_root_dict<'a, 'b>(root_bencode: &'b Bencode<'a>) -> ParseResult<&'b Dictionary<'a, Bencode<'a>>> {

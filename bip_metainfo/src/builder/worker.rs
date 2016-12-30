@@ -62,7 +62,7 @@ pub fn start_hasher_workers<A, C>(accessor: A, piece_length: usize, num_pieces: 
         
 /// Start a master hasher which will take care of chunking sequential/overlapping pieces from the data given to it and giving
 /// updates to the hasher workers.
-fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<MasterMessage>, work: Arc<MsQueue<WorkerMessage>>,
+fn start_hash_master<A>(accessor: A, num_workers: usize, recv: Receiver<MasterMessage>, work: Arc<MsQueue<WorkerMessage>>,
     buffers: Arc<PieceBuffers>, progress_sender: Sender<usize>) -> ParseResult<Vec<(usize, ShaHash)>> where A: Accessor {
     let mut pieces = Vec::new();
     let mut piece_index = 0;
@@ -83,6 +83,7 @@ fn start_hash_master<'a, A>(accessor: A, num_workers: usize, recv: Receiver<Mast
             })) == 0;
             
             if curr_piece_buffer.is_whole() {
+                println!("ASD");
                 work.push(WorkerMessage::HashPiece(piece_index, curr_piece_buffer));
                 
                 piece_index += 1;
