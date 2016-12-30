@@ -26,7 +26,7 @@ extern crate error_chain;
 // this would require essentially a completely separate routing table of course and so it
 // might make sense to make this distinction available to the user and allow them to startup
 // two dhts using the different protocols on their own.
-//const VUZE_DHT: (&'static str, u16) = ("dht.aelitis.com", 6881);
+// const VUZE_DHT: (&'static str, u16) = ("dht.aelitis.com", 6881);
 
 mod builder;
 mod error;
@@ -40,9 +40,9 @@ mod transaction;
 mod worker;
 
 pub use builder::{DhtBuilder, MainlineDht};
-pub use router::{Router};
+pub use router::Router;
 pub use worker::{DhtEvent, ShutdownCause};
 
-pub use bip_handshake::{Handshaker};
+pub use bip_handshake::Handshaker;
 /// Test
 pub use bip_util::bt::{InfoHash, PeerId};

@@ -1,8 +1,8 @@
-use std::io::{self};
+use std::io;
 
-use bip_bencode::{BencodeConvertError};
+use bip_bencode::BencodeConvertError;
 
-use message::error::{ErrorMessage};
+use message::error::ErrorMessage;
 
 error_chain! {
     types {
