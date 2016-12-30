@@ -31,8 +31,9 @@ impl ErrorCode {
             SERVER_ERROR_CODE   => Ok(ErrorCode::ServerError),
             PROTOCOL_ERROR_CODE => Ok(ErrorCode::ProtocolError),
             METHOD_UNKNOWN_CODE => Ok(ErrorCode::MethodUnknown),
-            unknown => Err(DhtError::with_detail(DhtErrorKind::InvalidResponse,
-                "KRPC Error Message Invalid Error Code", unknown.to_string()))
+            unknown => Err(DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                details: format!("Error Message Invalid Error Code {:?}", unknown)
+            }))
         }
     }
 }
@@ -56,8 +57,9 @@ struct ErrorValidate;
 impl ErrorValidate {
     fn extract_error_args<'a>(&self, args: &[Bencode<'a>]) -> DhtResult<(u8, &'a str)> {
         if args.len() != NUM_ERROR_ARGS {
-            return Err(DhtError::new(DhtErrorKind::InvalidResponse,
-                "KRPC Error Message Invalid Number Of Error Arguments"))
+            return Err(DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                details: format!("Error Message Invalid Number Of Error Args: {}", args.len())
+            }))
         }
         
         let code = try!(self.convert_int(&args[0], &format!("{}[0]", ERROR_ARGS_KEY)));
@@ -71,7 +73,7 @@ impl BencodeConvert for ErrorValidate {
     type Error = DhtError;
     
     fn handle_error(&self, error: BencodeConvertError) -> DhtError {
-        DhtError::with_detail(DhtErrorKind::InvalidResponse, error.desc(), error.key().to_owned())
+        error.into()
     }
 }
 

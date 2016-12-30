@@ -46,7 +46,7 @@ impl BencodeConvert for MessageValidate {
     type Error = DhtError;
     
     fn handle_error(&self, error: BencodeConvertError) -> DhtError {
-        DhtError::with_detail(DhtErrorKind::InvalidMessage, error.desc(), error.key().to_owned())
+        error.into()
     }
 }
 
@@ -84,8 +84,9 @@ impl<'a> MessageType<'a> {
                 Ok(MessageType::Error(err_message))
             },
             unknown => {
-                Err(DhtError::with_detail(DhtErrorKind::InvalidMessage, "KRPC Message Root Invalid Message Type",
-                    unknown.to_owned()))
+                Err(DhtError::from_kind(DhtErrorKind::InvalidMessage{
+                    code: unknown.to_owned()
+                }))
             }
         }
     }

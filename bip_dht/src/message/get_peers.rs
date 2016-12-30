@@ -111,8 +111,9 @@ impl<'a> GetPeersResponse<'a> {
                 CompactInfoType::Values(values_info)
             },
             (Err(_), Err(_)) => {
-                return Err(DhtError::new(DhtErrorKind::InvalidResponse,
-                    "Failed To Find nodes Or values In Node Response"))
+                return Err(DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                    details: "Failed To Find nodes Or values In Node Response".to_owned()
+                }))
             }
         };
         
@@ -138,24 +139,24 @@ impl<'a> GetPeersResponse<'a> {
     pub fn encode(&self) -> Vec<u8> {
         let mut response_args = BTreeMap::new();
         
-        response_args.insert(message::NODE_ID_KEY, ben_bytes!(self.node_id.as_ref()));
+        response_args.insert(message::NODE_ID_KEY.as_bytes(), ben_bytes!(self.node_id.as_ref()));
         match self.token {
             Some(token) => {
-                response_args.insert(message::TOKEN_KEY, ben_bytes!(token));
+                response_args.insert(message::TOKEN_KEY.as_bytes(), ben_bytes!(token));
             },
             None => ()
         };
         
         match self.info_type {
             CompactInfoType::Nodes(nodes) => {
-                response_args.insert(message::NODES_KEY, ben_bytes!(nodes.nodes()));
+                response_args.insert(message::NODES_KEY.as_bytes(), ben_bytes!(nodes.nodes()));
             },
             CompactInfoType::Values(values) => {
-                response_args.insert(message::VALUES_KEY, Bencode::List(values.values().to_vec()));
+                response_args.insert(message::VALUES_KEY.as_bytes(), Bencode::List(values.values().to_vec()));
             },
             CompactInfoType::Both(nodes, values) => {
-                response_args.insert(message::NODES_KEY, ben_bytes!(nodes.nodes()));
-                response_args.insert(message::VALUES_KEY, Bencode::List(values.values().to_vec()));
+                response_args.insert(message::NODES_KEY.as_bytes(), ben_bytes!(nodes.nodes()));
+                response_args.insert(message::VALUES_KEY.as_bytes(), Bencode::List(values.values().to_vec()));
             }
         };
         

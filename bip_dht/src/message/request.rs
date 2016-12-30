@@ -1,4 +1,4 @@
-use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError, BencodeConvertErrorKind};
+use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError};
 use bip_util::bt::{NodeId, InfoHash};
 
 use message::{self};
@@ -34,9 +34,8 @@ impl<'a> RequestValidate<'a> {
         NodeId::from_hash(node_id).map_err(|_| {
             let error_msg = ErrorMessage::new(self.trans_id.to_owned(), ErrorCode::ProtocolError,
                 format!("Node ID With Length {} Is Not Valid", node_id.len()));
-                
-            DhtError::with_detail(DhtErrorKind::InvalidRequest(error_msg), "Found Node ID With Invalid Length",
-                node_id.len().to_string())
+            
+            DhtError::from_kind(DhtErrorKind::InvalidRequest{ msg: error_msg })
         })
     }
     
@@ -45,8 +44,7 @@ impl<'a> RequestValidate<'a> {
             let error_msg = ErrorMessage::new(self.trans_id.to_owned(), ErrorCode::ProtocolError,
                 format!("InfoHash With Length {} Is Not Valid", info_hash.len()));
             
-            DhtError::with_detail(DhtErrorKind::InvalidRequest(error_msg), "Found InfoHash With Invalid Length",
-                info_hash.len().to_string())
+            DhtError::from_kind(DhtErrorKind::InvalidRequest{ msg: error_msg })
         })
     }
 }
@@ -55,13 +53,7 @@ impl<'a> BencodeConvert for RequestValidate<'a> {
     type Error = DhtError;
     
     fn handle_error(&self, error: BencodeConvertError) -> DhtError {
-        let message = match error.kind() {
-            BencodeConvertErrorKind::MissingKey => format!("Missing Dictionary Key: {}", error.key()),
-            BencodeConvertErrorKind::WrongType  => format!("Wrong Type For Key: {}", error.key())
-        };
-        let error_msg = ErrorMessage::new(self.trans_id.to_owned(), ErrorCode::ProtocolError, message);
-        
-        DhtError::with_detail(DhtErrorKind::InvalidRequest(error_msg), error.desc(), error.key().to_owned())
+        error.into()
     }
 }
 
@@ -116,8 +108,7 @@ impl<'a> RequestType<'a> {
                     let error_message = ErrorMessage::new(trans_id.to_owned(), ErrorCode::MethodUnknown,
                         format!("Received Unknown Request Method: {}", unknown));
     
-                    Err(DhtError::with_detail(DhtErrorKind::InvalidRequest(error_message),
-                        "KRPC Message Root Unknown Request Type", unknown.to_owned()))
+                    Err(DhtError::from_kind(DhtErrorKind::InvalidRequest{ msg: error_message }))
                 }
             }
         }
@@ -128,7 +119,7 @@ impl<'a> RequestType<'a> {
 ///
 /// Treat unsupported messages with either a target id key or info hash key as find node messages.
 fn forward_compatible_find_node<'a>(rqst_root: &Dictionary<'a, Bencode<'a>>) -> Option<&'static str> {
-    match (rqst_root.lookup(message::TARGET_ID_KEY), rqst_root.lookup(message::INFO_HASH_KEY)) {
+    match (rqst_root.lookup(message::TARGET_ID_KEY.as_bytes()), rqst_root.lookup(message::INFO_HASH_KEY.as_bytes())) {
         (Some(_), _) => Some(message::TARGET_ID_KEY),
         (_, Some(_)) => Some(message::INFO_HASH_KEY),
         (None, None) => None

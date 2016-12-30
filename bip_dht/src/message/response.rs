@@ -23,16 +23,18 @@ impl<'a> ResponseValidate<'a> {
     
     pub fn validate_node_id(&self, node_id: &[u8]) -> DhtResult<NodeId> {
         NodeId::from_hash(node_id).map_err(|_|
-            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found Node ID With Invalid Length",
-                format!("TransactionID: {:?}, NodeID Length: {:?}", self.trans_id, node_id.len()))
+            DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                details: format!("TID {:?} Found Node ID With Invalid Length {:?}", self.trans_id, node_id.len())
+            })
         )
     }
     
     /// Validate the given nodes string which should be IPv4 compact 
     pub fn validate_nodes<'b>(&self, nodes: &'b [u8]) -> DhtResult<CompactNodeInfo<'b>> {
         CompactNodeInfo::new(nodes).map_err(|_|
-            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found Nodes Structure With Wrong Multiple Of Bytes",
-                format!("TransactionID: {:?}", self.trans_id))
+            DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                details: format!("TID {:?} Found Nodes Structure With {} Number Of Bytes Instead Of Correct Multiple", self.trans_id, nodes.len())
+            })
         )
     }
     
@@ -40,14 +42,18 @@ impl<'a> ResponseValidate<'a> {
         for bencode in values.iter() {
             match bencode.bytes() {
                 Some(_) => (),
-                None    => return Err(DhtError::with_detail(DhtErrorKind::InvalidResponse,
-                    "Found Values Structure Element With Wrong Bencode Type", format!("TransactionID: {:?}", self.trans_id)))
+                None    => {
+                    return Err(DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                        details: format!("TID {:?} Found Values Structure As Non Bytes Type", self.trans_id)
+                    }))
+                }
             }
         }
     
         CompactValueInfo::new(values).map_err(|_|
-            DhtError::with_detail(DhtErrorKind::InvalidResponse, "Found values Structure Element With Wrong Number Of Bytes",
-            format!("TransactionID: {:?}", self.trans_id))
+            DhtError::from_kind(DhtErrorKind::InvalidResponse{
+                details: format!("TID {:?} Found Values Structrue With Wrong Number Of Bytes", self.trans_id)
+            })
         )
     }
 }
@@ -56,7 +62,7 @@ impl<'a> BencodeConvert for ResponseValidate<'a> {
     type Error = DhtError;
     
     fn handle_error(&self, error: BencodeConvertError) -> DhtError {
-        DhtError::with_detail(DhtErrorKind::InvalidResponse, error.desc(), error.key().to_owned())
+        error.into()
     }
 }
 
@@ -113,7 +119,7 @@ impl<'a> ResponseType<'a> {
                 unimplemented!();
             },
             ExpectedResponse::None => {
-                Err(DhtError::new(DhtErrorKind::UnsolicitedResponse, "Failed To Match Node Response To A Request"))
+                Err(DhtError::from_kind(DhtErrorKind::UnsolicitedResponse))
             }
         }
     }

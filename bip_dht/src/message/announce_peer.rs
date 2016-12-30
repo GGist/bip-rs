@@ -49,7 +49,7 @@ impl<'a> AnnouncePeerRequest<'a> {
         
         // Technically, the specification says that the value is either 0 or 1 but goes on to say that
         // if it is not zero, then the source port should be used. We will allow values other than 0 or 1.
-        let response_port = match rqst_root.lookup(IMPLIED_PORT_KEY).map(|n| n.int()) {
+        let response_port = match rqst_root.lookup(IMPLIED_PORT_KEY.as_bytes()).map(|n| n.int()) {
             Some(Some(n)) if n != 0 => ConnectPort::Implied,
             _ => {
                 // If we hit this, the port either was not provided or it was of the wrong bencode type

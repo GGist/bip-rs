@@ -11,6 +11,8 @@ extern crate log;
 extern crate mio;
 extern crate rand;
 extern crate chrono;
+#[macro_use]
+extern crate error_chain;
 
 // Mainline DHT extensions supported on behalf of libtorrent:
 // - Always send 'nodes' on a get_peers response even if 'values' is present
