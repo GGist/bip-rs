@@ -15,9 +15,9 @@ pub trait BencodeConvert {
     fn convert_int<'a, E>(&self, bencode: &Bencode<'a>, error_key: E) -> Result<i64, Self::Error>
         where E: AsRef<[u8]>
     {
-        bencode.int().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType(
-            error_key.as_ref().to_owned(), "Integer".to_owned()
-        ))))
+        bencode.int().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType{
+            key: error_key.as_ref().to_owned(), expected_type: "Integer".to_owned()
+        })))
     }
 
     /// Attempt to convert the given bencode value into bytes.
@@ -29,9 +29,9 @@ pub trait BencodeConvert {
                             -> Result<&'a [u8], Self::Error>
         where E: AsRef<[u8]>
     {
-        bencode.bytes().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType(
-            error_key.as_ref().to_owned(), "Bytes".to_owned()
-        ))))
+        bencode.bytes().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType{
+            key: error_key.as_ref().to_owned(), expected_type: "Bytes".to_owned()
+        })))
     }
 
     /// Attempt to convert the given bencode value into a UTF-8 string.
@@ -43,9 +43,9 @@ pub trait BencodeConvert {
                           -> Result<&'a str, Self::Error>
         where E: AsRef<[u8]>
     {
-        bencode.str().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType(
-            error_key.as_ref().to_owned(), "UTF-8 Bytes".to_owned()
-        ))))
+        bencode.str().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType{
+            key: error_key.as_ref().to_owned(), expected_type: "UTF-8 Bytes".to_owned()
+        })))
     }
 
     /// Attempty to convert the given bencode value into a list.
@@ -57,9 +57,9 @@ pub trait BencodeConvert {
                                -> Result<&'b [Bencode<'a>], Self::Error>
         where E: AsRef<[u8]>
     {
-        bencode.list().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType(
-            error_key.as_ref().to_owned(), "List".to_owned()
-        ))))
+        bencode.list().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType{
+            key: error_key.as_ref().to_owned(), expected_type: "List".to_owned()
+        })))
     }
 
     /// Attempt to convert the given bencode value into a dictionary.
@@ -71,9 +71,9 @@ pub trait BencodeConvert {
                                -> Result<&'b Dictionary<'a, Bencode<'a>>, Self::Error>
         where E: AsRef<[u8]>
     {
-        bencode.dict().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType(
-            error_key.as_ref().to_owned(), "Dictionary".to_owned()
-        ))))
+        bencode.dict().ok_or(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::WrongType{
+            key: error_key.as_ref().to_owned(), expected_type: "Dictionary".to_owned()
+        })))
     }
 
     /// Look up a value in a dictionary of bencoded values using the given key.
@@ -87,7 +87,7 @@ pub trait BencodeConvert {
 
         match dictionary.lookup(key_ref) {
             Some(n) => Ok(n),
-            None    => Err(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::MissingKey(key_ref.to_owned())))),
+            None    => Err(self.handle_error(BencodeConvertError::from_kind(BencodeConvertErrorKind::MissingKey{ key: key_ref.to_owned() }))),
         }
     }
 

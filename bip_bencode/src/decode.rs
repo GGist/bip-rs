@@ -180,7 +180,7 @@ fn collapse_bencode<'a>(stack: &mut Vec<IBencodeType<'a>>,
                 // Spec says that the keys must be in alphabetical order
                 match dict.keys().last() {
                     Some(last_key) if key < *last_key => {
-                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyOrdering(Some(curr_pos), key.to_owned())))
+                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyOrdering{ pos: Some(curr_pos), key: key.to_owned() }))
                     }
                     _ => (),
                 };
@@ -189,7 +189,7 @@ fn collapse_bencode<'a>(stack: &mut Vec<IBencodeType<'a>>,
                 match dict.entry(key) {
                     Entry::Vacant(n) => n.insert(bencode),
                     Entry::Occupied(_) => {
-                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyDuplicates(Some(curr_pos), key.to_owned())))
+                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyDuplicates{ pos: Some(curr_pos), key: key.to_owned() }))
                     }
                 };
 
@@ -223,7 +223,7 @@ fn collapse_bencode<'a>(stack: &mut Vec<IBencodeType<'a>>,
                 // Spec says that the keys must be in alphabetical order
                 match dict.keys().last() {
                     Some(last_key) if i_key < *last_key => {
-                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyOrdering(Some(curr_pos), key.to_owned())))
+                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyOrdering{ pos: Some(curr_pos), key: key.to_owned() }))
                     }
                     _ => (),
                 };
@@ -232,7 +232,7 @@ fn collapse_bencode<'a>(stack: &mut Vec<IBencodeType<'a>>,
                 match dict.entry(i_key) {
                     Entry::Vacant(n) => n.insert(bencode),
                     Entry::Occupied(_) => {
-                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyDuplicates(Some(curr_pos), key.to_owned())))
+                        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyDuplicates{ pos: Some(curr_pos), key: key.to_owned() }))
                     }
                 };
 
@@ -274,7 +274,7 @@ fn decode_shallow<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(Bencod
             // Include the length digit, don't increment position
             Ok((Bencode::Bytes(bencode), pos))
         }
-        _ => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidByte(Some(pos)))),
+        _ => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidByte{ pos: Some(pos) })),
     }
 }
 
@@ -285,7 +285,7 @@ fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, u
     let relative_end_pos = match begin_decode.iter().position(|n| *n == delim) {
         Some(end_pos) => end_pos,
         None => {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntNoDelimiter(Some(pos))))
+            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntNoDelimiter{ pos: Some(pos) }))
         }
     };
     let int_byte_slice = &begin_decode[..relative_end_pos];
@@ -293,19 +293,19 @@ fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, u
     if int_byte_slice.len() > 1 {
         // Negative zero is not allowed (this would not be caught when converting)
         if int_byte_slice[0] == b'-' && int_byte_slice[1] == b'0' {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntNegativeZero(Some(pos))));
+            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntNegativeZero{ pos: Some(pos) }));
         }
 
         // Zero padding is illegal, and unspecified for key lengths (we disallow both)
         if int_byte_slice[0] == b'0' {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntZeroPadding(Some(pos))));
+            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntZeroPadding{ pos: Some(pos) }));
         }
     }
 
     let int_str = match str::from_utf8(int_byte_slice) {
         Ok(n) => n,
         Err(_) => {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError(Some(pos))))
+            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError{ pos: Some(pos) }))
         }
     };
 
@@ -313,7 +313,7 @@ fn decode_int(bytes: &[u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, u
     let absolute_end_pos = pos + relative_end_pos;
     match i64::from_str_radix(int_str, 10) {
         Ok(n) => Ok((n, absolute_end_pos + 1)),
-        Err(_) => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError(Some(pos)))),
+        Err(_) => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError{ pos: Some(pos) })),
     }
 }
 
@@ -322,7 +322,7 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8]
     let (num_bytes, start_pos) = try!(decode_int(bytes, pos, ::BYTE_LEN_END));
 
     if num_bytes < 0 {
-        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthNegative(Some(pos))));
+        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthNegative{ pos: Some(pos) }));
     }
 
     // Should be safe to cast to usize (TODO: Check if cast would overflow to provide
@@ -331,7 +331,7 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8]
     let num_bytes = num_bytes as usize;
 
     if num_bytes > bytes[start_pos..].len() {
-        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthOverflow(Some(pos))));
+        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthOverflow{ pos: Some(pos) }));
     }
 
     let end_pos = start_pos + num_bytes;
@@ -348,7 +348,7 @@ fn decode_key<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8], 
 fn peek_byte(bytes: &[u8], pos: usize) -> BencodeParseResult<u8> {
     bytes.get(pos)
         .map(|n| *n)
-        .ok_or(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty(Some(pos))))
+        .ok_or(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty{ pos: Some(pos) }))
 }
 
 #[cfg(test)]
