@@ -15,13 +15,13 @@ error_chain! {
     }
 
     errors {
-        InvalidMessage{
+        InvalidMessage {
             code: String
         } {
             description("Node Sent An Invalid Message")
             display("Node Sent An Invalid Message With Message Code {}", code)
         }
-        InvalidResponse{
+        InvalidResponse {
             details: String
         } {
             description("Node Sent Us An Invalid Response")

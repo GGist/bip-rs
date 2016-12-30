@@ -1,4 +1,4 @@
-use error::{ErrorResponse};
+use error::ErrorResponse;
 
 /// Result type for a ClientRequest.
 pub type ClientResult<T> = Result<T, ClientError>;
@@ -17,5 +17,5 @@ pub enum ClientError {
     /// Requested to send from IPv4 to IPv6 or vice versa.
     IPVersionMismatch,
     /// Server returned an error message.
-    ServerMessage(ErrorResponse<'static>)
+    ServerMessage(ErrorResponse<'static>),
 }

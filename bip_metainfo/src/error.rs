@@ -1,9 +1,9 @@
 //! Errors for torrent file building and parsing.
 
-use std::io::{self};
+use std::io;
 
 use bip_bencode::{BencodeConvertError, BencodeParseError};
-use walkdir::{self};
+use walkdir;
 
 error_chain! {
     types {

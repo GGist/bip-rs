@@ -89,10 +89,7 @@ fn advance_initiate<C, T>(mut prot: PeerHandshake<T, C>,
         }
         InitiateState::Done(partial_seed) => {
             // Since we initiated the connection, we already know we are interested in the hash, no point on locking (we did this in the client)
-            let res_read = read_handshake(&read[..],
-                                          context::peer_context_protocol(context),
-                                          exp_pid,
-                                          |_| true);
+            let res_read = read_handshake(&read[..], context::peer_context_protocol(context), exp_pid, |_| true);
 
             let read_length = read.len();
             read.consume(read_length);
@@ -105,7 +102,7 @@ fn advance_initiate<C, T>(mut prot: PeerHandshake<T, C>,
                         .expect("bip_handshake: Failed To Send Seed From Finished Handshaker");
 
                     Intent::of(prot).sleep()
-                },
+                }
                 Ok(_) => Intent::error(Box::new(io::Error::new(io::ErrorKind::ConnectionAborted, "InfoHash Mismatch From Peer"))),
                 Err(err) => Intent::error(Box::new(err)),
             }

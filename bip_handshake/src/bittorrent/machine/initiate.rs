@@ -12,7 +12,7 @@ use try_connect::TryConnect;
 
 pub enum InitiateMessage {
     Initiate(InitiateSeed),
-    Shutdown
+    Shutdown,
 }
 
 // ----------------------------------------------------------------------------//
@@ -85,15 +85,15 @@ impl<H, C> Initiate<H, C>
             Some(InitiateMessage::Initiate(init)) => {
                 match C::Socket::try_connect(init.addr()).ok() {
                     Some(stream) => Response::spawn(self_variant, (stream, init)),
-                    None => Response::ok(self_variant)
+                    None => Response::ok(self_variant),
                 }
-            },
+            }
             Some(InitiateMessage::Shutdown) => {
                 scope.shutdown_loop();
 
                 Response::done()
-            },
-            None => Response::ok(self_variant)
+            }
+            None => Response::ok(self_variant),
         }
     }
 }
