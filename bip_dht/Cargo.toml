@@ -1,6 +1,6 @@
 [package]
 name          = "bip_dht"
-version       = "0.5.2"
+version       = "0.6.0"
 description   = "Implementation of the bittorrent mainline DHT"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -14,7 +14,7 @@ keywords      = ["dht", "distributed", "hash", "mainline", "bittorrent"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_bencode   = { path = "../bip_bencode", version = "0.1.0" }
+bip_bencode   = { path = "../bip_bencode", version = "0.2.0" }
 bip_handshake = { path = "../bip_handshake", version = "0.5.0" }
 bip_util      = { path = "../bip_util", version = "0.4.0" }
 crc           = "1.2.0"
@@ -22,6 +22,7 @@ log           = "0.3.0"
 mio           = "0.5.0"
 rand          = "0.3.0"
 chrono        = "0.2.0"
+error-chain   = "0.7.0"
 
 [features]
 unstable      = []
