@@ -1,13 +1,11 @@
-quick_error! {
-    #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum RequestError {
-        BlockTooBig {}
-    } 
+error_chain! {
+    types {
+        RequestError, RequestErrorKind, RequestResultExt, RequestResult;
+    }
 }
 
-quick_error! {
-    #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-    pub enum TorrentError {
-        
-    } 
+error_chain! {
+    types {
+        TorrentError, TorrentErrorKind, TorrentResultExt, TorrentResult;
+    }
 }

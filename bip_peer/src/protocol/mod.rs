@@ -67,7 +67,7 @@ impl PeerIdentifier {
 // ----------------------------------------------------------------------------//
 
 /// Messages that can be sent to the peer protocol layer.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum IProtocolMessage {
     /// Message from the disk manager to the protocol layer.
     DiskManager(ODiskMessage),

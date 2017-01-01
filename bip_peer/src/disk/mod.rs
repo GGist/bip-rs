@@ -72,7 +72,7 @@ pub enum IDiskMessage {
 }
 
 /// Message that can be received from the disk manager.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum ODiskMessage {
     /// DiskManager has assembled and verified a good the given piece at the index.
     FoundGoodPiece(InfoHash, usize),
@@ -86,27 +86,6 @@ pub enum ODiskMessage {
     RequestError(RequestError),
     /// Errors that can occur from a request associated with an InfoHash.
     TorrentError(TorrentError)
-}
-
-/// Helper for calculating the needed worst case queue size for a client receiver.
-pub fn client_recv_queue_length(total_pieces: usize) -> usize {
-    // Assumes that a FoundBadPiece cannot be followed by a FoundGoodPiece both referring
-    // to the same piece UNLESS the selection layer has observed the FoundBadPiece message.
-    // So we need room for all our Found[Good|Bad]Piece messages as well as a possible
-    // TorrentError message.
-    total_pieces + 1
-}
-
-/// Helper for calculating the needed worst case queue size for a peer (protocol) receiver.
-pub fn peer_recv_queue_length(max_outgoing: usize) -> usize {
-    // If max outgoing is 5, and selection layer sends 5 piece messages to peer
-    // that will be 5 WaitLoad messages. Then the protocol layer transfers to
-    // a read state. It then receives a piece message which corresponds to a
-    // WaitReserve message. At this point, the selection layer experiecnes
-    // back pressure from the peer protocol layer, and the peer protocol layer
-    // experiences back pressure from the disk manager. So the total number
-    // of messages that the peer should be ready to accept is 6 or 5 + 1.
-    max_outgoing + 1
 }
 
 // ----------------------------------------------------------------------------//
@@ -123,17 +102,20 @@ pub struct DiskManagerRegistration {
 
 impl DiskManagerRegistration {
     /// Create a new DiskManagerRegistration using the given FileSystem.
-    pub fn with_fs<F>(fs: F) -> DiskManagerRegistration
+    pub fn with_fs<F>(fs: F, free_client_token: Token) -> DiskManagerRegistration
         where F: FileSystem + Send + Sync + 'static {
         // Create the shared data structures.
         let clients = Arc::new(Clients::new());
         let blocks = Arc::new(Blocks::new(DEFAULT_BLOCK_SIZE));
 
+        let mut namespace_gen = TokenGenerator::new();
+
         // Spin up new worker threads for allocating blocks and writing them to disk.
-        let (disk_sender, sb_sender, ab_sender) = worker::create_workers(fs, clients.clone(), blocks.clone());
+        let (disk_sender, sb_sender, ab_sender) = worker::create_workers(fs, clients.clone(), blocks.clone(),
+            namespace_gen.generate());
 
         DiskManagerRegistration {
-            namespace_gen: TokenGenerator::new(),
+            namespace_gen: namespace_gen,
             clients: clients,
             blocks: blocks,
             disk_sender: disk_sender,

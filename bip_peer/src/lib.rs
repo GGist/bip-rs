@@ -8,7 +8,7 @@ extern crate rand;
 #[macro_use]
 extern crate nom;
 #[macro_use]
-extern crate quick_error;
+extern crate error_chain;
 extern crate chan;
 extern crate crossbeam;
 
