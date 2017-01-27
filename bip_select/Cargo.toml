@@ -1,0 +1,16 @@
+[package]
+name        = "bip_select"
+version     = "0.0.0"
+description = "Bittorrent Infrastructure Project Piece Selection Module"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_select"
+repository  = "https://github.com/GGist/bip-rs/bip_select"
+
+keywords    = ["piece", "selection"]
+
+license     = "MIT/Apache-2.0"
+
+[features]
+unstable = []

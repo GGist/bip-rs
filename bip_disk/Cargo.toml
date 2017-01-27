@@ -1,0 +1,16 @@
+[package]
+name        = "bip_disk"
+version     = "0.0.0"
+description = "Bittorrent Infrastructure Project Disk Module"
+
+authors     = ["Andrew <amiller4421@gmail.com>"]
+
+homepage    = "https://github.com/GGist/bip-rs/bip_disk"
+repository  = "https://github.com/GGist/bip-rs/bip_disk"
+
+keywords    = ["filesystem", "fs", "disk"]
+
+license     = "MIT/Apache-2.0"
+
+[features]
+unstable = []
