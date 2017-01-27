@@ -19,10 +19,11 @@ use token::{Token, TokenGenerator};
 use message::standard::PieceMessage;
 
 mod context;
+mod piece_checker;
+mod piece_reader;
 
-pub fn spawn_disk_worker<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>,
-    block_worker: Sender<SyncBlockMessage>, disk_worker_namespace: Token) -> Sender<DiskMessage>
-    where F: FileSystem + Send + Sync + 'static {
+pub fn spawn_disk_worker<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>, block_worker: Sender<SyncBlockMessage>,
+    disk_worker_namespace: Token) -> Sender<DiskMessage> where F: FileSystem + Send + Sync + 'static {
     let (send, recv) = chan::async();
 
     let disk_context = Arc::new(DiskWorkerContext::new(send.clone(), fs, clients, blocks, block_worker, disk_worker_namespace));
@@ -34,11 +35,11 @@ pub fn spawn_disk_worker<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetada
         thread::spawn(move || {
             for msg in clone_recv {
                 match msg {
-                    DiskMessage::AddTorrent(namespace, metainfo, base_dir)      => clone_disk_context.add_torrent(namespace, metainfo, base_dir),
+                    DiskMessage::AddTorrent(namespace, metainfo)                => clone_disk_context.add_torrent(namespace, metainfo),
                     DiskMessage::RemoveTorrent(namespace, hash)                 => clone_disk_context.remove_torrent(namespace, hash),
                     DiskMessage::LoadBlock(namespace, request, hash, piece_msg) => clone_disk_context.load_block(namespace, request, hash, piece_msg),
                     DiskMessage::ProcessBlock(namespace, request)               => clone_disk_context.process_block(namespace, request),
-                    DiskMessage::BlockReserved(request)                         => clone_disk_context.block_reserved(request),
+                    DiskMessage::BlockReserved(namespace, request)              => clone_disk_context.block_reserved(namespace, request),
                     DiskMessage::RequestError(request_error)                    => clone_disk_context.request_error(request_error)
                 }
             }

@@ -24,17 +24,17 @@ mod disk_worker;
 const NUM_DISK_WORKERS: usize = 4;
 
 pub enum DiskMessage {
-    AddTorrent(Token, MetainfoFile, PathBuf),
+    AddTorrent(Token, MetainfoFile),
     RemoveTorrent(Token, InfoHash),
     LoadBlock(Token, Token, InfoHash, PieceMessage),
     ProcessBlock(Token, Token),
     /// INTERNAL USE ONLY
-    BlockReserved(Token),
+    BlockReserved(Token, Token),
     RequestError(RequestError)
 }
 
 pub enum SyncBlockMessage {
-    ReserveBlock(Token, Token, InfoHash, PieceMessage)
+    ReserveBlock(Token, Token, Token, InfoHash, PieceMessage)
 }
 
 pub enum AsyncBlockMessage {
@@ -42,8 +42,9 @@ pub enum AsyncBlockMessage {
 }
 
 pub struct ReserveBlockClientMetadata {
-    hash:    InfoHash,
-    message: PieceMessage
+    pub hash:    InfoHash,
+    pub message: PieceMessage
+
 }
 
 impl ReserveBlockClientMetadata {
@@ -54,9 +55,8 @@ impl ReserveBlockClientMetadata {
 
 // ----------------------------------------------------------------------------//
 
-pub fn create_workers<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>,
-    blocks: Arc<Blocks>, disk_worker_namespace: Token)
-    -> (Sender<DiskMessage>, Sender<SyncBlockMessage>, Sender<AsyncBlockMessage>)
+pub fn create_workers<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>,
+    disk_worker_namespace: Token) -> (Sender<DiskMessage>, Sender<SyncBlockMessage>, Sender<AsyncBlockMessage>)
     where F: FileSystem + Send + Sync + 'static {
     let sync_worker = block_worker::spawn_sync_block_worker(clients.clone(), blocks.clone());
     let async_worker = block_worker::spawn_async_block_worker(blocks.clone());

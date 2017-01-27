@@ -26,11 +26,11 @@ pub fn spawn_sync_block_worker(clients: Arc<Clients<ReserveBlockClientMetadata>>
     thread::spawn(move || {
         for msg in recv {
             match msg {
-                SyncBlockMessage::ReserveBlock(namespace, request, hash, piece_msg) => {
+                SyncBlockMessage::ReserveBlock(callback_namespace, namespace, request, hash, piece_msg) => {
                     clients.associate_metadata(namespace, request, ReserveBlockClientMetadata::new(hash, piece_msg));
                     blocks.allocate_block(namespace, request, piece_msg.block_length());
 
-                    clients.message_client(namespace, ODiskMessage::BlockReserved(request));
+                    clients.message_client(callback_namespace, ODiskMessage::BlockReserved(namespace, request));
                 }
             }
         }

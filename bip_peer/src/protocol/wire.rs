@@ -404,7 +404,9 @@ impl<L, DR> Protocol for WireProtocol<L, DR>
         } else {
             while let Ok(msg) = self.recv.try_recv() {
                 match msg {
-                    IProtocolMessage::DiskManager(ODiskMessage::BlockLoaded(token)) | IProtocolMessage::DiskManager(ODiskMessage::BlockReserved(token)) => {
+                    // We don't use the namespace here because we know it is the same (TODO, Should Pass Namespace)
+                    IProtocolMessage::DiskManager(ODiskMessage::BlockLoaded(_namespace, token)) | 
+                    IProtocolMessage::DiskManager(ODiskMessage::BlockReserved(_namespace, token)) => {
                         self.process_disk(transport.input(), token);
                     },
                     IProtocolMessage::DiskManager(_) => {

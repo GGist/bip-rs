@@ -20,11 +20,11 @@ use registration::LayerRegistration;
 use token::{Token, TokenGenerator};
 use message::standard::PieceMessage;
 
-mod fs;
+pub mod fs;
 mod error;
 mod worker;
 
-pub use disk::fs::{FileSystem, OSFileSystem, MemFileSystem};
+pub use disk::fs::{FileSystem};
 
 const DISK_MANAGER_WORKER_THREADS: usize = 16;
 
@@ -54,7 +54,7 @@ pub enum IDiskMessage {
     ///
     /// The sender will also be signed up to receive `ODiskMessage::FoundGoodPiece`,
     /// `ODiskMessage::FoundBadpiece`, and `ODiskMessage::TorrentError` messages.
-    AddTorrent(MetainfoFile, PathBuf),
+    AddTorrent(MetainfoFile),
     /// Remove the torrent from the disk manager.
     ///
     /// This does NOT delete anything from disk.
@@ -74,14 +74,21 @@ pub enum IDiskMessage {
 /// Message that can be received from the disk manager.
 #[derive(Debug)]
 pub enum ODiskMessage {
+    /// Torrent has been added to the disk manager.
+    TorrentAdded(InfoHash),
+    /// Torrent has been removed from the disk manager.
+    TorrentRemoved(InfoHash),
     /// DiskManager has assembled and verified a good the given piece at the index.
-    FoundGoodPiece(InfoHash, usize),
+    FoundGoodPiece(InfoHash, u32),
     /// DiskManager has assembled and verified a bad piece at the index.
-    FoundBadPiece(InfoHash, usize),
+    FoundBadPiece(InfoHash, u32),
     /// Block for the given token has been loaded.
-    BlockLoaded(Token),
+    /// (Namespace, Request)
+    BlockLoaded(Token, Token),
     /// Block for the given token has been reserved.
-    BlockReserved(Token),
+    /// Because of problems with disk manager communication, (TODO), we give back
+    /// both the namespace and request token that the block can be accessed with.
+    BlockReserved(Token, Token),
     /// Errors that can occur from a request associated with a CompoundToken.
     RequestError(RequestError),
     /// Errors that can occur from a request associated with an InfoHash.
@@ -102,7 +109,7 @@ pub struct DiskManagerRegistration {
 
 impl DiskManagerRegistration {
     /// Create a new DiskManagerRegistration using the given FileSystem.
-    pub fn with_fs<F>(fs: F, free_client_token: Token) -> DiskManagerRegistration
+    pub fn with_fs<F>(fs: F) -> DiskManagerRegistration
         where F: FileSystem + Send + Sync + 'static {
         // Create the shared data structures.
         let clients = Arc::new(Clients::new());
@@ -111,8 +118,8 @@ impl DiskManagerRegistration {
         let mut namespace_gen = TokenGenerator::new();
 
         // Spin up new worker threads for allocating blocks and writing them to disk.
-        let (disk_sender, sb_sender, ab_sender) = worker::create_workers(fs, clients.clone(), blocks.clone(),
-            namespace_gen.generate());
+        let (disk_sender, sb_sender, ab_sender) = worker::create_workers(fs, clients.clone(),
+            blocks.clone(), namespace_gen.generate());
 
         DiskManagerRegistration {
             namespace_gen: namespace_gen,
@@ -210,7 +217,28 @@ impl DiskManagerAccess for DiskManager {
 
 impl TrySender<IDiskMessage> for DiskManager {
     fn try_send(&self, data: IDiskMessage) -> Option<IDiskMessage> {
-        unimplemented!();
+        match data {
+            IDiskMessage::AddTorrent(metainfo) => {
+                self.disk_sender.send(DiskMessage::AddTorrent(self.namespace, metainfo))
+            },
+            IDiskMessage::RemoveTorrent(hash) => {
+                self.disk_sender.send(DiskMessage::RemoveTorrent(self.namespace, hash))
+            },
+            IDiskMessage::LoadBlock(request, hash, message) => {
+                self.disk_sender.send(DiskMessage::LoadBlock(self.namespace, request, hash, message))
+            },
+            IDiskMessage::ReclaimBlock(request) => {
+                self.async_block_sender.send(AsyncBlockMessage::ReclaimBlock(self.namespace, request)) 
+            },
+            IDiskMessage::ReserveBlock(request, hash, message) => {
+                self.sync_block_sender.send(SyncBlockMessage::ReserveBlock(self.namespace, self.namespace, request, hash, message))
+            },
+            IDiskMessage::ProcessBlock(request) => {
+                self.disk_sender.send(DiskMessage::ProcessBlock(self.namespace, request))
+            }
+        }
+
+        None
     }
 }
 
