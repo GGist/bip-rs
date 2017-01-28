@@ -88,7 +88,7 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
                         // Since this is the initial diff, don't let clients know of bad pieces since these were reloaded from disk
                         match piece_state {
                             &PieceState::Good(index) => self.clients.message_client(namespace, ODiskMessage::FoundGoodPiece(hash, index)),
-                            &PieceState::Bad(_)      => ()
+                            &PieceState::Bad(bad_index)      => println!("ASDASDASDASDASDAS {}", bad_index)
                         }
                     });
                 });
@@ -98,7 +98,10 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
     }
 
     pub fn remove_torrent(&self, namespace: Token, hash: InfoHash) {
-        unimplemented!()
+        match self.remove_torrent_entry(hash) {
+            Ok(_)              => (),
+            Err(torrent_error) => self.clients.message_client(namespace, ODiskMessage::TorrentError(torrent_error))
+        }
     }
 
     pub fn load_block(&self, namespace: Token, request: Token, hash: InfoHash, piece_msg: PieceMessage) {
@@ -144,7 +147,8 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
 
     fn access_torrent_entry_mut<C>(&self, hash: &InfoHash, mut callback: C)
         where C: FnMut(&mut TorrentEntry) {
-        let read_torrents = self.torrents.read().expect("bip_peer: Failed To Get Write Lock On Torrents Map");
+        let read_torrents = self.torrents.read()
+            .expect("bip_peer: Failed To Get Write Lock On Torrents Map");
         let mut write_torrent = read_torrents.get(hash)
             .expect("bip_peer: Failed To Lookup Torrent Entry In Map")
             .lock()
@@ -155,7 +159,8 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
 
     fn access_torrent_entry<C>(&self, hash: &InfoHash, mut callback: C)
         where C: FnMut(&TorrentEntry) {
-        let read_torrents = self.torrents.read().expect("bip_peer: Failed To Get Write Lock On Torrents Map");
+        let read_torrents = self.torrents.read()
+            .expect("bip_peer: Failed To Get Write Lock On Torrents Map");
         let mut write_torrent = read_torrents.get(hash)
             .expect("bip_peer: Failed To Lookup Torrent Entry In Map")
             .lock()
@@ -165,7 +170,8 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
     }
 
     fn insert_torrent_entry(&self, entry: TorrentEntry) -> TorrentResult<()> {
-        let mut write_torrents = self.torrents.write().expect("bip_peer: Failed To Get Write Lock On Torrents Map");
+        let mut write_torrents = self.torrents.write()
+            .expect("bip_peer: Failed To Get Write Lock On Torrents Map");
         let hash = entry.metainfo.info_hash();
 
         match write_torrents.entry(hash) {
@@ -177,8 +183,13 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
         }
     }
 
-    fn remove_torrent_entry(&self, hash: InfoHash) {
-        
+    fn remove_torrent_entry(&self, hash: InfoHash) -> TorrentResult<()> {
+        let mut write_torrents = self.torrents.write()
+            .expect("bip_peer: Failed To Get Write Lock On Torrents Map");
+
+        write_torrents.remove(&hash)
+            .map(|_| ())
+            .ok_or(TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound{ hash: hash }))
     }
 }
 

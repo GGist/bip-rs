@@ -56,7 +56,11 @@ fn main() {
     let selection_layer_dm = disk_registration.register(Box::new(disk_send));
     selection_layer_dm.try_send(IDiskMessage::AddTorrent(metainfo_file));
 
+    let mut pieces_found = 0;
     for msg in disk_recv {
-        println!("{:?}", msg);
+        match msg {
+            ODiskMessage::FoundGoodPiece(_, _) => { pieces_found += 1; println!("{}", pieces_found) },
+            m => println!("{:?}", m)
+        }
     }
 }

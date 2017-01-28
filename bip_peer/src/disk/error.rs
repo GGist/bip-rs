@@ -33,5 +33,11 @@ error_chain! {
             description("Failed To Add Torrent Because Another Torrent With The Same InfoHash Is Already Added")
             display("Failed To Add Torrent Because Another Torrent With The Same InfoHash {:?} Is Already Added", hash)
         }
+        InfoHashNotFound {
+            hash: InfoHash
+        } {
+            description("Failed To Remove Torrent Because It Is Not Currently Added")
+            display("Failed To Remove Torrent Because The InfoHash {:?} It Is Not Currently Added", hash)
+        }
     }
 }

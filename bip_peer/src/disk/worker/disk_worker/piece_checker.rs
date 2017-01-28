@@ -32,7 +32,10 @@ pub struct PieceChecker<'a, F> {
 impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     /// Create a new PieceChecker with an initialized state.
     pub fn new(fs: F, info_dict: &'a InfoDictionary) -> TorrentResult<PieceChecker<'a, F>> {
-        let mut piece_checker = PieceChecker::with_state(fs, info_dict, PieceCheckerState::new());
+        let total_blocks = info_dict.pieces().count();
+        let last_piece_size = last_piece_size(info_dict);
+
+        let mut piece_checker = PieceChecker::with_state(fs, info_dict, PieceCheckerState::new(total_blocks, last_piece_size));
         
         try!(piece_checker.validate_files_sizes());
         try!(piece_checker.fill_checker_state());
@@ -58,18 +61,18 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
 
         let info_dict = self.info_dict;
         let piece_reader = PieceReader::new(self.fs, self.info_dict);
-
+        
         try!(self.checker_state.run_with_whole_pieces(piece_length as usize, |message| {
-            try!(piece_reader.read_piece(&mut piece_buffer[..], message));
+            try!(piece_reader.read_piece(&mut piece_buffer[..message.block_length()], message));
             
-            let calculated_hash = InfoHash::from_bytes(&piece_buffer);
+            let calculated_hash = InfoHash::from_bytes(&piece_buffer[..message.block_length()]);
             let expected_hash = InfoHash::from_hash(info_dict
                 .pieces()
                 .skip(message.piece_index() as usize)
                 .next()
                 .expect("bip_peer: Piece Checker Failed To Retrieve Expected Hash"))
                 .expect("bip_peer: Wrong Length Of Expected Hash Received");
-
+                
             Ok(calculated_hash == expected_hash)
         }));
 
@@ -81,8 +84,18 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     /// This is done once when a torrent file is added to see if we have any good pieces that
     /// the caller can use to skip (if the torrent was partially downloaded before).
     fn fill_checker_state(&mut self) -> TorrentResult<()> {
-        for piece_index in 0..self.info_dict.pieces().count() {
-            self.checker_state.add_pending_block(PieceMessage::new(piece_index as u32, 0, self.info_dict.piece_length() as usize));
+        let piece_length = self.info_dict.piece_length() as u64;
+        let total_bytes: u64 = self.info_dict.files().map(|file| file.length() as u64).sum();
+
+        let full_pieces = total_bytes / piece_length;
+        let last_piece_size = last_piece_size(self.info_dict);
+
+        for piece_index in 0..full_pieces {
+            self.checker_state.add_pending_block(PieceMessage::new(piece_index as u32, 0, piece_length as usize));
+        }
+
+        if last_piece_size != 0 {
+            self.checker_state.add_pending_block(PieceMessage::new(full_pieces as u32, 0, last_piece_size as usize));
         }
 
         Ok(())
@@ -127,6 +140,13 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     }
 }
 
+fn last_piece_size(info_dict: &InfoDictionary) -> usize {
+    let piece_length = info_dict.piece_length() as u64;
+    let total_bytes: u64 = info_dict.files().map(|file| file.length() as u64).sum();
+
+    (total_bytes % piece_length) as usize
+}
+
 fn build_path(parent_directory: Option<&str>, file: &File) -> String {
     let parent_directory = parent_directory.unwrap_or(".");
 
@@ -142,9 +162,11 @@ fn build_path(parent_directory: Option<&str>, file: &File) -> String {
 
 /// Stores state for the PieceChecker between invocations.
 pub struct PieceCheckerState {
-    new_states:     Vec<PieceState>,
-    old_states:     HashSet<PieceState>,
-    pending_blocks: HashMap<u32, Vec<PieceMessage>>
+    new_states:      Vec<PieceState>,
+    old_states:      HashSet<PieceState>,
+    pending_blocks:  HashMap<u32, Vec<PieceMessage>>,
+    total_blocks:    usize,
+    last_block_size: usize
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -157,11 +179,13 @@ pub enum PieceState {
 
 impl PieceCheckerState {
     /// Create a new PieceCheckerState.
-    fn new() -> PieceCheckerState {
+    fn new(total_blocks: usize, last_block_size: usize) -> PieceCheckerState {
         PieceCheckerState {
             new_states: Vec::new(),
             old_states: HashSet::new(),
-            pending_blocks: HashMap::new()
+            pending_blocks: HashMap::new(),
+            total_blocks: total_blocks,
+            last_block_size: last_block_size
         }
     }
 
@@ -190,8 +214,11 @@ impl PieceCheckerState {
         let mut new_states = &mut self.new_states;
         let old_states = &self.old_states;
 
+        let total_blocks = self.total_blocks;
+        let last_block_size = self.last_block_size;
+
         for ref message in self.pending_blocks.values()
-            .filter(|ref messages| messages.len() == 1 && messages[0].block_length() == piece_length)
+            .filter(|ref messages| piece_is_complete(total_blocks, last_block_size, piece_length, messages))
             .map(|ref messages| messages[0])
             .filter(|ref message| !old_states.contains(&PieceState::Good(message.piece_index()))) {
             let is_good = try!(callback(message));
@@ -202,7 +229,7 @@ impl PieceCheckerState {
                 new_states.push(PieceState::Bad(message.piece_index()));
             }
         }
-
+        
         Ok(())
     }
 
@@ -233,6 +260,22 @@ impl PieceCheckerState {
             }
         }
     }
+}
+
+/// True if the piece is ready to be hashed and checked (full) as good or not.
+fn piece_is_complete(total_blocks: usize, last_block_size: usize, piece_length: usize, messages: &[PieceMessage]) -> bool {
+    let is_single_message = messages.len() == 1;
+    let is_piece_length = messages.get(0)
+        .map(|message| message.block_length() == piece_length)
+        .unwrap_or(false);
+    let is_last_block = messages.get(0)
+        .map(|message| message.piece_index() == (total_blocks - 1) as u32)
+        .unwrap_or(false);
+    let is_last_block_length = messages.get(0)
+        .map(|message| message.block_length() == last_block_size)
+        .unwrap_or(false);
+
+    is_single_message && (is_piece_length || (is_last_block && is_last_block_length))
 }
 
 /// Merge a piece message a with a piece message b if possible.
