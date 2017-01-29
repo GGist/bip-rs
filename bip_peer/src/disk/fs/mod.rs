@@ -1,12 +1,5 @@
-use std::path::{Path, PathBuf};
-use std::io::{self, Write, Read, Seek, SeekFrom};
-use std::fs::{self, File, OpenOptions};
-use std::borrow::Cow;
-
-use bip_util::bt::InfoHash;
-use bip_util::sha::ShaHashBuilder;
-use bip_util::convert;
-use rand;
+use std::path::{Path};
+use std::io::{self};
 
 pub mod memory;
 pub mod native;

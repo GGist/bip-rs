@@ -27,3 +27,6 @@ error-chain   = "0.7.0"
 
 [features]
 unstable = []
+
+[profile.release]
+panic = "abort"

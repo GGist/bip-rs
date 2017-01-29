@@ -1,21 +1,12 @@
-use std::io;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc};
 use std::thread;
-use std::path::PathBuf;
 
-use bip_metainfo::MetainfoFile;
-use bip_util::bt::InfoHash;
-use bip_util::send::TrySender;
-use chan::{self, Sender, Receiver};
+use chan::{self, Sender};
 
 use disk::worker::shared::blocks::Blocks;
 use disk::worker::shared::clients::Clients;
-use disk::{IDiskMessage, ODiskMessage};
-use disk::fs::{FileSystem};
+use disk::{ODiskMessage};
 use disk::worker::{ReserveBlockClientMetadata, SyncBlockMessage, AsyncBlockMessage};
-use token::Token;
-use message::standard::PieceMessage;
 
 /// Spawn a synchronous block worker thread.
 ///

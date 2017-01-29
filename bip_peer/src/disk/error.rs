@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::io;
 
 use bip_util::bt::InfoHash;

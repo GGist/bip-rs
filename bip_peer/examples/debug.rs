@@ -63,7 +63,7 @@ fn main() {
 
     let pid = ['-' as u8, 'U' as u8, 'T' as u8, '5' as u8, '5' as u8, '5' as u8, '5' as u8, '-' as u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into();
 
-    let mut handshaker = protocol::spawn_tcp_handshaker(send, "0.0.0.0:0".parse().unwrap(), pid, disk_registration, selection_registration).unwrap();
+    let mut handshaker: () = protocol::spawn_tcp_handshaker(send, "0.0.0.0:0".parse().unwrap(), pid, disk_registration, selection_registration).unwrap();
 
     let hash = [0xf8, 0x8e, 0xd0, 0xc1, 0x6c, 0xf7, 0xf4, 0x52, 0xa5, 0xc7, 0x37, 0xa0, 0xb7, 0x50, 0x3f, 0x92, 0x5e, 0x11, 0xfe, 0x00].into();
     handshaker.register(hash);

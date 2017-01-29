@@ -1,25 +1,12 @@
-use std::io;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::path::{PathBuf, Path};
 use std::cmp;
-use std::cell::RefCell;
 
-use bip_metainfo::{MetainfoFile, InfoDictionary, File};
+use bip_metainfo::{InfoDictionary, File};
 use bip_util::bt::InfoHash;
-use bip_util::send::TrySender;
-use chan::{self, Sender, Receiver};
 
-use disk::worker::shared::blocks::Blocks;
-use disk::worker::shared::clients::Clients;
 use disk::error::{TorrentResult, TorrentError, TorrentErrorKind};
-use disk::worker::disk_worker::piece_reader::PieceReader;
-use disk::{IDiskMessage, ODiskMessage};
-use disk::worker::{self, ReserveBlockClientMetadata, SyncBlockMessage, AsyncBlockMessage, DiskMessage};
-use disk::worker::disk_worker::context::DiskWorkerContext;
+use disk::worker::disk_worker::piece_accessor::PieceAccessor;
 use disk::fs::{FileSystem};
-use token::{Token, TokenGenerator};
 use message::standard::PieceMessage;
 
 /// Calculates hashes on existing files within the file system given and reports good/bad pieces.
@@ -60,10 +47,10 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
         let mut piece_buffer = vec![0u8; piece_length as usize];
 
         let info_dict = self.info_dict;
-        let piece_reader = PieceReader::new(self.fs, self.info_dict);
+        let piece_accessor = PieceAccessor::new(&self.fs, self.info_dict);
         
         try!(self.checker_state.run_with_whole_pieces(piece_length as usize, |message| {
-            try!(piece_reader.read_piece(&mut piece_buffer[..message.block_length()], message));
+            try!(piece_accessor.read_piece(&mut piece_buffer[..message.block_length()], message));
             
             let calculated_hash = InfoHash::from_bytes(&piece_buffer[..message.block_length()]);
             let expected_hash = InfoHash::from_hash(info_dict
@@ -123,7 +110,8 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
                 let size_is_zero = actual_size == 0;
 
                 if !size_matches && size_is_zero {
-                    self.fs.write_file(&mut file, expected_size - 1, &[0]);
+                    self.fs.write_file(&mut file, expected_size - 1, &[0])
+                        .expect("bip_peer: Failed To Create File When Validating Sizes");
                 } else if !size_matches {
                     return Err(TorrentError::from_kind(TorrentErrorKind::ExistingFileSizeCheck{
                         file_path: file_path,
@@ -179,7 +167,7 @@ pub enum PieceState {
 
 impl PieceCheckerState {
     /// Create a new PieceCheckerState.
-    fn new(total_blocks: usize, last_block_size: usize) -> PieceCheckerState {
+    pub fn new(total_blocks: usize, last_block_size: usize) -> PieceCheckerState {
         PieceCheckerState {
             new_states: Vec::new(),
             old_states: HashSet::new(),
@@ -217,17 +205,18 @@ impl PieceCheckerState {
         let total_blocks = self.total_blocks;
         let last_block_size = self.last_block_size;
 
-        for ref message in self.pending_blocks.values()
+        for messages in self.pending_blocks.values_mut()
             .filter(|ref messages| piece_is_complete(total_blocks, last_block_size, piece_length, messages))
-            .map(|ref messages| messages[0])
-            .filter(|ref message| !old_states.contains(&PieceState::Good(message.piece_index()))) {
-            let is_good = try!(callback(message));
+            .filter(|ref messages| !old_states.contains(&PieceState::Good(messages[0].piece_index()))) {
+            let is_good = try!(callback(&messages[0]));
 
             if is_good {
-                new_states.push(PieceState::Good(message.piece_index()));
+                new_states.push(PieceState::Good(messages[0].piece_index()));
             } else {
-                new_states.push(PieceState::Bad(message.piece_index()));
+                new_states.push(PieceState::Bad(messages[0].piece_index()));
             }
+
+            messages.clear();
         }
         
         Ok(())
@@ -235,7 +224,7 @@ impl PieceCheckerState {
 
     /// Merges all pending piece messages into a single messages if possible.
     fn merge_pieces(&mut self) {
-        for (ref index, ref mut messages) in self.pending_blocks.iter_mut() {
+        for (_, ref mut messages) in self.pending_blocks.iter_mut() {
             // Sort the messages by their block offset
             messages.sort_by(|a, b| a.block_offset().cmp(&b.block_offset()));
 
@@ -244,7 +233,7 @@ impl PieceCheckerState {
             // See if we can merge all messages into a single message
             while merge_success && messages_len > 1 {
                 let actual_last = messages.remove(messages_len - 1);
-                let second_last = messages.remove(messages_len - 1);
+                let second_last = messages.remove(messages_len - 2);
 
                 let opt_merged =  merge_piece_messages(&actual_last, &second_last);
                 if let Some(merged) = opt_merged {

@@ -1,9 +1,8 @@
-use std::cmp;
 use std::sync::{RwLock, Mutex};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use bip_util::contiguous::{ContiguousBuffer, ContiguousBuffers};
+use bip_util::contiguous::{ContiguousBuffers, ContiguousBuffer};
 use crossbeam::sync::MsQueue;
 
 use token::Token;
@@ -30,7 +29,7 @@ impl Blocks {
             panic!("bip_peer: Blocks Created With A Block Size Of 0 Not Allowed")
         }
 
-        let mut empty_blocks = Blocks {
+        let empty_blocks = Blocks {
             free: MsQueue::new(),
             used: RwLock::new(HashMap::new()),
             free_count: AtomicUsize::new(0),
@@ -90,7 +89,13 @@ impl Blocks {
 
     /// Reclaim a block under the given namespace, corresponding to the given request id.
     pub fn reclaim_block(&self, namespace: Token, request: Token) {
-        self.remove_used_block(namespace, request);
+        let buffers = self.remove_used_block(namespace, request);
+
+        buffers.unpack(|mut buffer| {
+            buffer.clear();
+
+            self.reuse_blocks(buffer);
+        });
     }
 
     // ----- PRIVATE ----- //
@@ -105,15 +110,16 @@ impl Blocks {
     }
 
     /// Run the given closure with a mutable reference to the request map under the given namespace.
-    fn run_with_request_map<F>(&self, namespace: Token, accept: F)
-        where F: FnOnce(&mut HashMap<Token, ContiguousBuffers<Vec<u8>>>) {
+    fn run_with_request_map<F, R>(&self, namespace: Token, accept: F) -> R
+        where F: FnOnce(&mut HashMap<Token, ContiguousBuffers<Vec<u8>>>) -> R {
         let namespace_map = self.used.read()
             .expect("bip_peer: Blocks::run_with_request_map Failed To Read From Used Map");
         let mut request_map = namespace_map.get(&namespace)
-            .expect("bip_peer: Blocks::run_with_request_map Failed To Find Map For Namespace").lock()
+            .expect("bip_peer: Blocks::run_with_request_map Failed To Find Map For Namespace")
+            .lock()
             .expect("bip_peer: Blocks::run_with_request_map Failed To Lock Request Map");
 
-        accept(&mut request_map);
+        accept(&mut request_map)
     }
 
     /// Add the given blocks to the used map under the given namespace and request id.
@@ -126,12 +132,13 @@ impl Blocks {
     }
 
     /// Remove the given blocks to the used map under the given namespace and request id.
-    fn remove_used_block(&self, namespace: Token, request: Token) {
+    fn remove_used_block(&self, namespace: Token, request: Token) -> ContiguousBuffers<Vec<u8>> {
         self.run_with_request_map(namespace, |request_map| {
-            if request_map.remove(&request).is_none() {
-                panic!("bip_peer: Blocks::remove_used_block Failed To Remove Existing Block For Request Id")
+            match request_map.remove(&request) {
+                Some(buffers) => buffers,
+                None          => panic!("bip_peer: Blocks::remove_used_block Failed To Remove Existing Block For Request Id")
             }
-        });
+        })
     }
 
     /// Try to re-use the given block by pushing it to the free queue if there is space.

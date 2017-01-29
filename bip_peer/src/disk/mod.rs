@@ -1,10 +1,5 @@
-#![allow(unused)]
-
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::SyncSender;
-use std::path::PathBuf;
-use std::io::{self, Cursor, Write};
-use std::cell::RefCell;
+use std::sync::{Arc};
+use std::io::{Write};
 
 use bip_metainfo::MetainfoFile;
 use bip_util::bt::{InfoHash};
@@ -26,13 +21,13 @@ mod worker;
 
 pub use disk::fs::{FileSystem};
 
-const DISK_MANAGER_WORKER_THREADS: usize = 16;
+const DISK_MANAGER_WORKER_THREADS: usize = 1;
 
 // Maximum as well as the default block size for our requests.
 const DEFAULT_BLOCK_SIZE: usize = 16 * 1024;
 
 // Maximum allowed block size for peers requesting from us.
-const MAX_ALLOWED_BLOCK_SIZE: usize = 32 * 1024;
+//const MAX_ALLOWED_BLOCK_SIZE: usize = 32 * 1024;
 
 // Because a single piece may come from multiple peers, we need to track
 // how many bytes a single peer contibruted to both a good piece, as well
@@ -40,12 +35,12 @@ const MAX_ALLOWED_BLOCK_SIZE: usize = 32 * 1024;
 // bytes sent to us as good, they are considered bad. At the same time,
 // we only enforce this for peers who have sent us more than a given
 // number of bytes.
-const MALICIOUS_PEER_MIN_GOOD_HASH_RATE: f32 = 0.75;
+//const MALICIOUS_PEER_MIN_GOOD_HASH_RATE: f32 = 0.75;
 // Want this to be larger than a single piece since that is when we will be able
 // to detect if a piece is good or not. Hopefully a good peer isnt always sending
 // in the same piece as a malicious peer (should probably make some guarantee here).
 // For a 16KB block size and 16MB piece size, this would be 25 pieces.
-const MALICIOUS_PEER_MIN_TOTAL_BYTES: usize = DEFAULT_BLOCK_SIZE * 1024 * 25;
+//const MALICIOUS_PEER_MIN_TOTAL_BYTES: usize = DEFAULT_BLOCK_SIZE * 1024 * 25;
 
 /// Message that can be sent to the disk manager.
 #[derive(Debug)]
@@ -200,7 +195,7 @@ impl DiskManagerAccess for DiskManager {
     }
 
     fn read_block(&self, token: Token, write_bytes: &mut Write) {
-        self.blocks.access_block(self.namespace, token, |mut block| {
+        self.blocks.access_block(self.namespace, token, |block| {
             block.read(|bytes| {
                 match write_bytes.write(bytes) {
                     Ok(num_written) if num_written == bytes.len() => (),

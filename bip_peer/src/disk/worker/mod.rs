@@ -1,17 +1,11 @@
-use std::io;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::path::PathBuf;
+use std::sync::{Arc};
 
 use bip_metainfo::MetainfoFile;
 use bip_util::bt::InfoHash;
-use bip_util::send::TrySender;
-use chan::{self, Sender, Receiver};
+use chan::{Sender};
 
 use disk::worker::shared::blocks::Blocks;
 use disk::worker::shared::clients::Clients;
-use disk::{IDiskMessage, ODiskMessage};
 use disk::error::RequestError;
 use disk::fs::{FileSystem};
 use token::Token;
@@ -20,8 +14,6 @@ use message::standard::PieceMessage;
 pub mod shared;
 mod block_worker;
 mod disk_worker;
-
-const NUM_DISK_WORKERS: usize = 4;
 
 pub enum DiskMessage {
     AddTorrent(Token, MetainfoFile),
@@ -60,7 +52,8 @@ pub fn create_workers<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>
     where F: FileSystem + Send + Sync + 'static {
     let sync_worker = block_worker::spawn_sync_block_worker(clients.clone(), blocks.clone());
     let async_worker = block_worker::spawn_async_block_worker(blocks.clone());
-    let disk_worker = disk_worker::spawn_disk_worker(fs, clients, blocks, sync_worker.clone(), disk_worker_namespace);
+    let disk_worker = disk_worker::spawn_disk_worker(fs, clients, blocks, sync_worker.clone(), async_worker.clone(),
+        disk_worker_namespace);
 
     (disk_worker, sync_worker, async_worker)
 }

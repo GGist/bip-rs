@@ -1,37 +1,30 @@
-use std::io;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc};
 use std::thread;
-use std::path::PathBuf;
 
-use bip_metainfo::MetainfoFile;
-use bip_util::bt::InfoHash;
-use bip_util::send::TrySender;
-use chan::{self, Sender, Receiver};
+use chan::{self, Sender};
 
 use disk::worker::shared::blocks::Blocks;
 use disk::worker::shared::clients::Clients;
-use disk::{IDiskMessage, ODiskMessage};
-use disk::worker::{self, ReserveBlockClientMetadata, SyncBlockMessage, AsyncBlockMessage, DiskMessage};
+use disk::worker::{ReserveBlockClientMetadata, SyncBlockMessage, AsyncBlockMessage, DiskMessage};
 use disk::worker::disk_worker::context::DiskWorkerContext;
 use disk::fs::{FileSystem};
-use token::{Token, TokenGenerator};
-use message::standard::PieceMessage;
+use disk;
+use token::{Token};
 
 mod context;
 mod piece_checker;
-mod piece_reader;
+mod piece_accessor;
 
-pub fn spawn_disk_worker<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>, block_worker: Sender<SyncBlockMessage>,
-    disk_worker_namespace: Token) -> Sender<DiskMessage> where F: FileSystem + Send + Sync + 'static {
+pub fn spawn_disk_worker<F>(fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>, sync_worker: Sender<SyncBlockMessage>,
+    async_worker: Sender<AsyncBlockMessage>, disk_worker_namespace: Token) -> Sender<DiskMessage> where F: FileSystem + Send + Sync + 'static {
     let (send, recv) = chan::async();
 
-    let disk_context = Arc::new(DiskWorkerContext::new(send.clone(), fs, clients, blocks, block_worker, disk_worker_namespace));
+    let disk_context = Arc::new(DiskWorkerContext::new(send.clone(), fs, clients, blocks, sync_worker, async_worker, disk_worker_namespace));
 
-    for _ in 0..worker::NUM_DISK_WORKERS {
+    for _ in 0..disk::DISK_MANAGER_WORKER_THREADS {
         let clone_disk_context = disk_context.clone();
         let clone_recv = recv.clone();
-
+        
         thread::spawn(move || {
             for msg in clone_recv {
                 match msg {

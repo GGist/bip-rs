@@ -1,25 +1,24 @@
-use std::io;
 use std::collections::HashMap;
 use std::collections::hash_map::{Entry};
 use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::path::PathBuf;
+use std::mem;
+use std::io::Write;
 
 use bip_metainfo::MetainfoFile;
 use bip_util::bt::InfoHash;
 use bip_util::send::TrySender;
 use bip_util::contiguous::ContiguousBuffer;
-use chan::{self, Sender, Receiver};
+use chan::{Sender};
 
 use disk::worker::shared::blocks::Blocks;
 use disk::worker::shared::clients::Clients;
-use disk::worker::disk_worker::piece_reader::PieceReader;
-use disk::{IDiskMessage, ODiskMessage};
+use disk::worker::disk_worker::piece_accessor::PieceAccessor;
+use disk::{ODiskMessage};
 use disk::error::{RequestError, TorrentError, TorrentResult, TorrentErrorKind};
 use disk::fs::{FileSystem};
 use disk::worker::disk_worker::piece_checker::{PieceChecker, PieceState, PieceCheckerState};
-use disk::worker::{ReserveBlockClientMetadata, SyncBlockMessage, AsyncBlockMessage, DiskMessage};
-use token::{Token, TokenGenerator};
+use disk::worker::{ReserveBlockClientMetadata, SyncBlockMessage, DiskMessage, AsyncBlockMessage};
+use token::{Token};
 use message::standard::PieceMessage;
 
 pub struct DiskWorkerContext<F> {
@@ -27,32 +26,31 @@ pub struct DiskWorkerContext<F> {
     torrents:        RwLock<HashMap<InfoHash, Mutex<TorrentEntry>>>,
     clients:         Arc<Clients<ReserveBlockClientMetadata>>,
     blocks:          Arc<Blocks>,
-    block_worker:    Sender<SyncBlockMessage>,
-    namespace_token: Token,
-    request_gen:     Mutex<TokenGenerator>
-}
-
-enum BlockWaitWork {
-    LoadBlock(Token, Token)
+    sync_worker:     Sender<SyncBlockMessage>,
+    async_worker:    Sender<AsyncBlockMessage>,
+    namespace_token: Token
 }
 
 struct TorrentEntry {
-    metainfo:       MetainfoFile,
-    checker_state:  PieceCheckerState
+    metainfo:         MetainfoFile,
+    checker_state:    PieceCheckerState,
+    client_namespace: Token
 }
 
 impl TorrentEntry {
-    fn new(metainfo: MetainfoFile, checker_state: PieceCheckerState) -> TorrentEntry {
+    fn new(metainfo: MetainfoFile, checker_state: PieceCheckerState, client_namespace: Token) -> TorrentEntry {
         TorrentEntry{
             metainfo: metainfo,
-            checker_state: checker_state
+            checker_state: checker_state,
+            client_namespace: client_namespace
         }
     }
 }
 
 impl<F> DiskWorkerContext<F> where F: FileSystem {
     pub fn new(send: Sender<DiskMessage>, fs: F, clients: Arc<Clients<ReserveBlockClientMetadata>>, blocks: Arc<Blocks>,
-        block_worker: Sender<SyncBlockMessage>, disk_worker_namespace: Token) -> DiskWorkerContext<F> {
+        sync_worker: Sender<SyncBlockMessage>, async_worker: Sender<AsyncBlockMessage>, disk_worker_namespace: Token)
+        -> DiskWorkerContext<F> {
         // Add ourselves to the clients structure, this allows us to request blocks to be reserved
         // from the block worker when we, for example, need to load a block from disk.
         clients.add_client(disk_worker_namespace, Box::new(DiskSender(send)));
@@ -62,9 +60,9 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
             torrents: RwLock::new(HashMap::new()),
             clients: clients,
             blocks: blocks,
-            block_worker: block_worker,
-            namespace_token: disk_worker_namespace,
-            request_gen: Mutex::new(TokenGenerator::new())
+            sync_worker: sync_worker,
+            async_worker: async_worker,
+            namespace_token: disk_worker_namespace
         }
     }
 
@@ -74,7 +72,7 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
         let res_checker_state = PieceChecker::new(&self.fs, metainfo.info())
             .and_then(|checker| checker.calculate_diff())
             .and_then(|checker_state| {
-                let torrent_entry = TorrentEntry::new(metainfo, checker_state);
+                let torrent_entry = TorrentEntry::new(metainfo, checker_state, namespace);
 
                 self.insert_torrent_entry(torrent_entry)
             });
@@ -88,7 +86,7 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
                         // Since this is the initial diff, don't let clients know of bad pieces since these were reloaded from disk
                         match piece_state {
                             &PieceState::Good(index) => self.clients.message_client(namespace, ODiskMessage::FoundGoodPiece(hash, index)),
-                            &PieceState::Bad(bad_index)      => println!("ASDASDASDASDASDAS {}", bad_index)
+                            &PieceState::Bad(_)      => ()
                         }
                     });
                 });
@@ -105,11 +103,59 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
     }
 
     pub fn load_block(&self, namespace: Token, request: Token, hash: InfoHash, piece_msg: PieceMessage) {
-        self.block_worker.send(SyncBlockMessage::ReserveBlock(self.namespace_token, namespace, request, hash, piece_msg));
+        self.sync_worker.send(SyncBlockMessage::ReserveBlock(self.namespace_token, namespace, request, hash, piece_msg));
     }
 
     pub fn process_block(&self, namespace: Token, request: Token) {
-        unimplemented!()
+        let metadata = self.clients.remove_metadata(namespace, request);
+        let (hash, piece_message) = (metadata.hash, metadata.message);
+
+        // Well, the API I spent so long on, Blocks, is useless since we eventually have to pass
+        // a mutable reference to a byte array (which most OS's require, barring using a smallish
+        // buffer to transfer data from disk). Big TODO here...
+        let mut buffer = vec![0u8; piece_message.block_length()];
+        (*self.blocks).access_block(namespace, request, |buffers| {
+            let mut bytes_read = 0;
+
+            buffers.read(|slice| {
+                (&mut buffer[bytes_read..]).write(slice)
+                    .expect("bip_peer: Failed To Copy Block Into Buffer");
+                bytes_read += slice.len();
+            });
+        });
+
+        // TODO: Handle fs failures
+        self.access_torrent_entry_mut(&hash, |mut entry| {
+            let piece_accessor = PieceAccessor::new(&self.fs, entry.metainfo.info());
+
+            piece_accessor.write_piece(&buffer[..], &piece_message)
+                .expect("bip_peer: Failed To Write Piece To Disk");
+
+            // Add piece message to piece checker state
+            entry.checker_state.add_pending_block(piece_message);
+
+            // Its more efficient to swap here, otherwise, we would have to take a write
+            // lock on the outer HashMap to remove, then again to add this back.
+            let checker_state = mem::replace(&mut entry.checker_state, PieceCheckerState::new(0, 0));
+            let piece_checker = PieceChecker::with_state(&self.fs, entry.metainfo.info(), checker_state);
+            
+            // TODO: Handle failure here
+            let mut new_checker_state = piece_checker.calculate_diff()
+                .expect("bip_peer: Failed To Access Disk For Hashing");
+            
+            new_checker_state.run_with_diff(|piece_state| {
+                // Since this is the initial diff, don't let clients know of bad pieces since these were reloaded from disk
+                match piece_state {
+                    &PieceState::Good(index) => self.clients.message_client(entry.client_namespace, ODiskMessage::FoundGoodPiece(hash, index)),
+                    &PieceState::Bad(index)  => self.clients.message_client(entry.client_namespace, ODiskMessage::FoundBadPiece(hash, index))
+                }
+            });
+
+            entry.checker_state = new_checker_state;
+        });
+
+        // Reclaim the block
+        self.async_worker.send(AsyncBlockMessage::ReclaimBlock(namespace, request));
     }
 
     pub fn block_reserved(&self, namespace: Token, request: Token) {
@@ -120,29 +166,24 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
         // a mutable reference to a byte array (which most OS's require, barring using a smallish
         // buffer to transfer data from disk). Big TODO here...
         let mut buffer = vec![0u8; piece_message.block_length()];
-        self.access_torrent_entry(&hash, |entry| {
-            let piece_reader = PieceReader::new(&self.fs, entry.metainfo.info());
-            piece_reader.read_piece(&mut buffer[..], &piece_message);
-
-            (*self.blocks).access_block(namespace, request, |mut buffers| {
+        (*self.blocks).access_block(namespace, request, |mut buffers| {
                 buffers.write(&buffer[..]);
-            });
+        });
+
+        // TODO: Handle fs failures
+        self.access_torrent_entry(&hash, |entry| {
+            let piece_accessor = PieceAccessor::new(&self.fs, entry.metainfo.info());
+
+            piece_accessor.read_piece(&mut buffer[..], &piece_message)
+                .expect("bip_peer: Failed To Read Piece From Disk");
         });
 
         self.clients.message_client(namespace, ODiskMessage::BlockLoaded(namespace, request));
     }
 
-    pub fn request_error(&self, request_error: RequestError) {
+    pub fn request_error(&self, _request_error: RequestError) {
+        // TODO: Heh, we should figure out what to do here
         unimplemented!()
-    }
-
-    //fn check_torrent_pieces(&self, )
-
-    fn generate_request_token(&self) -> Token {
-        let mut request_generator = self.request_gen.lock()
-            .expect("bip_peer: Failed To Lock Request Generator In Disk Context");
-
-        request_generator.generate()
     }
 
     fn access_torrent_entry_mut<C>(&self, hash: &InfoHash, mut callback: C)
@@ -175,7 +216,7 @@ impl<F> DiskWorkerContext<F> where F: FileSystem {
         let hash = entry.metainfo.info_hash();
 
         match write_torrents.entry(hash) {
-            Entry::Vacant(mut vac) => {
+            Entry::Vacant(vac) => {
                 vac.insert(Mutex::new(entry));
                 Ok(())
             },
