@@ -232,10 +232,10 @@ impl PieceCheckerState {
             let mut merge_success = true;
             // See if we can merge all messages into a single message
             while merge_success && messages_len > 1 {
-                let actual_last = messages.remove(messages_len - 1);
-                let second_last = messages.remove(messages_len - 2);
+                let actual_last = messages.pop().expect("bip_peer: Failed To Merge Blocks");
+                let second_last = messages.pop().expect("bip_peer: Failed To Merge Blocks");
 
-                let opt_merged =  merge_piece_messages(&actual_last, &second_last);
+                let opt_merged =  merge_piece_messages(&second_last, &actual_last);
                 if let Some(merged) = opt_merged {
                     messages.push(merged);
                 } else {
@@ -268,20 +268,28 @@ fn piece_is_complete(total_blocks: usize, last_block_size: usize, piece_length: 
 }
 
 /// Merge a piece message a with a piece message b if possible.
+///
+/// First message's block offset should come before (or at) the block offset of the second message.
 fn merge_piece_messages(message_a: &PieceMessage, message_b: &PieceMessage) -> Option<PieceMessage> {
+    // Check if the pieces overlap
     let start_a = message_a.block_offset();
     let end_a = start_a + message_a.block_length() as u32;
 
     let start_b = message_b.block_offset();
     let end_b = start_b + message_b.block_length() as u32;
 
-    let max_end = cmp::max(end_a, end_b);
-
-    // Check which start to use, assuming the start falls between the other messages start to end range
+    // If start b falls between start and end a, then start a is where we start, and we end at the max of end a
+    // or end b, then calculate the length from end minus start. Vice versa if a falls between start and end b.
     if start_b >= start_a && start_b <= end_a {
-        Some(PieceMessage::new(message_a.piece_index(), start_a, max_end as usize))
+        let end_to_take = cmp::max(end_a, end_b);
+        let length = end_to_take - start_a;
+
+        Some(PieceMessage::new(message_a.piece_index(), start_a, length as usize))
     } else if start_a >= start_b && start_a <= end_b {
-        Some(PieceMessage::new(message_a.piece_index(), start_b, max_end as usize))
+        let end_to_take = cmp::max(end_a, end_b);
+        let length = end_to_take - start_b;
+
+        Some(PieceMessage::new(message_b.piece_index(), start_b, length as usize))
     } else {
         None
     }
