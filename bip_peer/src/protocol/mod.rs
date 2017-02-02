@@ -1,3 +1,4 @@
+//! Wire protocol implementation for the protocol layer.
 #![allow(unused)]
 
 use std::net::SocketAddr;
@@ -10,10 +11,8 @@ use bip_util::send::{TrySender, SplitSender};
 use rotor::Notifier;
 use rotor::mio::tcp::TcpListener;
 
-use disk::{ActiveDiskManager, IDiskMessage, ODiskMessage};
+use disk::{DiskManager, IDiskMessage, ODiskMessage, DiskManagerAccess};
 use selector::{OSelectorMessage, OSelectorMessageKind};
-use protocol::context::WireContext;
-use protocol::wire::WireProtocol;
 use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
 use registration::LayerRegistration;
 use token::Token;
@@ -22,25 +21,31 @@ mod context;
 mod error;
 mod wire;
 
-/// Spawn a TCP protocol handshaker layer that will automatically register itself with the given disk and selection layers.
-pub fn spawn_tcp_handshaker<S, M, DL, SL>(metadata: S,
-                                          listen: SocketAddr,
-                                          pid: PeerId,
-                                          disk: DL,
-                                          select: SL)
-                                          -> io::Result<BTHandshaker<S, M>>
+pub use protocol::context::WireContext;
+pub use protocol::wire::WireProtocol;
+
+/// Spawn a TCP peer protocol handshaker.
+pub fn spawn_tcp_handshaker<S, M, DLR, DL, SL>(metadata: S,
+                                               listen: SocketAddr,
+                                               pid: PeerId,
+                                               disk: DL,
+                                               select: SL)
+                                               -> io::Result<BTHandshaker<S, M>>
     where S: TrySender<M> + 'static,
           M: Send,
-          DL: LayerRegistration<ODiskMessage, IDiskMessage, SS2 = ActiveDiskManager> + 'static + Send,
+          DLR: DiskManagerAccess + TrySender<IDiskMessage> + 'static,
+          DL: LayerRegistration<ODiskMessage, IDiskMessage, SS2 = DLR> + 'static + Send,
           SL: LayerRegistration<OSelectorMessage, OProtocolMessage> + 'static + Send
 {
     let wire_context = WireContext::new(disk, select);
 
-    BTHandshaker::<S, M>::new::<WireProtocol<TcpListener>>(metadata, listen, pid, wire_context)
+    BTHandshaker::<S, M>::new::<WireProtocol<TcpListener, DLR>>(metadata, listen, pid, wire_context)
 }
 
 // ----------------------------------------------------------------------------//
 
+/// Uniquely identifies a peer in the protocol layer.
+///
 /// Since peers could be connected to us over multiple connections
 /// but may advertise the same peer id, we need to dis ambiguate
 /// them by a combination of the address (ip + port) and peer id.
@@ -61,7 +66,8 @@ impl PeerIdentifier {
 
 // ----------------------------------------------------------------------------//
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+/// Messages that can be sent to the peer protocol layer.
+#[derive(Debug)]
 pub enum IProtocolMessage {
     /// Message from the disk manager to the protocol layer.
     DiskManager(ODiskMessage),
@@ -101,13 +107,13 @@ impl From<OSelectorMessage> for IProtocolMessage {
 
 // ----------------------------------------------------------------------------//
 
-pub struct ProtocolSender {
+struct ProtocolSender {
     send: SyncSender<IProtocolMessage>,
     noti: Notifier,
 }
 
 impl ProtocolSender {
-    pub fn new(send: SyncSender<IProtocolMessage>, noti: Notifier) -> ProtocolSender {
+    fn new(send: SyncSender<IProtocolMessage>, noti: Notifier) -> ProtocolSender {
         ProtocolSender {
             send: send,
             noti: noti,
@@ -142,6 +148,7 @@ impl Clone for ProtocolSender {
 
 // ----------------------------------------------------------------------------//
 
+/// Combines a peer protocol layer message with a peer identifier.
 pub struct OProtocolMessage {
     kind: OProtocolMessageKind,
     id: PeerIdentifier,
@@ -160,6 +167,7 @@ impl OProtocolMessage {
     }
 }
 
+/// Enumeration of all messages originating from the peer protocol layer.
 pub enum OProtocolMessageKind {
     /// Message that a peer has connected for the given InfoHash.
     PeerConnect(Box<TrySender<OSelectorMessage>>, InfoHash),
@@ -197,8 +205,10 @@ mod tests {
     use bip_handshake::{Handshaker, BTHandshaker};
     use bip_util::send::TrySender;
     use nom::IResult;
+    use chan;
 
-    use disk::{ODiskMessage, IDiskMessage, ActiveDiskManager};
+    use token::{TokenGenerator, Token};
+    use disk::{ODiskMessage, IDiskMessage, DiskManager, DiskManagerAccess};
     use protocol::{OProtocolMessage, IProtocolMessage, OProtocolMessageKind, PeerIdentifier};
     use selector::{OSelectorMessage, ISelectorMessage, OSelectorMessageKind};
     use registration::LayerRegistration;
@@ -212,22 +222,51 @@ mod tests {
         }
     }
 
-    struct MockDiskRegistration;
-    impl LayerRegistration<ODiskMessage, IDiskMessage> for MockDiskRegistration {
-        type SS2 = ActiveDiskManager;
+    struct MockDiskManager {
+        request_gen: TokenGenerator
+    }
+    impl MockDiskManager {
+        fn new() -> MockDiskManager {
+            MockDiskManager{ request_gen: TokenGenerator::new() }
+        }
+    }
+    impl DiskManagerAccess for MockDiskManager {
+        fn write_block(&self, token: Token, read_bytes: &[u8]) {
+            unimplemented!()
+        }
 
-        fn register(&self, send: Box<TrySender<ODiskMessage>>) -> ActiveDiskManager {
-            ActiveDiskManager::new()
+        fn read_block(&self, token: Token, write_bytes: &mut Write) {
+            unimplemented!()
+        }
+
+        fn new_request_token(&mut self) -> Token {
+            self.request_gen.generate()
+        }
+    }
+    impl TrySender<IDiskMessage> for MockDiskManager {
+        fn try_send(&self, msg: IDiskMessage) -> Option<IDiskMessage> {
+            unimplemented!()
+        }
+    }
+
+    struct MockDiskRegistration {
+        namespace_gen: TokenGenerator
+    }
+    impl LayerRegistration<ODiskMessage, IDiskMessage> for MockDiskRegistration {
+        type SS2 = MockDiskManager;
+
+        fn register(&mut self, send: Box<TrySender<ODiskMessage>>) -> MockDiskManager {
+            MockDiskManager::new()
         }
     }
 
     struct MockSelectionRegistration {
-        send: Sender<OProtocolMessage>,
+        send: Sender<OProtocolMessage>
     }
     impl LayerRegistration<OSelectorMessage, OProtocolMessage> for MockSelectionRegistration {
         type SS2 = Sender<OProtocolMessage>;
 
-        fn register(&self, _send: Box<TrySender<OSelectorMessage>>) -> Sender<OProtocolMessage> {
+        fn register(&mut self, _send: Box<TrySender<OSelectorMessage>>) -> Sender<OProtocolMessage> {
             self.send.clone()
         }
     }
@@ -241,15 +280,16 @@ mod tests {
 
         let (protocol_send, protocol_recv) = mpsc::channel();
         let mock_select_registration = MockSelectionRegistration { send: protocol_send };
+        let mock_disk_registration = MockDiskRegistration{ namespace_gen: TokenGenerator::new() };
 
-        let handshaker = super::spawn_tcp_handshaker(m_send, listen_addr, pid, MockDiskRegistration, mock_select_registration).unwrap();
+        let handshaker = super::spawn_tcp_handshaker(m_send, listen_addr, pid, mock_disk_registration, mock_select_registration).unwrap();
         handshaker.register([0u8; 20].into());
 
         let mut stream = TcpStream::connect(SocketAddr::V4(SocketAddrV4::new(listen_ip, handshaker.port()))).unwrap();
         mock_initiate_handshake(&mut stream);
 
         thread::sleep(Duration::from_millis(100));
-
+        
         (handshaker, stream, protocol_recv)
     }
 

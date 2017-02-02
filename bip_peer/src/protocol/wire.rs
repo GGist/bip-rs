@@ -16,7 +16,7 @@ use rotor::mio::tcp::TcpStream;
 use rotor_stream::{Protocol, Intent, Exception, Transport, Buf, StreamSocket, SocketError};
 use nom::IResult;
 
-use disk::{ActiveDiskManager, IDiskMessage, ODiskMessage};
+use disk::{DiskManager, IDiskMessage, ODiskMessage, DiskManagerAccess};
 use message::{self, MessageType};
 use protocol::{PeerIdentifier, IProtocolMessage, ProtocolSender, OProtocolMessage, OProtocolMessageKind};
 use protocol::context::WireContext;
@@ -34,9 +34,11 @@ pub const MAX_INCOMING_MESSAGES: usize = 8;
 const MAX_PEER_TIMEOUT_MILLIS: u64 = 2 * 60 * 1000;
 const MAX_SELF_TIMEOUT_MILLIS: u64 = (30 + 60) * 1000;
 
-pub struct WireProtocol<L> {
+/// Implementation of the peer wire protocol.
+pub struct WireProtocol<L, DR> {
     id: PeerIdentifier,
-    disk: ActiveDiskManager,
+    hash: InfoHash,
+    disk: DR,
     send: SplitSender<ProtocolSender>,
     recv: Receiver<IProtocolMessage>,
     state: WireState,
@@ -69,16 +71,19 @@ pub enum WireState {
     WritePayload,
 }
 
-impl<L> WireProtocol<L> {
+impl<L, DR> WireProtocol<L, DR>
+    where DR: TrySender<IDiskMessage> + DiskManagerAccess {
     /// Create a new WireConnection and return an Intent.
     fn new(id: PeerIdentifier,
-           disk: ActiveDiskManager,
+           hash: InfoHash,
+           disk: DR,
            send: SplitSender<ProtocolSender>,
            recv: Receiver<IProtocolMessage>,
            now: Time)
-           -> Intent<WireProtocol<L>> {
+           -> Intent<WireProtocol<L, DR>> {
         let connection = WireProtocol {
             id: id,
+            hash: hash,
             state: WireState::ReadLength,
             disk: disk,
             send: send,
@@ -107,6 +112,13 @@ impl<L> WireProtocol<L> {
         now + Duration::from_millis(MAX_SELF_TIMEOUT_MILLIS)
     }
 
+    /// Send the message to the disk manager.
+    fn send_disk_message(&self, msg: IDiskMessage) {
+        if self.disk.try_send(msg).is_some() {
+            panic!("bip_peer: Wire Protocol Failed To Send Message To Disk Manager")
+        }
+    }
+
     /// Process the message to be written to the remote peer.
     ///
     /// Returns true if a disconnnect from the peer should be initiated.
@@ -129,10 +141,11 @@ impl<L> WireProtocol<L> {
             OSelectorMessageKind::PeerHave(have_msg) => self.write_queue.push_back((MessageType::Have(have_msg), None)),
             OSelectorMessageKind::PeerBitField(bfield_msg) => self.write_queue.push_back((MessageType::BitField(bfield_msg), None)),
             OSelectorMessageKind::PeerRequest(req_msg) => self.write_queue.push_back((MessageType::Request(req_msg), None)),
-            OSelectorMessageKind::PeerPiece(token, piece_msg) => {
-                // Sign up to receive a notification when the block associated with
-                // the token has been loaded and is ready to be read from the manager
-                assert!(self.disk.try_send(IDiskMessage::WaitBlock(token)).is_none());
+            OSelectorMessageKind::PeerPiece(piece_msg) => {
+                let token = self.disk.new_request_token();
+
+                // Tell the disk manager to load the piece that we need to send, then store the token to lookup when we get a response
+                self.send_disk_message(IDiskMessage::LoadBlock(token, self.hash, piece_msg));
                 self.block_queue.insert(token, MessageType::Piece(piece_msg));
             }
             OSelectorMessageKind::PeerCancel(cancel_msg) => self.write_queue.push_back((MessageType::Cancel(cancel_msg), None)),
@@ -145,25 +158,27 @@ impl<L> WireProtocol<L> {
     fn process_disk(&mut self, in_buffer: &mut Buf, token: Token) {
         let curr_state = self.state;
 
-        match (self.block_queue.entry(token), curr_state) {
-            (Entry::Occupied(mut occ), _) => {
+        let opt_message_type = self.block_queue.remove(&token);
+        match (opt_message_type, curr_state) {
+            (Some(message_type), _) => {
                 // Disk manager has loaded a block for us to write to the peer, move the message to our write_queue
-                self.write_queue.push_back((occ.remove(), Some(token)));
+                self.write_queue.push_back((message_type, Some(token)));
             }
-            (Entry::Vacant(_), WireState::DiskReserve(tok, len)) if tok == token => {
+            (None, WireState::DiskReserve(tok, len)) if tok == token => {
                 // Disk manager has reserved a block for us to write our received block to
-                self.disk.redeem_reserve(tok, &in_buffer[..len]);
+                self.disk.write_block(token, &in_buffer[..len]);
+                self.send_disk_message(IDiskMessage::ProcessBlock(token));
 
                 in_buffer.consume(len);
                 self.state = WireState::ReadLength;
             }
-            (Entry::Vacant(_), WireState::DiskReserve(tok, len)) => unreachable!("bip_peer: Token Returned By DiskManager Was Not Expected"),
+            (None, WireState::DiskReserve(tok, len)) => unreachable!("bip_peer: Token Returned By DiskManager Was Not Expected"),
             _ => unreachable!("bip_peer: Called ProcessDisk In An Invalid State {:?}", curr_state),
         };
     }
 
     /// Transition our state into a disconnected state.
-    fn advance_disconnect<F>(self, sel_send: F, error: ProtocolError) -> Intent<WireProtocol<L>>
+    fn advance_disconnect<F>(self, sel_send: F, error: ProtocolError) -> Intent<WireProtocol<L, DR>>
         where F: Fn(OProtocolMessage)
     {
         sel_send(OProtocolMessage::new(self.id, OProtocolMessageKind::PeerDisconnect));
@@ -172,7 +187,7 @@ impl<L> WireProtocol<L> {
     }
 
     /// Attempts to advance our state from a read event.
-    fn advance_read<F>(mut self, now: Time, in_buffer: &mut Buf, out_buffer: &mut Buf, sel_send: F) -> Intent<WireProtocol<L>>
+    fn advance_read<F>(mut self, now: Time, in_buffer: &mut Buf, out_buffer: &mut Buf, sel_send: F) -> Intent<WireProtocol<L, DR>>
         where F: Fn(OProtocolMessage)
     {
         let curr_state = self.state;
@@ -184,7 +199,7 @@ impl<L> WireProtocol<L> {
                 self.state = WireState::ReadPayload(expected_len);
             }
             WireState::ReadPayload(len) => {
-                let res_opt_kind_msg = parse_kind_message(self.id, &in_buffer[..len], &self.disk);
+                let res_opt_kind_msg = parse_kind_message(self.id, &in_buffer[..len], self.disk.new_request_token());
 
                 // For whatever message we received, propogate it up a layer (it is impossible to
                 // receive a peer disconnect message off the wire, so we assume we arent propogating
@@ -195,7 +210,7 @@ impl<L> WireProtocol<L> {
                         self.state = WireState::DiskReserve(token, piece_msg.block_length());
 
                         // Disk manager will notify us when the memory is reserved
-                        assert!(self.disk.try_send(IDiskMessage::WaitBlock(token)).is_none());
+                        self.send_disk_message(IDiskMessage::ReserveBlock(token, self.hash, piece_msg));
                         sel_send(OProtocolMessage::new(self.id, OProtocolMessageKind::PeerPiece(token, piece_msg)));
                     }
                     Ok(opt_kind) => {
@@ -225,7 +240,7 @@ impl<L> WireProtocol<L> {
     /// time we can take control of the stream and write to the peer. The upper layer will have to make sure that it doesn't starve
     /// ourselves of reads (since there is no notion of "flow" control provided back to that layer). We may want to look at this again
     /// in the future and provide the upper layer with feedback for when writes succeeded, although it would be preferrable to not do so.
-    fn advance_write(mut self, now: Time, mut out_buffer: &mut Buf, bytes_flushed: bool) -> Intent<WireProtocol<L>> {
+    fn advance_write(mut self, now: Time, mut out_buffer: &mut Buf, bytes_flushed: bool) -> Intent<WireProtocol<L, DR>> {
         // First, check if this was called from a bytes flushed event
         if bytes_flushed {
             // "Reset" our state
@@ -242,7 +257,8 @@ impl<L> WireProtocol<L> {
             // We can write out this message, and an optional payload from disk
             msg.write_bytes(&mut out_buffer).unwrap();
             if let Some(token) = opt_token {
-                out_buffer.extend(self.disk.redeem_load(token));
+                self.disk.read_block(token, out_buffer);
+                self.send_disk_message(IDiskMessage::ReclaimBlock(token));
             }
 
             self.state = WireState::WritePayload;
@@ -260,16 +276,16 @@ impl<L> WireProtocol<L> {
 }
 
 /// Attempt to parse the peer message as an OProtocolMessageKind.
-fn parse_kind_message(id: PeerIdentifier, bytes: &[u8], disk: &ActiveDiskManager) -> Result<Option<OProtocolMessageKind>, ProtocolError> {
+fn parse_kind_message(id: PeerIdentifier, bytes: &[u8], request_token: Token) -> Result<Option<OProtocolMessageKind>, ProtocolError> {
     match MessageType::from_bytes(bytes) {
-        IResult::Done(_, msg_type) => Ok(map_message_type(msg_type, disk)),
+        IResult::Done(_, msg_type) => Ok(map_message_type(msg_type, request_token)),
         IResult::Error(_) |
         IResult::Incomplete(_) => Err(ProtocolError::new(id, ProtocolErrorKind::InvalidMessage)),
     }
 }
 
 /// Maps a message type as an OProtocolMessageKind.
-fn map_message_type(msg_type: MessageType, disk: &ActiveDiskManager) -> Option<OProtocolMessageKind> {
+fn map_message_type(msg_type: MessageType, request_token: Token) -> Option<OProtocolMessageKind> {
     match msg_type {
         MessageType::KeepAlive => None,
         MessageType::Choke => Some(OProtocolMessageKind::PeerChoke),
@@ -279,17 +295,18 @@ fn map_message_type(msg_type: MessageType, disk: &ActiveDiskManager) -> Option<O
         MessageType::Have(msg) => Some(OProtocolMessageKind::PeerHave(msg)),
         MessageType::BitField(msg) => Some(OProtocolMessageKind::PeerBitField(msg)),
         MessageType::Request(msg) => Some(OProtocolMessageKind::PeerRequest(msg)),
-        MessageType::Piece(msg) => Some(OProtocolMessageKind::PeerPiece(disk.gen_request_token(), msg)),
+        MessageType::Piece(msg) => Some(OProtocolMessageKind::PeerPiece(request_token, msg)),
         MessageType::Cancel(msg) => Some(OProtocolMessageKind::PeerCancel(msg)),
         MessageType::Extension(_) => unimplemented!(),
     }
 }
 
-impl<L> PeerProtocol for WireProtocol<L>
+impl<L, DR> PeerProtocol for WireProtocol<L, DR>
     where L: LocalAddress + TryBind + TryAccept + Evented + Any + Send,
-          L::Output: TryConnect + StreamSocket + Send
+          L::Output: TryConnect + StreamSocket + Send,
+          DR: DiskManagerAccess + TrySender<IDiskMessage>
 {
-    type Context = WireContext;
+    type Context = WireContext<DR>;
 
     type Protocol = Self;
 
@@ -298,11 +315,12 @@ impl<L> PeerProtocol for WireProtocol<L>
     type Socket = L::Output;
 }
 
-impl<L> Protocol for WireProtocol<L>
+impl<L, DR> Protocol for WireProtocol<L, DR>
     where L: LocalAddress + TryBind + TryAccept + Evented + Any + Send,
-          L::Output: TryConnect + StreamSocket + Send
+          L::Output: TryConnect + StreamSocket + Send,
+          DR: DiskManagerAccess + TrySender<IDiskMessage>
 {
-    type Context = BTContext<WireContext>;
+    type Context = BTContext<WireContext<DR>>;
     type Socket = L::Output;
     type Seed = BTSeed;
 
@@ -310,7 +328,7 @@ impl<L> Protocol for WireProtocol<L>
         let id = PeerIdentifier::new(bt_seed.addr(), bt_seed.pid());
 
         // Create a ProtocolSender for layers to send messages and wake us up
-        let (send, recv) = mpsc::sync_channel(MAX_INCOMING_MESSAGES);
+        let (send, recv) = mpsc::sync_channel(MAX_INCOMING_MESSAGES + 1);
         let protocol_send = ProtocolSender::new(send, scope.notifier());
 
         // Using a SplitSender for the sender here so that we can defer message acking until the message is queued and written
@@ -319,7 +337,7 @@ impl<L> Protocol for WireProtocol<L>
 
         let active_disk = scope.register_disk(Box::new(protocol_send));
 
-        WireProtocol::new(id, active_disk, select_send, recv, scope.now())
+        WireProtocol::new(id, bt_seed.hash(), active_disk, select_send, recv, scope.now())
     }
 
     fn bytes_read(self, transport: &mut Transport<Self::Socket>, end: usize, scope: &mut Scope<Self::Context>) -> Intent<Self> {
@@ -386,9 +404,14 @@ impl<L> Protocol for WireProtocol<L>
         } else {
             while let Ok(msg) = self.recv.try_recv() {
                 match msg {
-                    IProtocolMessage::DiskManager(ODiskMessage::BlockReady(token)) => {
+                    // We don't use the namespace here because we know it is the same (TODO, Should Pass Namespace)
+                    IProtocolMessage::DiskManager(ODiskMessage::BlockLoaded(_namespace, token)) | 
+                    IProtocolMessage::DiskManager(ODiskMessage::BlockReserved(_namespace, token)) => {
                         self.process_disk(transport.input(), token);
-                    }
+                    },
+                    IProtocolMessage::DiskManager(_) => {
+                        panic!("bip_peer: WireProtocol Received Unexpected Message From DiskManager")
+                    },
                     IProtocolMessage::PieceManager(sel_msg) => {
                         // If the selection layer sent us a disconnect message, handle it here
                         if self.process_message(now, sel_msg) {

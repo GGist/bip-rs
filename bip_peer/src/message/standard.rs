@@ -1,3 +1,5 @@
+//! Standard wire protocol message parsing and serializing.
+
 use std::borrow::ToOwned;
 use std::io::{self, Write};
 

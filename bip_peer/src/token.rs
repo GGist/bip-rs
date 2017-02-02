@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use bip_util::trans::TIDGenerator;
+use bip_util::trans::{TransactionIds, SequentialIds};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Token {
@@ -8,12 +8,12 @@ pub struct Token {
 }
 
 pub struct TokenGenerator {
-    generator: TIDGenerator<u64>,
+    generator: SequentialIds<u64>
 }
 
 impl TokenGenerator {
     pub fn new() -> TokenGenerator {
-        TokenGenerator { generator: TIDGenerator::<u64>::new() }
+        TokenGenerator { generator: SequentialIds::<u64>::new() }
     }
 
     pub fn generate(&mut self) -> Token {

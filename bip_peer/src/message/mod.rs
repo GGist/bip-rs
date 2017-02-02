@@ -1,3 +1,4 @@
+//! Wire protocol message parsing and serializing.
 #![allow(unused)]
 
 use std::io::{self, Write};
@@ -32,8 +33,7 @@ pub const MESSAGE_LENGTH_LEN_BYTES: usize = 4;
 pub mod extension;
 pub mod standard;
 
-/// Enumeration of all message types. These types are shallow so they do not include
-/// variable length payload data; that data will have to be read in afterward.
+/// Enumeration of all (shallow) peer wire protocol messages.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum MessageType {
     KeepAlive,
@@ -97,10 +97,7 @@ pub fn parse_message_length(bytes: &[u8]) -> usize {
     }
 }
 
-/// Called when a conversion from a u32 to a usize is necessary
-/// for the program to proceed in a valid state.
-///
-/// If the conversion is not valid, a panic will occur.
+/// Panics if the conversion from a u32 to usize is not valid.
 pub fn u32_to_usize(value: u32) -> usize {
     if value as usize as u32 != value {
         panic!("bip_peer: Cannot Convert u32 To usize, usize Is Less Than 32-Bits")

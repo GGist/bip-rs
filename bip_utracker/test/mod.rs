@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Sender};
 
 use bip_util::bt::{InfoHash, PeerId};
-use bip_util::trans::{TIDGenerator};
+use bip_util::trans::{LocallyShuffledIds, TransactionIds};
 use bip_utracker::{ServerHandler, ServerResult, Handshaker, ClientMetadata};
 use bip_utracker::announce::{AnnounceResponse, AnnounceRequest, AnnounceEvent};
 use bip_utracker::contact::{CompactPeersV4, CompactPeersV6, CompactPeers};
@@ -31,14 +31,14 @@ struct MockTrackerHandler {
 
 struct InnerMockTrackerHandler {
     cids:          HashSet<u64>,
-    cid_generator: TIDGenerator<u64>,
+    cid_generator: LocallyShuffledIds<u64>,
     peers_map:     HashMap<InfoHash, HashSet<SocketAddr>>
 }
 
 impl MockTrackerHandler {
     pub fn new() -> MockTrackerHandler {
         MockTrackerHandler{ inner: Arc::new(Mutex::new(InnerMockTrackerHandler{ 
-            cids: HashSet::new(), cid_generator: TIDGenerator::<u64>::new(),
+            cids: HashSet::new(), cid_generator: LocallyShuffledIds::<u64>::new(),
             peers_map: HashMap::new() })) }
     }
     

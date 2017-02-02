@@ -13,7 +13,7 @@ impl<T> LayerRegistration<OSelectorMessage, T> for PieceSelector
 {
     type SS2 = SelectorSender;
 
-    fn register(&self, send: Box<TrySender<OSelectorMessage>>) -> SelectorSender {
+    fn register(&mut self, send: Box<TrySender<OSelectorMessage>>) -> SelectorSender {
         unimplemented!();
     }
 }

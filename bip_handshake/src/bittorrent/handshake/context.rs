@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 use bip_util::bt::{PeerId, InfoHash};
 
@@ -44,5 +44,11 @@ impl<C> Deref for BTContext<C> {
 
     fn deref(&self) -> &C {
         &self.c_context
+    }
+}
+
+impl<C> DerefMut for BTContext<C> {
+    fn deref_mut(&mut self) -> &mut C {
+        &mut self.c_context
     }
 }

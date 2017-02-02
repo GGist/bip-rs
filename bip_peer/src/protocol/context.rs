@@ -5,19 +5,21 @@ use bip_util::send::TrySender;
 use rotor::{Machine, Void, Scope, Response, EventSet};
 use rotor_stream::{Accepted, StreamSocket};
 
-use disk::{InactiveDiskManager, ODiskMessage, ActiveDiskManager, IDiskMessage};
+use disk::{DiskManagerRegistration, ODiskMessage, DiskManager, IDiskMessage, DiskManagerAccess};
 use protocol::OProtocolMessage;
 use selector::OSelectorMessage;
 use registration::LayerRegistration;
 
-pub struct WireContext {
-    disk: Box<LayerRegistration<ODiskMessage, IDiskMessage, SS2 = ActiveDiskManager> + Send>,
+/// Context so new peers can register themselves with the disk and selection layers.
+pub struct WireContext<DR> {
+    disk: Box<LayerRegistration<ODiskMessage, IDiskMessage, SS2 = DR> + Send>,
     sele: Box<TrySender<OProtocolMessage> + Send>,
 }
 
-impl WireContext {
-    pub fn new<D, S>(disk: D, selector: S) -> WireContext
-        where D: LayerRegistration<ODiskMessage, IDiskMessage, SS2 = ActiveDiskManager> + 'static + Send,
+impl<DR> WireContext<DR>
+    where DR: DiskManagerAccess + TrySender<IDiskMessage> {
+    pub fn new<D, S>(disk: D, mut selector: S) -> WireContext<DR>
+        where D: LayerRegistration<ODiskMessage, IDiskMessage, SS2 = DR> + 'static + Send,
               S: LayerRegistration<OSelectorMessage, OProtocolMessage> + 'static + Send
     {
         // Selector will not send anything through this channel, instead, it will wait to
@@ -32,7 +34,7 @@ impl WireContext {
         }
     }
 
-    pub fn register_disk(&self, send: Box<TrySender<ODiskMessage>>) -> ActiveDiskManager {
+    pub fn register_disk(&mut self, send: Box<TrySender<ODiskMessage>>) -> DR {
         self.disk.register(send)
     }
 

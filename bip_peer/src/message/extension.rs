@@ -1,3 +1,5 @@
+//! Extended wire protocol message parsing and serializing.
+
 use std::io::{self, Write};
 
 use byteorder::{WriteBytesExt, BigEndian};

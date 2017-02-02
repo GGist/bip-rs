@@ -1,6 +1,6 @@
 [package]
 name        = "bip_peer"
-version     = "0.0.1"
+version     = "0.1.0"
 description = "Communication with bittorrent peers via peer wire protocol"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -20,6 +20,13 @@ byteorder     = "0.5.0"
 rotor         = "0.6.0"
 rotor-stream  = { git = "https://github.com/GGist/rotor-stream.git", branch = "reclaim_stream_socket" }
 nom           = "1.2.0"
+rand          = "0.3.0"
+chan          = "0.1.0"
+crossbeam     = "0.2.0"
+error-chain   = "0.7.0"
 
 [features]
 unstable = []
+
+[profile.release]
+panic = "abort"
