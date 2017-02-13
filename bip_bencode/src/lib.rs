@@ -1,3 +1,5 @@
+#![recursion_limit = "1024"]
+
 //! Library for parsing and converting bencoded data.
 //!
 //! # Examples
@@ -38,16 +40,22 @@
 #[macro_use]
 extern crate error_chain;
 
-mod bencode;
-mod convert;
+mod inner;
+//mod mutable;
+mod reference;
+//mod convert;
 mod decode;
-mod dictionary;
-mod encode;
+//mod dictionary;
+//mod encode;
 mod error;
+//pub mod types;
 
-pub use bencode::{Bencode, BencodeKind};
-pub use convert::BencodeConvert;
-pub use dictionary::Dictionary;
+pub use reference::{BencodeRef, BTypeRef, TypeRef};
+pub use reference::dict::{BDictRef, DictRef};
+pub use reference::list::{BListRef, ListRef};
+//pub use bencode::{Bencode, BencodeKind};
+//pub use convert::BencodeConvert;
+//pub use dictionary::Dictionary;
 pub use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 pub use error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
 
@@ -59,7 +67,7 @@ const INT_START: u8 = b'i';
 const BYTE_LEN_LOW: u8 = b'0';
 const BYTE_LEN_HIGH: u8 = b'9';
 const BYTE_LEN_END: u8 = b':';
-
+/*
 /// Construct a Bencode map by supplying string references as keys and Bencode as values.
 #[macro_export]
 macro_rules! ben_map {
@@ -118,3 +126,4 @@ macro_rules! ben_int {
         }
     }
 }
+*/

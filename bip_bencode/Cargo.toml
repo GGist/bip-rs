@@ -1,6 +1,6 @@
 [package]
 name          = "bip_bencode"
-version       = "0.2.0"
+version       = "0.3.0"
 description   = "Efficient decoding and encoding for bencode"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -14,7 +14,7 @@ keywords      = ["bencode", "bittorrent"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-error-chain = "0.7.0"
+error-chain   = "0.8"
 
 [features]
 unstable      = []
