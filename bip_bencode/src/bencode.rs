@@ -37,9 +37,7 @@ impl<'a> Bencode<'a> {
         let (bencode, end_pos) = try!(decode::decode(bytes, 0));
 
         if end_pos != bytes.len() {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty {
-                pos: Some(end_pos),
-            }));
+            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty{ pos: end_pos }));
         }
 
         Ok(bencode)
