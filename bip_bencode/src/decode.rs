@@ -287,7 +287,7 @@ fn validate_keys_sorted_and_unique<'a>(_tokens: &[BencodeToken<'a>]) -> BencodeP
 fn peek_byte(bytes: &[u8], pos: usize) -> BencodeParseResult<u8> {
     bytes.get(pos)
         .map(|n| *n)
-        .ok_or(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty { pos: pos }))
+        .ok_or_else(|| BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty { pos: pos }))
 }
 
 #[cfg(test)]
