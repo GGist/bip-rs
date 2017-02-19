@@ -1,16 +1,23 @@
 use std::ops::{Index, IndexMut};
 
+/// Trait for working with generic list data structures.
 pub trait BListAccess<V> {
+    /// Get a list element at the given index.
     fn get(&self, index: usize) -> Option<&V>;
 
+    /// Get a mutable list element at the given index.
     fn get_mut(&mut self, index: usize) -> Option<&mut V>;
 
+    /// Remove a list element at the given index.
     fn remove(&mut self, index: usize) -> Option<V>;
 
+    /// Insert a list element at the given index.
     fn insert(&mut self, index: usize, item: V);
 
+    /// Push an element to the back of the list.
     fn push(&mut self, item: V);
 
+    /// Get the length of the list.
     fn len(&self) -> usize;
 }
 
