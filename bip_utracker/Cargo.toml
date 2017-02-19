@@ -7,7 +7,7 @@ authors       = ["Andrew <amiller4421@gmail.com>"]
 
 homepage      = "https://github.com/GGist/bip-rs"
 repository    = "https://github.com/GGist/bip-rs/tree/master/bip_utracker"
-documentation = "http://ggist.github.io/bip-rs/bip_utracker/index.html"
+documentation = "https://docs.rs/bip_utracker/"
 
 keywords      = ["tracker", "bittorrent", "udp"]
 

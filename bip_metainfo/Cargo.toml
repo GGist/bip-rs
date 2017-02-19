@@ -7,14 +7,14 @@ authors       = ["Andrew <amiller4421@gmail.com>"]
 
 homepage      = "https://github.com/GGist/bip-rs"
 repository    = "https://github.com/GGist/bip-rs/tree/master/bip_metainfo"
-documentation = "http://ggist.github.io/bip-rs/bip_metainfo/index.html"
+documentation = "https://docs.rs/bip_metainfo/"
 
 keywords      = ["metainfo", "torrent", "file", "bittorrent"]
 
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_bencode   = { path = "../bip_bencode", version = "0.2.0" }
+bip_bencode   = { version = "0.2.0" }
 bip_util      = { path = "../bip_util", version = "0.4.0" }
 chrono        = "0.2.0"
 crossbeam     = "0.2.0"
