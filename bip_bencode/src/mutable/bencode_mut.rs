@@ -30,22 +30,27 @@ impl<'a> BencodeMut<'a> {
         BencodeMut{ inner: inner }
     }
 
+    /// Create a new `BencodeMut` representing an `i64`.
     pub fn new_int(value: i64) -> BencodeMut<'a> {
         BencodeMut::new(InnerBencodeMut::Int(value))
     }
 
+    /// Create a new `BencodeMut` representing a `[u8]`.
     pub fn new_bytes(value: &'a [u8]) -> BencodeMut<'a> {
         BencodeMut::new(InnerBencodeMut::Bytes(value))
     }
 
+    /// Create a new `BencodeMut` representing a `BListAccess`.
     pub fn new_list() -> BencodeMut<'a> {
         BencodeMut::new(InnerBencodeMut::List(Vec::new()))
     }
 
+    /// Create a new `BencodeMut` representing a `BDictAccess`.
     pub fn new_dict() -> BencodeMut<'a> {
         BencodeMut::new(InnerBencodeMut::Dict(BTreeMap::new()))
     }
 
+    /// Encode the `BencodeMut` into a buffer representing the bencode.
     pub fn encode(&self) -> Vec<u8> {
         let mut buffer = Vec::new();
 
