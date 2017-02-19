@@ -7,11 +7,12 @@
 //! ```rust
 //!     extern crate bip_bencode;
 //!
-//!     use bip_bencode::{Bencode};
+//!     use std::default::Default;
+//!     use bip_bencode::{BencodeRef, BRefAccess, BDecodeOpt};
 //!
 //!     fn main() {
 //!         let data = b"d12:lucky_numberi7ee";
-//!         let bencode = Bencode::decode(data).unwrap();
+//!         let bencode = BencodeRef::decode(data, BDecodeOpt::default()).unwrap();
 //!
 //!         assert_eq!(7, bencode.dict().unwrap().lookup("lucky_number".as_bytes())
 //!             .unwrap().int().unwrap());
@@ -23,8 +24,6 @@
 //! ```rust
 //!     #[macro_use]
 //!     extern crate bip_bencode;
-//!
-//!     use bip_bencode::{Bencode};
 //!
 //!     fn main() {
 //!         let message = (ben_map!{
@@ -38,16 +37,18 @@
 #[macro_use]
 extern crate error_chain;
 
-mod bencode;
-mod convert;
-mod decode;
-mod dictionary;
-mod encode;
+mod access;
+mod mutable;
+mod reference;
 mod error;
 
-pub use bencode::{Bencode, BencodeKind};
-pub use convert::BencodeConvert;
-pub use dictionary::Dictionary;
+pub use reference::bencode_ref::{BencodeRef};
+pub use mutable::bencode_mut::{BencodeMut};
+pub use access::bencode::{BRefAccess, BencodeRefKind, BMutAccess, BencodeMutKind};
+pub use access::convert::BConvert;
+pub use access::dict::BDictAccess;
+pub use access::list::BListAccess;
+pub use reference::decode_opt::BDecodeOpt;
 pub use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 pub use error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
 
@@ -60,61 +61,68 @@ const BYTE_LEN_LOW: u8 = b'0';
 const BYTE_LEN_HIGH: u8 = b'9';
 const BYTE_LEN_END: u8 = b':';
 
-/// Construct a Bencode map by supplying string references as keys and Bencode as values.
+/// Construct a `Bencode` map by supplying string references as keys and `Bencode` as values.
 #[macro_export]
 macro_rules! ben_map {
 ( $($key:expr => $val:expr),* ) => {
         {
             use std::convert::{AsRef};
-            use std::collections::{BTreeMap};
-            use bip_bencode::{Bencode};
-            
-            let mut map = BTreeMap::new();
-            $(
-                map.insert(AsRef::as_ref($key), $val);
-            )*
-            Bencode::Dict(map)
+            use bip_bencode::{BMutAccess, BencodeMut};
+
+            let mut bencode_map = BencodeMut::new_dict();
+            {
+                let mut map = bencode_map.dict_mut().unwrap();
+                $(
+                    map.insert(AsRef::as_ref($key), $val);
+                )*
+            }
+
+            bencode_map
         }
     }
 }
 
-/// Construct a Bencode list by supplying a list of Bencode values.
+/// Construct a `Bencode` list by supplying a list of `Bencode` values.
 #[macro_export]
 macro_rules! ben_list {
     ( $($ben:expr),* ) => {
         {
-            use bip_bencode::{Bencode};
+            use bip_bencode::{BencodeMut, BMutAccess};
             
-            let mut list = Vec::new();
-            $(
-                list.push($ben);
-            )*
-            Bencode::List(list)
+            let mut bencode_list = BencodeMut::new_list();
+            {
+                let mut list = bencode_list.list_mut().unwrap();
+                $(
+                    list.push($ben);
+                )*
+            }
+
+            bencode_list
         }
     }
 }
 
-/// Construct Bencode bytes by supplying a type convertible to Vec\<u8\>.
+/// Construct `Bencode` bytes by supplying a type convertible to `Vec<u8>`.
 #[macro_export]
 macro_rules! ben_bytes {
     ( $ben:expr ) => {
         {
             use std::convert::{AsRef};
-            use bip_bencode::{Bencode};
+            use bip_bencode::{BencodeMut};
             
-            Bencode::Bytes(AsRef::as_ref($ben))
+            BencodeMut::new_bytes(AsRef::as_ref($ben))
         }
     }
 }
 
-/// Construct a Bencode integer by supplying an i64.
+/// Construct a `Bencode` integer by supplying an `i64`.
 #[macro_export]
 macro_rules! ben_int {
     ( $ben:expr ) => {
         {
-            use bip_bencode::{Bencode};
+            use bip_bencode::{BencodeMut};
             
-            Bencode::Int($ben)
+            BencodeMut::new_int($ben)
         }
     }
 }

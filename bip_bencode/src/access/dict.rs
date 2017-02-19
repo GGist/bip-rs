@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 /// Trait for working with generic map data structures.
-pub trait Dictionary<'a, V> {
+pub trait BDictAccess<'a, V> {
     /// Convert the dictionary to an unordered list of key/value pairs.
     fn to_list(&self) -> Vec<(&'a [u8], &V)>;
 
@@ -18,7 +18,7 @@ pub trait Dictionary<'a, V> {
     fn remove(&mut self, key: &[u8]) -> Option<V>;
 }
 
-impl<'a, V> Dictionary<'a, V> for BTreeMap<&'a [u8], V> {
+impl<'a, V> BDictAccess<'a, V> for BTreeMap<&'a [u8], V> {
     fn to_list(&self) -> Vec<(&'a [u8], &V)> {
         self.iter().map(|(k, v)| (*k, v)).collect()
     }

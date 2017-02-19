@@ -66,6 +66,13 @@ error_chain! {
             description("Invalid Byte Length Found To Overflow Buffer Length")
             display("Invalid Byte Length Found To Overflow Buffer Length At {:?}", pos)
         }
+        InvalidRecursionExceeded {
+            pos: usize,
+            max: usize
+        } {
+            description("Invalid Recursion Limit Exceeded")
+            display("Invalid Recursion Limit Exceeded At {:?} For Limit {:?}", pos, max)
+        }
     }
 }
 
