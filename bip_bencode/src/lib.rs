@@ -61,7 +61,7 @@ const BYTE_LEN_LOW: u8 = b'0';
 const BYTE_LEN_HIGH: u8 = b'9';
 const BYTE_LEN_END: u8 = b':';
 
-/// Construct a `Bencode` map by supplying string references as keys and `Bencode` as values.
+/// Construct a `BencodeMut` map by supplying string references as keys and `BencodeMut` as values.
 #[macro_export]
 macro_rules! ben_map {
 ( $($key:expr => $val:expr),* ) => {
@@ -82,7 +82,7 @@ macro_rules! ben_map {
     }
 }
 
-/// Construct a `Bencode` list by supplying a list of `Bencode` values.
+/// Construct a `BencodeMut` list by supplying a list of `BencodeMut` values.
 #[macro_export]
 macro_rules! ben_list {
     ( $($ben:expr),* ) => {
@@ -102,7 +102,7 @@ macro_rules! ben_list {
     }
 }
 
-/// Construct `Bencode` bytes by supplying a type convertible to `Vec<u8>`.
+/// Construct `BencodeMut` bytes by supplying a type convertible to `Vec<u8>`.
 #[macro_export]
 macro_rules! ben_bytes {
     ( $ben:expr ) => {
@@ -115,7 +115,7 @@ macro_rules! ben_bytes {
     }
 }
 
-/// Construct a `Bencode` integer by supplying an `i64`.
+/// Construct a `BencodeMut` integer by supplying an `i64`.
 #[macro_export]
 macro_rules! ben_int {
     ( $ben:expr ) => {

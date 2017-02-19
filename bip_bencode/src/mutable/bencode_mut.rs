@@ -19,6 +19,7 @@ pub enum InnerBencodeMut<'a> {
     Dict(BTreeMap<&'a [u8], BencodeMut<'a>>),
 }
 
+/// `BencodeMut` object that stores references to some data.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct BencodeMut<'a> {
     inner: InnerBencodeMut<'a>

@@ -1,7 +1,7 @@
 use access::dict::BDictAccess;
 use access::list::BListAccess;
 
-/// Abstract representation of a Bencode object.
+/// Abstract representation of a `BencodeRef` object.
 pub enum BencodeRefKind<'b, 'a: 'b, T: 'b> {
     /// Bencode Integer.
     Int(i64),
@@ -58,7 +58,7 @@ impl<'a: 'b, 'b, T> BRefAccess<'a> for &'b T where T: BRefAccess<'a> {
     }
 }
 
-/// Abstract representation of a Bencode object.
+/// Abstract representation of a `BencodeMut` object.
 pub enum BencodeMutKind<'b, 'a: 'b, T: 'b> {
     /// Bencode Integer.
     Int(i64),

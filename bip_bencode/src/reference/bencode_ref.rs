@@ -27,7 +27,7 @@ impl<'a> Into<BencodeRef<'a>> for InnerBencodeRef<'a> {
     }
 }
 
-/// Bencode object that holds references to the underlying data.
+/// `BencodeRef` object that stores references to some buffer.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct BencodeRef<'a> {
     inner: InnerBencodeRef<'a>

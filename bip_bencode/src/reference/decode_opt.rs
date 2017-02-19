@@ -1,9 +1,9 @@
 use std::default::Default;
 
-const DEFAULT_MAX_RECURSION:  usize = 25;
+const DEFAULT_MAX_RECURSION:  usize = 50;
 const DEFAULT_CHECK_KEY_SORT: bool = false;
 
-/// Object for specifying decode options for `Bencode`.
+/// Stores decoding options for modifying decode behavior.
 #[derive(Copy, Clone)]
 pub struct BDecodeOpt {
     max_recursion:  usize,
@@ -11,7 +11,7 @@ pub struct BDecodeOpt {
 }
 
 impl BDecodeOpt {
-    /// Create a new `DecodeOpt` object.
+    /// Create a new `BDecodeOpt` object.
     pub fn new(max_recursion: usize, check_key_sort: bool) -> BDecodeOpt {
         BDecodeOpt{ max_recursion: max_recursion, check_key_sort: check_key_sort }
     }
