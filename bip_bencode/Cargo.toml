@@ -7,7 +7,7 @@ authors       = ["Andrew <amiller4421@gmail.com>"]
 
 homepage      = "https://github.com/GGist/bip-rs"
 repository    = "https://github.com/GGist/bip-rs/tree/master/bip_bencode"
-documentation = "http://ggist.github.io/bip-rs/bip_bencode/index.html"
+documentation = "https://docs.rs/bip_bencode/"
 
 keywords      = ["bencode", "bittorrent"]
 
