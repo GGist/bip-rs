@@ -137,3 +137,67 @@ impl<'a> BMutAccess<'a> for BencodeMut<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use access::bencode::BMutAccess;
+    use mutable::bencode_mut::BencodeMut;
+
+    #[test]
+    fn positive_int_encode() {
+        let bencode_int = BencodeMut::new_int(-560);
+
+        let int_bytes = b"i-560e";
+        assert_eq!(&int_bytes[..], &bencode_int.encode()[..]);
+    }
+
+    #[test]
+    fn positive_bytes_encode() {
+        let bencode_bytes = BencodeMut::new_bytes(b"asdasd");
+
+        let bytes_bytes = b"6:asdasd";
+        assert_eq!(&bytes_bytes[..], &bencode_bytes.encode()[..]);
+    }
+
+    #[test]
+    fn positive_empty_list_encode() {
+        let bencode_list = BencodeMut::new_list();
+
+        let list_bytes = b"le";
+        assert_eq!(&list_bytes[..], &bencode_list.encode()[..]);
+    }
+
+    #[test]
+    fn positive_nonempty_list_encode() {
+        let mut bencode_list = BencodeMut::new_list();
+
+        {
+            let list_mut = bencode_list.list_mut().unwrap();
+            list_mut.push(BencodeMut::new_int(56));
+        }
+
+        let list_bytes = b"li56ee";
+        assert_eq!(&list_bytes[..], &bencode_list.encode()[..]);
+    }
+
+    #[test]
+    fn positive_empty_dict_encode() {
+        let bencode_dict = BencodeMut::new_dict();
+
+        let dict_bytes = b"de";
+        assert_eq!(&dict_bytes[..], &bencode_dict.encode()[..]);
+    }
+
+    #[test]
+    fn positive_nonempty_dict_encode() {
+        let mut bencode_dict = BencodeMut::new_dict();
+
+        {
+            let dict_mut = bencode_dict.dict_mut().unwrap();
+            dict_mut.insert(b"asd", BencodeMut::new_bytes(b"asdasd"));
+        }
+
+        let dict_bytes = b"d3:asd6:asdasde";
+        assert_eq!(&dict_bytes[..], &bencode_dict.encode()[..]);
+    }
+}

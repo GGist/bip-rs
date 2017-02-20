@@ -1,5 +1,4 @@
 use access::bencode::BRefAccess;
-use reference::bencode_ref::BencodeRef;
 use error::{BencodeConvertErrorKind, BencodeConvertError};
 use access::dict::BDictAccess;
 use access::list::BListAccess;

@@ -14,27 +14,27 @@ pub fn decode<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -
     
     match curr_byte {
         ::INT_START  => {
-            let (bencode, int_bytes, pos) = try!(decode_int(bytes, pos + 1, ::BEN_END));
-            Ok((InnerBencodeRef::Int(bencode, int_bytes).into(), pos))
+            let (bencode, next_pos) = try!(decode_int(bytes, pos + 1, ::BEN_END));
+            Ok((InnerBencodeRef::Int(bencode, &bytes[pos..next_pos]).into(), next_pos))
         },
         ::LIST_START => {
-            let (bencode, list_bytes, pos) = try!(decode_list(bytes, pos + 1, opts, depth));
-            Ok((InnerBencodeRef::List(bencode, list_bytes).into(), pos))
+            let (bencode, next_pos) = try!(decode_list(bytes, pos + 1, opts, depth));
+            Ok((InnerBencodeRef::List(bencode, &bytes[pos..next_pos]).into(), next_pos))
         },
         ::DICT_START => {
-            let (bencode, dict_bytes, pos) = try!(decode_dict(bytes, pos + 1, opts, depth));
-            Ok((InnerBencodeRef::Dict(bencode, dict_bytes).into(), pos))
+            let (bencode, next_pos) = try!(decode_dict(bytes, pos + 1, opts, depth));
+            Ok((InnerBencodeRef::Dict(bencode, &bytes[pos..next_pos]).into(), next_pos))
         },
         ::BYTE_LEN_LOW...::BYTE_LEN_HIGH => {
-            let (bencode, bytes_bytes, pos) = try!(decode_bytes(bytes, pos));
+            let (bencode, next_pos) = try!(decode_bytes(bytes, pos));
             // Include the length digit, don't increment position
-            Ok((InnerBencodeRef::Bytes(bencode, bytes_bytes).into(), pos))
+            Ok((InnerBencodeRef::Bytes(bencode, &bytes[pos..next_pos]).into(), next_pos))
         },
         _ => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidByte{ pos: pos }))
     }
 }
 
-fn decode_int<'a>(bytes: &'a [u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, &'a [u8], usize)> {
+fn decode_int<'a>(bytes: &'a [u8], pos: usize, delim: u8) -> BencodeParseResult<(i64, usize)> {
     let (_, begin_decode) = bytes.split_at(pos);
     
     let relative_end_pos = match begin_decode.iter().position(|n| *n == delim) {
@@ -64,13 +64,13 @@ fn decode_int<'a>(bytes: &'a [u8], pos: usize, delim: u8) -> BencodeParseResult<
     let absolute_end_pos = pos + relative_end_pos;
     let next_pos = absolute_end_pos + 1;
     match i64::from_str_radix(int_str, 10) {
-        Ok(n)  => Ok((n, &bytes[pos..next_pos], next_pos)),
+        Ok(n)  => Ok((n, next_pos)),
         Err(_) => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError{ pos: pos }))
     }
 }
     
-fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8], &'a [u8], usize)> {
-    let (num_bytes, _, start_pos) = try!(decode_int(bytes, pos, ::BYTE_LEN_END));
+fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8], usize)> {
+    let (num_bytes, start_pos) = try!(decode_int(bytes, pos, ::BYTE_LEN_END));
 
     if num_bytes < 0 {
         return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthNegative{ pos: pos }))
@@ -85,11 +85,11 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8]
         return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthOverflow{ pos: pos }))
     }
     
-    let end_pos = start_pos + num_bytes;
-    Ok((&bytes[start_pos..end_pos], &bytes[pos..end_pos], end_pos))
+    let next_pos = start_pos + num_bytes;
+    Ok((&bytes[start_pos..next_pos], next_pos))
 }
 
-fn decode_list<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(Vec<BencodeRef<'a>>, &'a [u8], usize)> {
+fn decode_list<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(Vec<BencodeRef<'a>>, usize)> {
     let mut bencode_list = Vec::new();
     
     let mut curr_pos = pos;
@@ -105,17 +105,17 @@ fn decode_list<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) 
     }
     
     let next_pos = curr_pos + 1;
-    Ok((bencode_list, &bytes[pos..next_pos], next_pos))
+    Ok((bencode_list, next_pos))
 }
 
-fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(BTreeMap<&'a [u8], BencodeRef<'a>>, &'a [u8], usize)> {
+fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(BTreeMap<&'a [u8], BencodeRef<'a>>, usize)> {
     let mut bencode_dict = BTreeMap::new();
     
     let mut curr_pos = pos;
     let mut curr_byte = try!(peek_byte(bytes, curr_pos));
     
     while curr_byte != ::BEN_END {
-        let (key_bytes, _, next_pos) = try!(decode_bytes(bytes, curr_pos));
+        let (key_bytes, next_pos) = try!(decode_bytes(bytes, curr_pos));
         
         // Spec says that the keys must be in alphabetical order
         match bencode_dict.keys().last() {
@@ -139,7 +139,7 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) 
     }
     
     let next_pos = curr_pos + 1;
-    Ok((bencode_dict, &bytes[pos..next_pos], next_pos))
+    Ok((bencode_dict, next_pos))
 }
 
 fn peek_byte(bytes: &[u8], pos: usize) -> BencodeParseResult<u8> {
