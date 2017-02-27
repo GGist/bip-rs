@@ -1,4 +1,2 @@
-pub mod handshake;
-pub mod machine;
-pub mod seed;
-pub mod client;
+mod handshake;
+mod extension_bits;

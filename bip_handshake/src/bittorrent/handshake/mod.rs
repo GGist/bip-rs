@@ -1,4 +1,4 @@
-use bip_util::bt::PeerId;
+/*use bip_util::bt::PeerId;
 
 use bittorrent::seed::{InitiateSeed, CompleteSeed, PartialBTSeed, EmptyBTSeed, BTSeed};
 
@@ -32,3 +32,6 @@ enum CompleteState {
     WriteMessage(EmptyBTSeed),
     Done(BTSeed),
 }
+*/
+mod codec;
+mod message;
