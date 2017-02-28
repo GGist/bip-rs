@@ -2,7 +2,7 @@ use std::io;
 use std::u8;
 use std::io::Write;
 
-use bittorrent::extension_bits::ExtensionBits;
+use bittorrent::handshake::extension_bits::ExtensionBits;
 
 use bip_util::bt::{self, InfoHash, PeerId};
 use nom::{IResult, be_u8};

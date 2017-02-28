@@ -9,4 +9,6 @@ mod local_addr;
 mod remote_addr;
 mod transport;
 
+pub type Protocol = String;
+
 pub use bip_util::bt::{PeerId, InfoHash};

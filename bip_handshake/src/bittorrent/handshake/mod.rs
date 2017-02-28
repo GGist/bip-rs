@@ -34,4 +34,5 @@ enum CompleteState {
 }
 */
 mod codec;
+mod extension_bits;
 mod message;
