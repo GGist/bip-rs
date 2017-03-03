@@ -15,9 +15,13 @@ license       = "MIT/Apache-2.0"
 
 [dependencies]
 bip_util      = { path = "../bip_util", version = "0.4" }
+error-chain   = "0.10"
 futures       = "0.1"
 nom           = "2.1"
+rand          = "0.3"
 tokio-core    = "0.1"
+tokio-timer   = "0.1"
+
 
 [features]
 unstable      = []

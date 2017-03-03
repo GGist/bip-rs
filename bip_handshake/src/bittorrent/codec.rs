@@ -1,6 +1,6 @@
 use std::io;
 
-use bittorrent::handshake::message::HandshakeMessage;
+use bittorrent::message::HandshakeMessage;
 
 use nom::{IResult};
 use tokio_core::io::{Codec, EasyBuf};
