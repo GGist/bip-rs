@@ -29,23 +29,3 @@ pub use remote_addr::RemoteAddr;
 pub use transport::Transport;
 
 pub use bip_util::bt::{PeerId, InfoHash};
-/*
-pub use bittorrent::protocol::extensions::Extensions;
-pub use bittorrent::handshake::handshaker::{HandshakerBuilder, Handshaker, HandshakerStream, HandshakerSink};
-pub use bittorrent::handshake::initiate::InitiateHandshake;
-pub use bittorrent::handshake::complete::CompleteHandshake;
-
-pub mod filters {
-    pub use filter::{BittorrentFilter, SocketBlockFilter, InfoHashAllowFilter};
-}
-
-pub mod extension {
-    
-}
-
-pub use filter::{HandshakeFilters, HandshakeFilter, FilterDecision};
-pub use local_addr::LocalAddr;
-pub use remote_addr::RemoteAddr;
-pub use transport::Transport;
-
-pub use bip_util::bt::{PeerId, InfoHash};*/

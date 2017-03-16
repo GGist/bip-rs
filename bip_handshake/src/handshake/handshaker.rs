@@ -1,5 +1,6 @@
 use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4};
 use std::io;
+use std::time::Duration;
 
 use message::initiate::InitiateMessage;
 use message::complete::CompleteMessage;
@@ -23,6 +24,7 @@ use futures::stream::Stream;
 use futures::future::{self, Loop, Future};
 use tokio_core::reactor::Handle;
 use tokio_core::io::Io;
+use tokio_timer::{self};
 use rand::{self, Rng};
 
 const MAX_ADDR_BUFFER_SIZE: usize = 1000;
@@ -124,16 +126,30 @@ impl<S> Handshaker<S> where S: Io + LocalAddr + RemoteAddr + 'static {
         let (sock_send, sock_recv) = mpsc::channel(MAX_SOCK_BUFFER_SIZE);
         
         let filters = Filters::new();
+        let timer = tokio_timer::wheel()
+            .num_slots(50)
+            .max_timeout(Duration::from_millis(5000))
+            .build();
 
         // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
         handler::loop_handler(addr_recv, initiator::initiator_handler::<T>, hand_send.clone(), (filters.clone(), handle.clone()), &handle);
         handler::loop_handler(listener, listener::listener_handler, hand_send, filters.clone(), &handle);
-        handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone()), &handle);
+        handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), timer), &handle);
 
         let sink = HandshakerSink::new(addr_send, open_port, builder.pid, filters);
         let stream = HandshakerStream::new(sock_recv);
 
         Ok(Handshaker{ sink: sink, stream: stream })
+    }
+
+    /// Retrieve our public port that we advertise to others.
+    pub fn port(&self) -> u16 {
+        self.sink.port()
+    }
+
+    /// Retrieve our `PeerId` that we advertise to others.
+    pub fn peer_id(&self) -> PeerId {
+        self.sink.peer_id()
     }
 }
 
