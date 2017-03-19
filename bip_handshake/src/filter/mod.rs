@@ -1,8 +1,6 @@
 use std::cmp::{PartialEq, Eq};
 use std::net::SocketAddr;
-use std::fmt::Debug;
 use std::any::Any;
-use std::hash::Hash;
 
 use message::protocol::Protocol;
 use message::extensions::{Extensions};

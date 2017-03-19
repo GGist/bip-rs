@@ -2,19 +2,18 @@ use std::io;
 use std::net::SocketAddr;
 
 use local_addr::LocalAddr;
-use remote_addr::RemoteAddr;
 
-use futures::Poll;
+//use futures::Poll;
 use futures::future::Future;
 use futures::stream::Stream;
-use tokio_core::io::Io;
-use tokio_core::net::{TcpStream, TcpStreamNew, Incoming, TcpListener};
+//use tokio_core::net::{TcpStream, TcpStreamNew, Incoming, TcpListener};
 use tokio_core::reactor::Handle;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 /// Trait for initializing connections over an abstract `Transport`.
 pub trait Transport {
     /// Concrete socket.
-    type Socket: Io + LocalAddr + RemoteAddr + 'static;
+    type Socket: AsyncRead + AsyncWrite + 'static;
 
     /// Future `Self::Socket`.
     type FutureSocket: Future<Item=Self::Socket, Error=io::Error> + 'static;
@@ -30,7 +29,7 @@ pub trait Transport {
 }
 
 //--------------------------------------------------------------------------//
-
+/*
 /// `Incoming` stream that allows retrieval of the `LocalAddr`.
 pub struct IncomingWithLocalAddr {
     local_addr: SocketAddr,
@@ -69,4 +68,4 @@ impl Transport for TcpStream {
             Ok(IncomingWithLocalAddr{ local_addr: local_addr, incoming: incoming })
         })
     }
-}
+}*/

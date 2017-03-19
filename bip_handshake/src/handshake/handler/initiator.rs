@@ -1,14 +1,9 @@
-use std::net::SocketAddr;
-
 use handshake::handler::HandshakeType;
 use transport::Transport;
 use message::initiate::InitiateMessage;
-use filter::FilterDecision;
 use filter::filters::Filters;
-use message::protocol::Protocol;
 use handshake::handler;
 
-use bip_util::bt::InfoHash;
 use futures::future::{self, Future};
 use tokio_core::reactor::Handle;
 

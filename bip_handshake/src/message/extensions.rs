@@ -33,7 +33,13 @@ impl Extensions {
     ///
     /// This is useful for getting the extensions that both clients support.
     pub fn union(&self, ext: &Extensions) -> Extensions {
-        unimplemented!()
+        let mut result_ext = Extensions::new();
+
+        for index in 0..NUM_EXTENSION_BYTES {
+            result_ext.bytes[index] = self.bytes[index] & ext.bytes[index];
+        }
+
+        result_ext
     }
 
     /// Create a new `Extensions` using the given bytes directly.

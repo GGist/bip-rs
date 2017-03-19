@@ -2,24 +2,31 @@ use std::io;
 
 use bittorrent::message::HandshakeMessage;
 
+use bytes::BytesMut;
+use bytes::buf::BufMut;
 use nom::{IResult};
-use tokio_core::io::{Codec, EasyBuf};
+use tokio_io::codec::{Encoder, Decoder};
 
 pub struct HandshakeCodec;
 
-impl Codec for HandshakeCodec {
-    type In = HandshakeMessage;
-    type Out = HandshakeMessage;
+impl Decoder for HandshakeCodec {
+    type Item = HandshakeMessage;
+    type Error = io::Error;
 
-    fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<HandshakeMessage>> {
-        match HandshakeMessage::from_bytes(buf.as_ref()) {
+    fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<HandshakeMessage>> {
+        match HandshakeMessage::from_bytes(&**src) {
             IResult::Done(_, message) => Ok(Some(message)),
             IResult::Incomplete(_)    => Ok(None),
             IResult::Error(_)         => Err(io::Error::new(io::ErrorKind::ConnectionAborted, "Handshake Protocol Error"))
         }
     }
+}
 
-    fn encode(&mut self, msg: HandshakeMessage, buf: &mut Vec<u8>) -> io::Result<()> {
-        msg.write_bytes(buf)
+impl Encoder for HandshakeCodec {
+    type Item = HandshakeMessage;
+    type Error = io::Error;
+
+    fn encode(&mut self, msg: HandshakeMessage, dst: &mut BytesMut) -> io::Result<()> {
+        msg.write_bytes(dst.writer())
     }
 }

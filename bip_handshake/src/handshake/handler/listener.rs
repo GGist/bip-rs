@@ -4,8 +4,7 @@ use handshake::handler::HandshakeType;
 use filter::filters::Filters;
 use handshake::handler;
 
-use futures::future::{self, FutureResult, Future};
-use tokio_core::reactor::Handle;
+use futures::future::{self, Future};
 
 /// Handle the result of listeneing for handshake connections.
 ///

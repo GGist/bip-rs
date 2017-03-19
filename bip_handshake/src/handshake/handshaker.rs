@@ -11,19 +11,17 @@ use handshake::handler::listener;
 use handshake::handler;
 use transport::Transport;
 use local_addr::LocalAddr;
-use remote_addr::RemoteAddr;
 use filter::filters::Filters;
 use filter::{HandshakeFilter, HandshakeFilters};
 
 use bip_util::bt::PeerId;
 use bip_util::convert;
-use futures::{StartSend, Poll, Async};
+use futures::{StartSend, Poll};
 use futures::sync::mpsc::{self, Sender, Receiver, SendError};
 use futures::sink::Sink;
 use futures::stream::Stream;
-use futures::future::{self, Loop, Future};
 use tokio_core::reactor::Handle;
-use tokio_core::io::Io;
+use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::{self};
 use rand::{self, Rng};
 
@@ -111,7 +109,7 @@ pub struct Handshaker<S> {
     stream: HandshakerStream<S>
 }
 
-impl<S> Handshaker<S> where S: Io + LocalAddr + RemoteAddr + 'static {
+impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
     fn with_builder<T>(builder: &HandshakerBuilder, handle: Handle) -> io::Result<Handshaker<T::Socket>>
         where T: Transport<Socket=S> + 'static {
         let listener = try!(T::listen(&builder.bind, &handle));

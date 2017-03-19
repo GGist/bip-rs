@@ -14,14 +14,13 @@ use bip_util::bt::{PeerId};
 use futures::future::Future;
 use futures::stream::Stream;
 use futures::sink::Sink;
-use tokio_core::io::Io;
-use tokio_core::reactor::Handle;
 use tokio_timer::Timer;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 const HANDSHAKE_TIMEOUT_MILLIS: u64 = 1500;
 
 pub fn execute_handshake<S>(item: HandshakeType<S>, context: &(Extensions, PeerId, Filters, Timer))
-    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: Io + 'static {
+    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let &(ref ext, ref pid, ref filters, ref timer) = context;
 
     match item {
@@ -31,7 +30,7 @@ pub fn execute_handshake<S>(item: HandshakeType<S>, context: &(Extensions, PeerI
 }
 
 fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pid: PeerId, filters: Filters, timer: Timer)
-    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: Io + 'static {
+    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let framed = sock.framed(HandshakeCodec);
 
     let (prot, hash, addr) = init_msg.into_parts();
@@ -68,7 +67,7 @@ fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pi
 }
 
 fn complete_handshake<S>(sock: S, addr: SocketAddr, ext: Extensions, pid: PeerId, filters: Filters, timer: Timer)
-    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: Io + 'static {
+    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let framed = sock.framed(HandshakeCodec);
 
     Box::new(timer.timeout(

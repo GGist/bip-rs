@@ -15,11 +15,13 @@ license       = "MIT/Apache-2.0"
 
 [dependencies]
 bip_util      = { path = "../bip_util", version = "0.4" }
-error-chain   = "0.10"
+bytes         = "0.4"
 futures       = "0.1"
 nom           = "2.1"
 rand          = "0.3"
 tokio-core    = "0.1"
+# Until Framed into_inner Methods Show Up In Crates.io
+tokio-io      = { git = "https://github.com/tokio-rs/tokio-io.git" }
 tokio-timer   = "0.1"
 
 

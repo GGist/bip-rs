@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::sync::RwLock;
 
-use filter::{HandshakeFilter, FilterDecision};
+use filter::{HandshakeFilter};
 
 #[derive(Clone)]
 pub struct Filters {
@@ -19,8 +19,8 @@ impl Filters {
             let opt_found = check_index(&mut_filters[..], &filter);
 
             match opt_found {
-                Some(index) => (),
-                None        => { mut_filters.push(Box::new(filter)); }
+                Some(_) => (),
+                None    => { mut_filters.push(Box::new(filter)); }
             }
         });
     }

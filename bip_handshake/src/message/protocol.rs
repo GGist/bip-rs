@@ -2,8 +2,7 @@ use std::io;
 use std::u8;
 use std::io::Write;
 
-use bip_util::bt::{self, InfoHash, PeerId};
-use nom::{IResult, be_u8, rest};
+use nom::{IResult, be_u8};
 
 const BITTORRENT_10_PROTOCOL:     &'static [u8] = b"BitTorrent Protocol";
 const BITTORRENT_10_PROTOCOL_LEN: u8            = 19;
@@ -38,8 +37,9 @@ fn parse_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
     parse_real_protocol(bytes)
 }
 
+#[allow(unreachable_patterns, unused)]
 fn parse_real_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
-    switch!(bytes, call!(parse_raw_protocol),
+    switch!(bytes, parse_raw_protocol,
         BITTORRENT_10_PROTOCOL => value!(Protocol::BitTorrent) |
         custom                 => value!(Protocol::Custom(custom.to_vec()))
     )
