@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use bittorrent::codec::HandshakeCodec;
 use bittorrent::message::HandshakeMessage;
+use bittorrent::framed::FramedHandshake;
 use message::extensions::Extensions;
 use handshake::handler::HandshakeType;
 use message::initiate::InitiateMessage;
@@ -31,7 +31,7 @@ pub fn execute_handshake<S>(item: HandshakeType<S>, context: &(Extensions, PeerI
 
 fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pid: PeerId, filters: Filters, timer: Timer)
     -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
-    let framed = sock.framed(HandshakeCodec);
+    let framed = FramedHandshake::new(sock);
 
     let (prot, hash, addr) = init_msg.into_parts();
     let handshake_msg = HandshakeMessage::from_parts(prot.clone(), ext, hash, pid);
@@ -68,7 +68,7 @@ fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pi
 
 fn complete_handshake<S>(sock: S, addr: SocketAddr, ext: Extensions, pid: PeerId, filters: Filters, timer: Timer)
     -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
-    let framed = sock.framed(HandshakeCodec);
+    let framed = FramedHandshake::new(sock);
 
     Box::new(timer.timeout(
             framed.into_future()

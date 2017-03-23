@@ -20,14 +20,8 @@ futures       = "0.1"
 nom           = "2.1"
 rand          = "0.3"
 tokio-core    = "0.1"
-# Until Framed into_inner Methods Show Up In Crates.io
-tokio-io      = { git = "https://github.com/tokio-rs/tokio-io.git" }
+tokio-io      = "0.1"
 tokio-timer   = "0.1"
-
 
 [features]
 unstable      = []
-
-[[test]]
-name = "test"
-path = "test/mod.rs"

@@ -2,6 +2,7 @@ use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4};
 use std::io;
 use std::time::Duration;
 
+use discovery::DiscoveryInfo;
 use message::initiate::InitiateMessage;
 use message::complete::CompleteMessage;
 use message::extensions::Extensions;
@@ -109,6 +110,16 @@ pub struct Handshaker<S> {
     stream: HandshakerStream<S>
 }
 
+impl<S> DiscoveryInfo for Handshaker<S> {
+    fn port(&self) -> u16 {
+        self.sink.port()
+    }
+
+    fn peer_id(&self) -> PeerId {
+        self.sink.peer_id()
+    }
+}
+
 impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
     fn with_builder<T>(builder: &HandshakerBuilder, handle: Handle) -> io::Result<Handshaker<T::Socket>>
         where T: Transport<Socket=S> + 'static {
@@ -138,16 +149,6 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
         let stream = HandshakerStream::new(sock_recv);
 
         Ok(Handshaker{ sink: sink, stream: stream })
-    }
-
-    /// Retrieve our public port that we advertise to others.
-    pub fn port(&self) -> u16 {
-        self.sink.port()
-    }
-
-    /// Retrieve our `PeerId` that we advertise to others.
-    pub fn peer_id(&self) -> PeerId {
-        self.sink.peer_id()
     }
 }
 
@@ -204,14 +205,14 @@ impl HandshakerSink {
     fn new(send: Sender<InitiateMessage>, port: u16, pid: PeerId, filters: Filters) -> HandshakerSink {
         HandshakerSink{ send: send, port: port, pid: pid, filters: filters }
     }
+}
 
-    /// Retrieve our public port that we advertise to others.
-    pub fn port(&self) -> u16 {
+impl DiscoveryInfo for HandshakerSink {
+    fn port(&self) -> u16 {
         self.port
     }
 
-    /// Retrieve our `PeerId` that we advertise to others.
-    pub fn peer_id(&self) -> PeerId {
+    fn peer_id(&self) -> PeerId {
         self.pid
     }
 }

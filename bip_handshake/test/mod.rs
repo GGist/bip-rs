@@ -1,4 +1,4 @@
-extern crate bip_handshake;
+/*extern crate bip_handshake;
 extern crate rotor_stream;
 extern crate rotor;
 
@@ -91,4 +91,4 @@ impl Protocol for MockProtocol {
     fn wakeup(self, _transport: &mut Transport<Self::Socket>, _scope: &mut Scope<Self::Context>) -> Intent<Self> {
         unimplemented!()
     }
-}
+}*/

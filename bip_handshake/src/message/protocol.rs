@@ -4,8 +4,8 @@ use std::io::Write;
 
 use nom::{IResult, be_u8};
 
-const BITTORRENT_10_PROTOCOL:     &'static [u8] = b"BitTorrent Protocol";
-const BITTORRENT_10_PROTOCOL_LEN: u8            = 19;
+const BT_PROTOCOL:     &'static [u8] = b"BitTorrent Protocol";
+const BT_PROTOCOL_LEN: u8            = 19;
 
 /// Protocol information transmitted as part of the handshake.
 #[derive(Clone, PartialEq, Eq)]
@@ -22,7 +22,7 @@ impl Protocol {
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write {
         let (len, bytes) = match self {
-            &Protocol::BitTorrent       => (BITTORRENT_10_PROTOCOL_LEN as usize, &BITTORRENT_10_PROTOCOL[..]),
+            &Protocol::BitTorrent       => (BT_PROTOCOL_LEN as usize, &BT_PROTOCOL[..]),
             &Protocol::Custom(ref prot) => (prot.len(), &prot[..])
         };
 
@@ -30,6 +30,13 @@ impl Protocol {
         try!(writer.write_all(bytes));
 
         Ok(())
+    }
+
+    pub fn write_len(&self) -> usize {
+        match self {
+            &Protocol::BitTorrent         => BT_PROTOCOL_LEN as usize,
+            &Protocol::Custom(ref custom) => custom.len()
+        }
     }
 }
 
@@ -40,7 +47,8 @@ fn parse_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
 #[allow(unreachable_patterns, unused)]
 fn parse_real_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
     switch!(bytes, parse_raw_protocol,
-        BITTORRENT_10_PROTOCOL => value!(Protocol::BitTorrent) |
+        // TODO: Move back to using constant here, for now, MIR occurs
+        b"BitTorrent Protocol" => value!(Protocol::BitTorrent) |
         custom                 => value!(Protocol::Custom(custom.to_vec()))
     )
 }

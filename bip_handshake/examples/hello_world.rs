@@ -1,48 +1,71 @@
-extern crate bip_handshake;
-extern crate tokio_core;
+/*extern crate tokio_core;
+extern crate tokio_io;
+extern crate bytes;
 extern crate futures;
 
-use std::any::{Any, TypeId};
-use std::net::SocketAddr;
-use std::hash::Hash;
-use std::cmp::{PartialEq, Eq};
-use std::fmt::Debug;
-use std::collections::hash_map::DefaultHasher;
+use std::thread;
+use std::io;
 
-use futures::future::{self, Future, Loop};
-use futures::stream::Stream;
-use futures::sink::Sink;
-use tokio_core::reactor::Core;
-use tokio_core::net::TcpStream;
+use bytes::*;
+use tokio_io::AsyncRead;
+use tokio_io::codec::*;
+use tokio_core::*;
+use tokio_core::reactor::*;
+use tokio_core::net::*;
+use futures::stream::*;
+use futures::*;
 
-use bip_handshake::{HandshakerBuilder, InitiateHandshake};
+struct SimpleProtocol;
+
+impl Decoder for SimpleProtocol {
+    type Item = u8;
+    type Error = io::Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<u8>> {
+        if src.len() >= 1 {
+            Ok(Some(src.split_off(1)[0]))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl Encoder for SimpleProtocol {
+    type Item = ();
+    type Error = io::Error;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        unimplemented!()
+    }
+}
 
 fn main() {
     let mut core = Core::new().unwrap();
-    let handshaker = HandshakerBuilder::new().build::<TcpStream>(core.handle()).unwrap();
-    let (sink, stream) = handshaker.split();
+    let handle = core.handle();
 
-    println!("{:?}", sink.port());
+    let listener = TcpListener::bind(&("127.0.0.1:32423".parse().unwrap()), &handle).unwrap();
 
-    let hash = [0x66, 0xa9, 0x2e, 0xc7, 0x7b, 0x81, 0xc3, 0xdf, 0x07, 0xe0, 0x07, 0x81, 0xfd, 0x3b, 0xdf, 0x65, 0x4b, 0x6e, 0xf1, 0xa2];
-    let initiate = InitiateHandshake::new("BitTorrent protocol".to_string(), hash.into(), "127.0.0.1:49658".parse().unwrap());
+    handle.spawn(listener.incoming()
+        .into_future()
+        .map_err(|_| ())
+        .and_then(|(opt_result, _)| {
+            let (socket, addr) = opt_result.unwrap();
 
-    let asd = sink.send(initiate).wait().unwrap();
+            socket.framed(SimpleProtocol)
+                .into_future()
+                .and_then(|(opt_message, framed)| {
+                    println!("{:?}", opt_message);
 
-    core.run(future::loop_fn(stream, |stream| {
-        stream.into_future()
-            .and_then(|(opt, stream)| {
-                println!("Connected!!!");
-                let result: Loop<(), _> = Loop::Continue(stream);
-                loop {
-                    
-                }
-                Ok(result)
-            })
-            .or_else(|(err, stream)| {
-                println!("Errored!!!");
+                    framed.into_inner().framed(SimpleProtocol)
+                        .into_future()
+                        .and_then(|(opt_message, _)| {
+                            println!("{:?}", opt_message);
 
-                Err(())
-            })
-    }));
-}
+                            Err(())
+                        })
+                })
+        })
+        .map(|_| ())
+        .map_err(|_| ())
+    );
+}*/

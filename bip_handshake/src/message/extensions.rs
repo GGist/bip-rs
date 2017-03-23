@@ -4,7 +4,7 @@ use std::io::Write;
 use nom::{IResult, be_u8};
 
 /// Number of bytes that the extension protocol takes.
-const NUM_EXTENSION_BYTES: usize = 8;
+pub const NUM_EXTENSION_BYTES: usize = 8;
 
 /// Extensions supported by either end of a handshake.
 #[derive(Copy, Clone)]

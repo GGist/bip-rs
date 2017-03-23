@@ -3,7 +3,7 @@ use std::u8;
 use std::io::Write;
 
 use message::protocol::Protocol;
-use message::extensions::Extensions;
+use message::extensions::{self, Extensions};
 
 use bip_util::bt::{self, InfoHash, PeerId};
 use nom::{IResult};
@@ -45,12 +45,20 @@ impl HandshakeMessage {
         Ok(())
     }
 
+    pub fn write_len(&self) -> usize {
+        write_len_with_protocol_len(self.prot.write_len() as u8)
+    }
+
     pub fn into_parts(self) -> (Protocol, Extensions, InfoHash, PeerId) {
         (self.prot, self.ext, self.hash, self.pid)
     }
 }
 
-pub fn parse_remote_handshake(bytes: &[u8]) -> IResult<&[u8], HandshakeMessage> {
+pub fn write_len_with_protocol_len(protocol_len: u8) -> usize {
+    1 + (protocol_len as usize) + extensions::NUM_EXTENSION_BYTES + bt::INFO_HASH_LEN + bt::PEER_ID_LEN
+}
+
+fn parse_remote_handshake(bytes: &[u8]) -> IResult<&[u8], HandshakeMessage> {
     do_parse!(bytes,
         prot: call!(Protocol::from_bytes)   >>
         ext:  call!(Extensions::from_bytes) >>
@@ -72,4 +80,12 @@ fn parse_remote_pid(bytes: &[u8]) -> IResult<&[u8], PeerId> {
         pid: take!(bt::PEER_ID_LEN) >>
         (PeerId::from_hash(pid).unwrap())
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn positive() {
+        
+    }
 }

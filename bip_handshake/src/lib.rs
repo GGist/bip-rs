@@ -12,6 +12,7 @@ mod bittorrent;
 mod handshake;
 mod message;
 mod filter;
+mod discovery;
 mod local_addr;
 mod transport;
 
@@ -24,6 +25,7 @@ pub use handshake::handshaker::{HandshakerBuilder, Handshaker, HandshakerStream,
 
 pub use filter::{FilterDecision, HandshakeFilter, HandshakeFilters};
 
+pub use discovery::DiscoveryInfo;
 pub use local_addr::LocalAddr;
 pub use transport::Transport;
 
