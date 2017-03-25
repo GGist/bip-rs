@@ -7,7 +7,7 @@ use nom::{IResult, be_u8};
 pub const NUM_EXTENSION_BYTES: usize = 8;
 
 /// Extensions supported by either end of a handshake.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Extensions {
     bytes: [u8; NUM_EXTENSION_BYTES]
 }
@@ -44,6 +44,12 @@ impl Extensions {
 
     /// Create a new `Extensions` using the given bytes directly.
     fn with_bytes(bytes: [u8; NUM_EXTENSION_BYTES]) -> Extensions {
+        Extensions{ bytes: bytes }
+    }
+}
+
+impl From<[u8; NUM_EXTENSION_BYTES]> for Extensions {
+    fn from(bytes: [u8; NUM_EXTENSION_BYTES]) -> Extensions {
         Extensions{ bytes: bytes }
     }
 }

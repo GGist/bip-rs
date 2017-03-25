@@ -8,7 +8,7 @@ use message::extensions::{self, Extensions};
 use bip_util::bt::{self, InfoHash, PeerId};
 use nom::{IResult};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct HandshakeMessage {
     prot: Protocol,
     ext:  Extensions,
@@ -35,11 +35,9 @@ impl HandshakeMessage {
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write {
         try!(self.prot.write_bytes(&mut writer));
-
         try!(self.ext.write_bytes(&mut writer));
-
         try!(writer.write_all(self.hash.as_ref()));
-
+        
         try!(writer.write_all(self.pid.as_ref()));
 
         Ok(())
@@ -84,8 +82,97 @@ fn parse_remote_pid(bytes: &[u8]) -> IResult<&[u8], PeerId> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
+    use super::{HandshakeMessage};
+    use message::extensions::{self, Extensions};
+    use message::protocol::Protocol;
+
+    use bip_util::bt::{self, PeerId, InfoHash};
+
+    fn any_peer_id() -> PeerId {
+        [22u8; bt::PEER_ID_LEN].into()
+    }
+
+    fn any_info_hash() -> InfoHash {
+        [55u8; bt::INFO_HASH_LEN].into()
+    }
+
+    fn any_extensions() -> Extensions {
+        [255u8; extensions::NUM_EXTENSION_BYTES].into()
+    }
+
     #[test]
-    fn positive() {
-        
+    fn positive_decode_zero_bytes_protocol() {
+        let mut buffer = Vec::new();
+
+        let exp_protocol = Protocol::Custom(Vec::new());
+        let exp_extensions = any_extensions();
+        let exp_hash = any_info_hash();
+        let exp_pid = any_peer_id();
+
+        let exp_message = HandshakeMessage::from_parts(exp_protocol.clone(),
+            exp_extensions, exp_hash, exp_pid);
+
+        exp_protocol.write_bytes(&mut buffer).unwrap();
+        exp_extensions.write_bytes(&mut buffer).unwrap();
+        buffer.write_all(exp_hash.as_ref()).unwrap();
+        buffer.write_all(exp_pid.as_ref()).unwrap();
+
+        let recv_message = HandshakeMessage::from_bytes(&buffer).unwrap().1;
+
+        assert_eq!(exp_message, recv_message);
+    }
+
+    #[test]
+    fn positive_many_bytes_protocol() {
+        let mut buffer = Vec::new();
+
+        let exp_protocol = Protocol::Custom(b"My Protocol".to_vec());
+        let exp_extensions = any_extensions();
+        let exp_hash = any_info_hash();
+        let exp_pid = any_peer_id();
+
+        let exp_message = HandshakeMessage::from_parts(exp_protocol.clone(),
+            exp_extensions, exp_hash, exp_pid);
+
+        exp_protocol.write_bytes(&mut buffer).unwrap();
+        exp_extensions.write_bytes(&mut buffer).unwrap();
+        buffer.write_all(exp_hash.as_ref()).unwrap();
+        buffer.write_all(exp_pid.as_ref()).unwrap();
+
+        let recv_message = HandshakeMessage::from_bytes(&buffer).unwrap().1;
+
+        assert_eq!(exp_message, recv_message);
+    }
+
+    #[test]
+    fn positive_bittorrent_protocol() {
+        let mut buffer = Vec::new();
+
+        let exp_protocol = Protocol::BitTorrent;
+        let exp_extensions = any_extensions();
+        let exp_hash = any_info_hash();
+        let exp_pid = any_peer_id();
+
+        let exp_message = HandshakeMessage::from_parts(exp_protocol.clone(),
+            exp_extensions, exp_hash, exp_pid);
+
+        exp_protocol.write_bytes(&mut buffer).unwrap();
+        exp_extensions.write_bytes(&mut buffer).unwrap();
+        buffer.write_all(exp_hash.as_ref()).unwrap();
+        buffer.write_all(exp_pid.as_ref()).unwrap();
+
+        let recv_message = HandshakeMessage::from_bytes(&buffer).unwrap().1;
+
+        assert_eq!(exp_message, recv_message);
+    }
+
+    #[test]
+    #[should_panic]
+    fn negative_create_overflow_protocol() {
+        let overflow_protocol = Protocol::Custom(vec![0u8; 256]);
+
+        HandshakeMessage::from_parts(overflow_protocol, any_extensions(), any_info_hash(), any_peer_id());
     }
 }

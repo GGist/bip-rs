@@ -8,7 +8,7 @@ const BT_PROTOCOL:     &'static [u8] = b"BitTorrent Protocol";
 const BT_PROTOCOL_LEN: u8            = 19;
 
 /// Protocol information transmitted as part of the handshake.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Protocol {
     BitTorrent,
     Custom(Vec<u8>)
@@ -47,7 +47,7 @@ fn parse_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
 #[allow(unreachable_patterns, unused)]
 fn parse_real_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
     switch!(bytes, parse_raw_protocol,
-        // TODO: Move back to using constant here, for now, MIR occurs
+        // TODO: Move back to using constant here, for now, MIR compiler error occurs
         b"BitTorrent Protocol" => value!(Protocol::BitTorrent) |
         custom                 => value!(Protocol::Custom(custom.to_vec()))
     )

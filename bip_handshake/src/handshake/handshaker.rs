@@ -8,7 +8,7 @@ use message::complete::CompleteMessage;
 use message::extensions::Extensions;
 use handshake::handler::handshaker;
 use handshake::handler::initiator;
-use handshake::handler::listener;
+use handshake::handler::listener::ListenerHandler;
 use handshake::handler;
 use transport::Transport;
 use local_addr::LocalAddr;
@@ -142,7 +142,7 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
 
         // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
         handler::loop_handler(addr_recv, initiator::initiator_handler::<T>, hand_send.clone(), (filters.clone(), handle.clone()), &handle);
-        handler::loop_handler(listener, listener::listener_handler, hand_send, filters.clone(), &handle);
+        handler::loop_handler(listener, ListenerHandler::new, hand_send, filters.clone(), &handle);
         handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), timer), &handle);
 
         let sink = HandshakerSink::new(addr_send, open_port, builder.pid, filters);

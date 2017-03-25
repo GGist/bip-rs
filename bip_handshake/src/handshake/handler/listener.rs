@@ -4,18 +4,32 @@ use handshake::handler::HandshakeType;
 use filter::filters::Filters;
 use handshake::handler;
 
-use futures::future::{self, Future};
+use futures::{Poll, Async};
+use futures::future::{Future};
 
-/// Handle the result of listeneing for handshake connections.
-///
-/// Returns a HandshakeType that will be completed.
-pub fn listener_handler<S>(item: (S, SocketAddr), context: &Filters) -> Box<Future<Item=Option<HandshakeType<S>>,Error=()>>
-    where S: 'static {
-    let (sock, addr) = item;
+pub struct ListenerHandler<S> {
+    opt_item: Option<HandshakeType<S>>
+}
 
-    if handler::should_filter(Some(&addr), None, None, None, None, context) {
-        Box::new(future::ok(None))
-    } else {
-        Box::new(future::ok(Some(HandshakeType::Complete(sock, addr))))
+impl<S> ListenerHandler<S> {
+    pub fn new(item: (S, SocketAddr), context: &Filters) -> ListenerHandler<S> {
+        let (sock, addr) = item;
+
+        let opt_item = if handler::should_filter(Some(&addr), None, None, None, None, context) {
+            None
+        } else {
+            Some(HandshakeType::Complete(sock, addr))
+        };
+
+        ListenerHandler{ opt_item: opt_item }
+    }
+}
+
+impl<S> Future for ListenerHandler<S> {
+    type Item = Option<HandshakeType<S>>;
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Option<HandshakeType<S>>, ()> {
+        Ok(Async::Ready(self.opt_item.take()))
     }
 }
