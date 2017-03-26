@@ -60,7 +60,7 @@ pub trait HandshakeFilter {
 //----------------------------------------------------------------------------------//
 
 /// Filtering decision made for a given handshake.
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum FilterDecision {
     /// Pass on making a filter decision for the given field.
     Pass = 0,
@@ -89,5 +89,31 @@ impl FilterDecision {
         } else {
             other
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FilterDecision;
+
+    #[test]
+    fn positive_decision_choose_self() {
+        let decision = FilterDecision::Block;
+
+        assert_eq!(FilterDecision::Block, decision.choose(FilterDecision::Block));
+    }
+
+    #[test]
+    fn positive_decision_choose_higher() {
+        let decision = FilterDecision::Pass;
+
+        assert_eq!(FilterDecision::NeedData, decision.choose(FilterDecision::NeedData));
+    }
+
+    #[test]
+    fn positive_decision_keep_higher() {
+        let decision = FilterDecision::NeedData;
+
+        assert_eq!(FilterDecision::NeedData, decision.choose(FilterDecision::Pass));
     }
 }

@@ -229,4 +229,25 @@ mod tests {
 
         assert_eq!(&[55], buffer_ref);
     }
+
+    #[test]
+    fn positive_read_bytes_after_handshake() {
+        let exp_message = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
+
+        let mut buffer = Vec::new();
+        exp_message.write_bytes(&mut buffer).unwrap();
+        // Write some bytes right after the handshake, make sure
+        // our framed handshake doesnt read/buffer these (we need
+        // to be able to read them afterwards)
+        buffer.write_all(&[55, 54, 21]).unwrap();
+
+        let read_frame = FramedHandshake::new(&buffer[..])
+            .into_future()
+            .wait()
+            .ok()
+            .unwrap().1;
+        let buffer_ref = read_frame.into_inner();
+
+        assert_eq!(&[55, 54, 21], buffer_ref);
+    }
 }

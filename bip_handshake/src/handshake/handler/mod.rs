@@ -79,12 +79,14 @@ pub fn loop_handler<M, H, K, F, R, C>(stream: M, handler: H, sink: K, context: C
 /// Computes whether or not we should filter given the parameters and filters.
 pub fn should_filter(addr: Option<&SocketAddr>, prot: Option<&Protocol>, ext: Option<&Extensions>,
                      hash: Option<&InfoHash>, pid: Option<&PeerId>, filters: &Filters) -> bool {
+    // Initially, we set all our results to pass
     let mut addr_filter = FilterDecision::Pass;
     let mut prot_filter = FilterDecision::Pass;
     let mut ext_filter = FilterDecision::Pass;
     let mut hash_filter = FilterDecision::Pass;
     let mut pid_filter = FilterDecision::Pass;
 
+    // Choose on individual fields
     filters.access_filters(|ref_filters| {
         for ref_filter in ref_filters {
             addr_filter = addr_filter.choose(ref_filter.on_addr(addr));
@@ -95,5 +97,6 @@ pub fn should_filter(addr: Option<&SocketAddr>, prot: Option<&Protocol>, ext: Op
         }
     });
 
+    // Choose across the results of individual fields
     addr_filter.choose(prot_filter).choose(ext_filter).choose(hash_filter).choose(pid_filter) == FilterDecision::Block
 }
