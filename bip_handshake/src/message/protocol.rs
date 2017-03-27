@@ -15,10 +15,12 @@ pub enum Protocol {
 }
 
 impl Protocol {
+    /// Create a `Protocol` from the given bytes.
     pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], Protocol> {
         parse_protocol(bytes)
     }
 
+    /// Write the `Protocol` out to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write {
         let (len, bytes) = match self {
@@ -32,6 +34,7 @@ impl Protocol {
         Ok(())
     }
 
+    /// Get the legth of the given protocol (does not include the length byte).
     pub fn write_len(&self) -> usize {
         match self {
             &Protocol::BitTorrent         => BT_PROTOCOL_LEN as usize,

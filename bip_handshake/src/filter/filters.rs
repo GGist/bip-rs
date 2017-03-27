@@ -90,6 +90,8 @@ pub mod test_filters {
     use message::protocol::Protocol;
     use filter::{HandshakeFilter, FilterDecision};
 
+    use bip_util::bt::PeerId;
+
     #[derive(PartialEq, Eq)]
     pub struct BlockAddrFilter {
         addr: SocketAddr
@@ -115,6 +117,8 @@ pub mod test_filters {
         }
     }
 
+    //----------------------------------------------------------------------------------//
+
     #[derive(PartialEq, Eq)]
     pub struct BlockProtocolFilter {
         prot: Protocol
@@ -134,6 +138,33 @@ pub mod test_filters {
         fn on_prot(&self, opt_prot: Option<&Protocol>) -> FilterDecision {
             match opt_prot {
                 Some(in_prot) if in_prot == &self.prot => FilterDecision::Block,
+                Some(_) => FilterDecision::Pass,
+                None => FilterDecision::NeedData
+            }
+        }
+    }
+
+    //----------------------------------------------------------------------------------//
+
+    #[derive(PartialEq, Eq)]
+    pub struct BlockPeerIdFilter {
+        pid: PeerId
+    }
+
+    impl BlockPeerIdFilter {
+        pub fn new(pid: PeerId) -> BlockPeerIdFilter {
+            BlockPeerIdFilter{ pid: pid }
+        }
+    }
+
+    impl HandshakeFilter for BlockPeerIdFilter {
+        fn as_any(&self) -> &Any {
+            self
+        }
+
+        fn on_pid(&self, opt_pid: Option<&PeerId>) -> FilterDecision {
+            match opt_pid {
+                Some(in_pid) if in_pid == &self.pid => FilterDecision::Block,
                 Some(_) => FilterDecision::Pass,
                 None => FilterDecision::NeedData
             }

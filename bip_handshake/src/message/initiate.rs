@@ -5,6 +5,7 @@ use message::protocol::Protocol;
 use bip_util::bt::InfoHash;
 
 /// Message used to initiate a handshake with the `Handshaker`.
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct InitiateMessage {
     prot: Protocol,
     hash: InfoHash,

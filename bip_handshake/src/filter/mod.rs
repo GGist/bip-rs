@@ -23,6 +23,22 @@ pub trait HandshakeFilters {
     fn clear_filters(&self);
 }
 
+impl<'a, T> HandshakeFilters for &'a T where T: HandshakeFilters {
+    fn add_filter<F>(&self, filter: F)
+        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        (*self).add_filter(filter)
+    }
+
+    fn remove_filter<F>(&self, filter: F)
+        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        (*self).remove_filter(filter)
+    }
+
+    fn clear_filters(&self) {
+        (*self).clear_filters()
+    }
+}
+
 //----------------------------------------------------------------------------------//
 
 /// Trait for filtering connections during handshaking.

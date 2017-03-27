@@ -15,6 +15,7 @@ use tokio_core::reactor::Handle;
 pub mod handshaker;
 pub mod initiator;
 pub mod listener;
+pub mod timer;
 
 pub enum HandshakeType<S> {
     Initiate(S, InitiateMessage),

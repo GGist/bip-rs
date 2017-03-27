@@ -14,6 +14,8 @@ use transport::Transport;
 use local_addr::LocalAddr;
 use filter::filters::Filters;
 use filter::{HandshakeFilter, HandshakeFilters};
+use handshake::config::HandshakerConfig;
+use handshake::handler::timer::HandshakeTimer;
 
 use bip_util::bt::PeerId;
 use bip_util::convert;
@@ -26,17 +28,14 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_timer::{self};
 use rand::{self, Rng};
 
-const MAX_ADDR_BUFFER_SIZE: usize = 1000;
-const MAX_HAND_BUFFER_SIZE: usize = 20;
-const MAX_SOCK_BUFFER_SIZE: usize = 20;
-
 /// Build configuration for `Handshaker` object creation.
 #[derive(Copy, Clone)]
 pub struct HandshakerBuilder {
-    bind: SocketAddr,
-    port: u16,
-    pid:  PeerId,
-    ext:  Extensions
+    bind:   SocketAddr,
+    port:   u16,
+    pid:    PeerId,
+    ext:    Extensions,
+    config: HandshakerConfig
 }
 
 impl HandshakerBuilder {
@@ -51,7 +50,8 @@ impl HandshakerBuilder {
         let seed = rand::thread_rng().next_u32();
         let default_peer_id = PeerId::from_bytes(&convert::four_bytes_to_array(seed));
 
-        HandshakerBuilder{ bind: default_sock_addr, port: default_v4_port, pid: default_peer_id, ext: Extensions::new() }
+        HandshakerBuilder{ bind: default_sock_addr, port: default_v4_port, pid: default_peer_id,
+                           ext: Extensions::new(), config: HandshakerConfig::default() }
     }
 
     /// Address that the host will listen on.
@@ -85,12 +85,17 @@ impl HandshakerBuilder {
     }
 
     /// Extensions supported by our client, advertised to the peer when handshaking.
-    ///
-    /// The handshaker will yield connected clients, and provide the UNION of our extensions
-    /// and the clients extensions. Our client should look at this to determine what extension
-    /// messages to send or receive.
     pub fn with_extensions(&mut self, ext: Extensions) -> &mut HandshakerBuilder {
         self.ext = ext;
+
+        self
+    }
+
+    /// Configuration that will be used to alter the internal behavior of handshaking.
+    ///
+    /// This will typically not need to be set unless you know what you are doing.
+    pub fn with_config(&mut self, config: HandshakerConfig) -> &mut HandshakerBuilder {
+        self.config = config;
 
         self
     }
@@ -130,15 +135,13 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
             try!(listener.local_addr()).port()
         } else { builder.port };
 
-        let (addr_send, addr_recv) = mpsc::channel(MAX_ADDR_BUFFER_SIZE);
-        let (hand_send, hand_recv) = mpsc::channel(MAX_HAND_BUFFER_SIZE);
-        let (sock_send, sock_recv) = mpsc::channel(MAX_SOCK_BUFFER_SIZE);
+        let config = builder.config;
+        let (addr_send, addr_recv) = mpsc::channel(config.sink_buffer_size());
+        let (hand_send, hand_recv) = mpsc::channel(config.wait_buffer_size());
+        let (sock_send, sock_recv) = mpsc::channel(config.done_buffer_size());
         
         let filters = Filters::new();
-        let timer = tokio_timer::wheel()
-            .num_slots(50)
-            .max_timeout(Duration::from_millis(5000))
-            .build();
+        let timer = configured_handshake_timer(config.handshake_timeout());
 
         // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
         handler::loop_handler(addr_recv, initiator::initiator_handler::<T>, hand_send.clone(), (filters.clone(), handle.clone()), &handle);
@@ -150,6 +153,19 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
 
         Ok(Handshaker{ sink: sink, stream: stream })
     }
+}
+
+/// Configure a timer wheel and create a `HandshakeTimer`.
+fn configured_handshake_timer(duration: Duration) -> HandshakeTimer {
+    // Precision, or, number of slots given out duration.s
+    let precision = 50;
+
+    let timer = tokio_timer::wheel()
+        .num_slots(precision)
+        .max_timeout(duration)
+        .build();
+
+    HandshakeTimer::new(timer, duration)
 }
 
 impl<S> Sink for Handshaker<S> {

@@ -28,44 +28,60 @@ pub trait Transport {
     fn listen(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener>;
 }
 
-//--------------------------------------------------------------------------//
-/*
-/// `Incoming` stream that allows retrieval of the `LocalAddr`.
-pub struct IncomingWithLocalAddr {
-    local_addr: SocketAddr,
-    incoming:   Incoming
-}
+#[cfg(test)]
+pub mod test_transports {
+    use std::io::{self, Cursor};
+    use std::net::SocketAddr;
 
-impl Stream for IncomingWithLocalAddr {
-    type Item = (TcpStream, SocketAddr);
-    type Error = io::Error;
+    use super::Transport;
+    use local_addr::LocalAddr;
 
-    fn poll(&mut self) -> Poll<Option<(TcpStream, SocketAddr)>, io::Error> {
-        self.incoming.poll()
+    use futures::{Poll};
+    use futures::future::{self, FutureResult};
+    use futures::stream::{self, Stream, Empty};
+    use tokio_core::reactor::Handle;
+
+    pub struct MockTransport;
+
+    impl Transport for MockTransport {
+        type Socket       = Cursor<Vec<u8>>;
+        type FutureSocket = FutureResult<Self::Socket, io::Error>;
+        type Listener     = MockListener;
+
+        fn connect(_addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::FutureSocket> {
+            Ok(future::ok(Cursor::new(Vec::new())))
+        }
+
+        fn listen(addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::Listener> {
+            Ok(MockListener::new(*addr))
+        }
+    }
+
+    //----------------------------------------------------------------------------------//
+
+    pub struct MockListener {
+        addr: SocketAddr,
+        empty: Empty<(Cursor<Vec<u8>>, SocketAddr), io::Error>
+    }
+
+    impl MockListener {
+        fn new(addr: SocketAddr) -> MockListener {
+            MockListener{ addr: addr, empty: stream::empty() }
+        }
+    }
+
+    impl LocalAddr for MockListener {
+        fn local_addr(&self) -> io::Result<SocketAddr> {
+            Ok(self.addr)
+        }
+    }
+
+    impl Stream for MockListener {
+        type Item = (Cursor<Vec<u8>>, SocketAddr);
+        type Error = io::Error;
+
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            self.empty.poll()
+        }
     }
 }
-
-impl LocalAddr for IncomingWithLocalAddr {
-    fn local_addr(&self) -> io::Result<SocketAddr> {
-        Ok(self.local_addr)
-    }
-}
-
-impl Transport for TcpStream {
-    type Socket = TcpStream;
-    type FutureSocket = TcpStreamNew;
-    type Listener = IncomingWithLocalAddr;
-
-    fn connect(addr: &SocketAddr, handle: &Handle) -> io::Result<TcpStreamNew> {
-        Ok(TcpStream::connect(addr, handle))
-    }
-
-    fn listen(addr: &SocketAddr, handle: &Handle) -> io::Result<IncomingWithLocalAddr> {
-        TcpListener::bind(addr, handle).and_then(|listener| {
-            let local_addr = try!(listener.local_addr());
-            let incoming = listener.incoming();
-
-            Ok(IncomingWithLocalAddr{ local_addr: local_addr, incoming: incoming })
-        })
-    }
-}*/

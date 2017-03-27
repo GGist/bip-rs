@@ -8,3 +8,13 @@ pub trait DiscoveryInfo {
     /// Retrieve our `PeerId` that we advertise to others.
     fn peer_id(&self) -> PeerId;
 }
+
+impl<'a, T> DiscoveryInfo for &'a T where T: DiscoveryInfo {
+    fn port(&self) -> u16 {
+        (*self).port()
+    }
+
+    fn peer_id(&self) -> PeerId {
+        (*self).peer_id()
+    }
+}
