@@ -44,7 +44,7 @@ fn positive_connect() {
         })
     ).unwrap();
 
-    assert_eq!(handshaker_one_addr, *item_two.address());
+    // Result from handshaker one should match handshaker two's listen address
     assert_eq!(handshaker_two_addr, *item_one.address());
 
     assert_eq!(handshaker_one_pid, *item_two.peer_id());
