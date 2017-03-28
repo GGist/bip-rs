@@ -3,10 +3,10 @@ use std::net::SocketAddr;
 
 use local_addr::LocalAddr;
 
-//use futures::Poll;
+use futures::Poll;
 use futures::future::Future;
 use futures::stream::Stream;
-//use tokio_core::net::{TcpStream, TcpStreamNew, Incoming, TcpListener};
+use tokio_core::net::{TcpStream, TcpStreamNew, Incoming, TcpListener};
 use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -27,6 +27,57 @@ pub trait Transport {
     /// Listen to the given address for this transport, using the supplied `Handle`.
     fn listen(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener>;
 }
+
+//----------------------------------------------------------------------------------//
+
+/// Defines a `Transport` operating over TCP.
+pub struct TcpTransport;
+
+impl Transport for TcpTransport {
+    type Socket = TcpStream;
+    type FutureSocket = TcpStreamNew;
+    type Listener = TcpListenerStream<Incoming>;
+
+    fn connect(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket> {
+        Ok(TcpStream::connect(addr, handle))
+    }
+
+    fn listen(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener> {
+        let listener = try!(TcpListener::bind(addr, handle));
+        let listen_addr = try!(listener.local_addr());
+
+        Ok(TcpListenerStream::new(listen_addr, listener.incoming()))
+    }
+}
+
+/// Convenient object that wraps a listener stream `L`, and also implements `LocalAddr`.
+pub struct TcpListenerStream<L> {
+    listen_addr: SocketAddr,
+    listener:    L
+}
+
+impl<L> TcpListenerStream<L> {
+    fn new(listen_addr: SocketAddr, listener: L) -> TcpListenerStream<L> {
+        TcpListenerStream{ listen_addr: listen_addr, listener: listener }
+    }
+}
+
+impl<L> Stream for TcpListenerStream<L> where L: Stream {
+    type Item = L::Item;
+    type Error = L::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        self.listener.poll()
+    }
+}
+
+impl<L> LocalAddr for TcpListenerStream<L> {
+    fn local_addr(&self) -> io::Result<SocketAddr> {
+        Ok(self.listen_addr)
+    }
+}
+
+//----------------------------------------------------------------------------------//
 
 #[cfg(test)]
 pub mod test_transports {

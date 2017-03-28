@@ -25,3 +25,7 @@ tokio-timer   = "0.1"
 
 [features]
 unstable      = []
+
+[[test]]
+name = "test"
+path = "test/mod.rs"

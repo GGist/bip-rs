@@ -5,6 +5,7 @@ extern crate futures;
 extern crate nom;
 extern crate rand;
 extern crate tokio_core;
+#[macro_use]
 extern crate tokio_io;
 extern crate tokio_timer;
 
@@ -29,5 +30,10 @@ pub use filter::{FilterDecision, HandshakeFilter, HandshakeFilters};
 pub use discovery::DiscoveryInfo;
 pub use local_addr::LocalAddr;
 pub use transport::Transport;
+
+/// Built in objects implementing `Transport`.
+pub mod transports {
+    pub use transport::{TcpTransport, TcpListenerStream};
+}
 
 pub use bip_util::bt::{PeerId, InfoHash};

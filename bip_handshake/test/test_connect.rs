@@ -1,41 +1,52 @@
-use std::thread;
-use std::time::Duration;
-use std::sync::mpsc::{self, Sender, Receiver};
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use bip_handshake::{HandshakerBuilder, InitiateMessage, Protocol, DiscoveryInfo};
+use bip_handshake::transports::TcpTransport;
 
-use bip_handshake::{BTHandshaker, Handshaker};
-
-use {MockContext, MockProtocol, MockEvent};
+use bip_util::bt::{self};
+use tokio_core::reactor::{Core};
+use futures::Future;
+use futures::stream::Stream;
+use futures::sink::Sink;
 
 #[test]
 fn positive_connect() {
-    // Create dummy metadata channels
-    let (m_send, _): (Sender<()>, Receiver<()>) = mpsc::channel();
+    let mut core = Core::new().unwrap();
 
-    // Create a context that both protocols can access
-    let (context, recv) = MockContext::new();
+    let mut handshaker_one_addr = "10.0.0.18:0".parse().unwrap();
+    let handshaker_one_pid = [4u8; bt::PEER_ID_LEN].into();
 
-    // Store peer ids and the info hash
-    let pid_one = [0u8; 20].into();
-    let pid_two = [1u8; 20].into();
-    let info_hash = [0u8; 20].into();
+    let handshaker_one = HandshakerBuilder::new()
+        .with_bind_addr(handshaker_one_addr)
+        .with_peer_id(handshaker_one_pid)
+        .build::<TcpTransport>(core.handle()).unwrap();
 
-    // Create two handshakers to connect to each other
-    let mut handshaker_one = BTHandshaker::new::<MockProtocol>(m_send.clone(), "127.0.0.1:0".parse().unwrap(), pid_one, context.clone()).unwrap();
-    let handshaker_two = BTHandshaker::new::<MockProtocol>(m_send, "127.0.0.1:0".parse().unwrap(), pid_two, context).unwrap();
+    handshaker_one_addr.set_port(handshaker_one.port());
 
-    // Make sure both handshakers are looking for the same info hash
-    handshaker_one.register(info_hash);
-    handshaker_two.register(info_hash);
+    let mut handshaker_two_addr = "10.0.0.18:0".parse().unwrap();
+    let handshaker_two_pid = [5u8; bt::PEER_ID_LEN].into();
 
-    // Have handshaker one initiate a connection with handshaker two
-    handshaker_one.connect(Some(pid_two), info_hash, SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), handshaker_two.port())));
+    let handshaker_two = HandshakerBuilder::new()
+        .with_bind_addr(handshaker_two_addr)
+        .with_peer_id(handshaker_two_pid)
+        .build::<TcpTransport>(core.handle()).unwrap();
 
-    // Allow the handshakers time to complete
-    thread::sleep(Duration::from_millis(250));
+    handshaker_two_addr.set_port(handshaker_two.port());
 
-    // Assert that both handshakers sent their message
-    assert_eq!(recv.try_recv(), Ok(MockEvent::Connect));
-    assert_eq!(recv.try_recv(), Ok(MockEvent::Connect));
-    assert!(recv.try_recv().is_err());
+    let (item_one, item_two) = core.run(handshaker_one
+        .send(InitiateMessage::new(Protocol::BitTorrent, [55u8; bt::INFO_HASH_LEN].into(), handshaker_two_addr))
+        .map_err(|_| ())
+        .and_then(|handshaker_one| {
+            handshaker_one.into_future()
+                .join(handshaker_two.into_future())
+                .map_err(|_| ())
+        })
+        .map(|((opt_item_one, _), (opt_item_two, _))| {
+            (opt_item_one.unwrap(), opt_item_two.unwrap())
+        })
+    ).unwrap();
+
+    assert_eq!(handshaker_one_addr, *item_two.address());
+    assert_eq!(handshaker_two_addr, *item_one.address());
+
+    assert_eq!(handshaker_one_pid, *item_two.peer_id());
+    assert_eq!(handshaker_two_pid, *item_one.peer_id());
 }

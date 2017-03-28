@@ -29,7 +29,7 @@ pub fn execute_handshake<S>(item: HandshakeType<S>, context: &(Extensions, PeerI
 fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pid: PeerId, filters: Filters, timer: HandshakeTimer)
     -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let framed = FramedHandshake::new(sock);
-
+    
     let (prot, hash, addr) = init_msg.into_parts();
     let handshake_msg = HandshakeMessage::from_parts(prot.clone(), ext, hash, pid);
 

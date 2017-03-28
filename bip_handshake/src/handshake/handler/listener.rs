@@ -14,7 +14,7 @@ pub struct ListenerHandler<S> {
 impl<S> ListenerHandler<S> {
     pub fn new(item: (S, SocketAddr), context: &Filters) -> ListenerHandler<S> {
         let (sock, addr) = item;
-
+        
         let opt_item = if handler::should_filter(Some(&addr), None, None, None, None, context) {
             None
         } else {

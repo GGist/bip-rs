@@ -53,16 +53,17 @@ impl<S> Sink for FramedHandshake<S> where S: AsyncWrite {
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
         loop {
-            let write_result = {
-                self.sock.write_buf(&mut Cursor::new(&self.write_buffer))
-            };
+            let write_result = self.sock.write_buf(&mut Cursor::new(&self.write_buffer));
 
-            match try!(write_result) {
+            match try_nb!(write_result) {
+                Async::Ready(0)       => { return Err(io::Error::new(io::ErrorKind::WriteZero, "Failed To Write Bytes").into()) },
                 Async::Ready(written) => { self.write_buffer.split_to(written); },
                 Async::NotReady       => { return Ok(Async::NotReady) }
             }
 
             if self.write_buffer.is_empty() {
+                try_nb!(self.sock.flush());
+
                 return Ok(Async::Ready(()))
             }
         }
@@ -77,13 +78,9 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
         loop {
             match self.state {
                 HandshakeState::Waiting => {
-                    let read_result = {
-                        let mut cursor = Cursor::new(&mut self.read_buffer[..]);
-
-                        try!(self.sock.read_buf(&mut cursor))
-                    };
-
-                    match read_result {
+                    let read_result = self.sock.read_buf(&mut Cursor::new(&mut self.read_buffer[..]));
+                    
+                    match try_nb!(read_result) {
                         Async::Ready(0)    => (),
                         Async::Ready(1)    => {
                             let length = self.read_buffer[0];
@@ -119,7 +116,7 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
                         let read_result = {
                             let mut cursor = Cursor::new(&mut self.read_buffer[self.read_pos..]);
 
-                            try!(self.sock.read_buf(&mut cursor))
+                            try_nb!(self.sock.read_buf(&mut cursor))
                         };
                         
                         match read_result {

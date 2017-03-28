@@ -157,11 +157,8 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
 
 /// Configure a timer wheel and create a `HandshakeTimer`.
 fn configured_handshake_timer(duration: Duration) -> HandshakeTimer {
-    // Precision, or, number of slots given out duration.s
-    let precision = 50;
-
     let timer = tokio_timer::wheel()
-        .num_slots(precision)
+        .num_slots(64)
         .max_timeout(duration)
         .build();
 

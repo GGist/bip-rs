@@ -1,3 +1,11 @@
+extern crate bip_handshake;
+extern crate bip_util;
+extern crate futures;
+extern crate tokio_io;
+extern crate tokio_core;
+
+mod test_connect;
+
 /*extern crate bip_handshake;
 extern crate rotor_stream;
 extern crate rotor;
