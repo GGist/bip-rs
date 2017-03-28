@@ -11,7 +11,7 @@ use futures::sink::Sink;
 fn positive_connect() {
     let mut core = Core::new().unwrap();
 
-    let mut handshaker_one_addr = "10.0.0.18:0".parse().unwrap();
+    let mut handshaker_one_addr = "127.0.0.1:0".parse().unwrap();
     let handshaker_one_pid = [4u8; bt::PEER_ID_LEN].into();
 
     let handshaker_one = HandshakerBuilder::new()
@@ -21,7 +21,7 @@ fn positive_connect() {
 
     handshaker_one_addr.set_port(handshaker_one.port());
 
-    let mut handshaker_two_addr = "10.0.0.18:0".parse().unwrap();
+    let mut handshaker_two_addr = "127.0.0.1:0".parse().unwrap();
     let handshaker_two_pid = [5u8; bt::PEER_ID_LEN].into();
 
     let handshaker_two = HandshakerBuilder::new()
