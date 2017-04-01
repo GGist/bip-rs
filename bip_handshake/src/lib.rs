@@ -1,29 +1,39 @@
 extern crate bip_util;
+extern crate bytes;
+extern crate futures;
 #[macro_use]
 extern crate nom;
-extern crate rotor;
-extern crate rotor_stream;
+extern crate rand;
+extern crate tokio_core;
+#[macro_use]
+extern crate tokio_io;
+extern crate tokio_timer;
 
 mod bittorrent;
-mod handshaker;
-mod local_address;
-mod peer_protocol;
-mod try_accept;
-mod try_bind;
-mod try_connect;
+mod handshake;
+mod message;
+mod filter;
+mod discovery;
+mod local_addr;
+mod transport;
 
-pub use handshaker::Handshaker;
-pub use bittorrent::client::BTHandshaker;
-pub use bittorrent::handshake::context::BTContext;
-pub use bittorrent::seed::BTSeed;
+pub use message::complete::CompleteMessage;
+pub use message::initiate::InitiateMessage;
+pub use message::protocol::Protocol;
+pub use message::extensions::Extensions;
 
-/// Traits for providing handshakers with custom peer protocols.
-pub mod protocol {
-    pub use local_address::LocalAddress;
-    pub use peer_protocol::PeerProtocol;
-    pub use try_accept::TryAccept;
-    pub use try_bind::TryBind;
-    pub use try_connect::TryConnect;
+pub use handshake::config::HandshakerConfig;
+pub use handshake::handshaker::{HandshakerBuilder, Handshaker, HandshakerStream, HandshakerSink};
+
+pub use filter::{FilterDecision, HandshakeFilter, HandshakeFilters};
+
+pub use discovery::DiscoveryInfo;
+pub use local_addr::LocalAddr;
+pub use transport::Transport;
+
+/// Built in objects implementing `Transport`.
+pub mod transports {
+    pub use transport::{TcpTransport, TcpListenerStream};
 }
 
 pub use bip_util::bt::{PeerId, InfoHash};
