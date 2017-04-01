@@ -6,7 +6,7 @@ use nom::{IResult, be_u8};
 /// Number of bytes that the extension protocol takes.
 pub const NUM_EXTENSION_BYTES: usize = 8;
 
-/// Extensions supported by either end of a handshake.
+/// `Extensions` supported by either end of a handshake.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct Extensions {
     bytes: [u8; NUM_EXTENSION_BYTES]

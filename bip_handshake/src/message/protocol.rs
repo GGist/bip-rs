@@ -7,7 +7,7 @@ use nom::{IResult, be_u8};
 const BT_PROTOCOL:     &'static [u8] = b"BitTorrent Protocol";
 const BT_PROTOCOL_LEN: u8            = 19;
 
-/// Protocol information transmitted as part of the handshake.
+/// `Protocol` information transmitted as part of the handshake.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Protocol {
     BitTorrent,

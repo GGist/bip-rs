@@ -115,6 +115,16 @@ pub struct Handshaker<S> {
     stream: HandshakerStream<S>
 }
 
+impl<S> Handshaker<S> {
+    /// Splits the `Handshaker` into its parts.
+    ///
+    /// This is an enhanced version of `Stream::split` in that the returned `Sink` implements
+    /// `DiscoveryInfo` so it can be cloned and passed in to different peer discovery services.
+    pub fn into_parts(self) -> (HandshakerSink, HandshakerStream<S>) {
+        (self.sink, self.stream)
+    }
+}
+
 impl<S> DiscoveryInfo for Handshaker<S> {
     fn port(&self) -> u16 {
         self.sink.port()

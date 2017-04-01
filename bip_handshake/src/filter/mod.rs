@@ -80,10 +80,10 @@ pub trait HandshakeFilter {
 pub enum FilterDecision {
     /// Pass on making a filter decision for the given field.
     Pass = 0,
-    /// Filter needs the given data to make a decision.
-    NeedData = 1,
     /// Block the handshake based on the given data.
-    Block = 2,
+    Block = 1,
+    /// Filter needs the given data to make a decision.
+    NeedData = 2,
     /// Allow the handshake based on the given data.
     ///
     /// Allowing a field that a previous filter blocked
@@ -95,7 +95,7 @@ pub enum FilterDecision {
 impl FilterDecision {
     /// Choose between the current decision, and the other decision.
     ///
-    /// Allow > Block > NeedData > Pass
+    /// Allow > NeedData > Block > Pass
     pub fn choose(&self, other: FilterDecision) -> FilterDecision {
         let self_num = *self as u8;
         let other_num = other as u8;

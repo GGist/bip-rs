@@ -81,7 +81,7 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
                     let read_result = self.sock.read_buf(&mut Cursor::new(&mut self.read_buffer[..]));
                     
                     match try_nb!(read_result) {
-                        Async::Ready(0)    => (),
+                        Async::Ready(0)    => { return Ok(Async::Ready(None)) },
                         Async::Ready(1)    => {
                             let length = self.read_buffer[0];
 
@@ -92,9 +92,7 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
                             self.read_buffer[0] = length;
                         },
                         Async::Ready(read) => panic!("bip_handshake: Expected To Read Single Byte, Read {:?}", read),
-                        Async::NotReady    => {
-                            return Ok(Async::NotReady)
-                        }
+                        Async::NotReady    => { return Ok(Async::NotReady) }
                     }
                 },
                 HandshakeState::Length(length) => {
@@ -120,6 +118,7 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
                         };
                         
                         match read_result {
+                            Async::Ready(0)    => { return Ok(Async::Ready(None)) },
                             Async::Ready(read) => { self.read_pos += read; },
                             Async::NotReady    => {
                                 return Ok(Async::NotReady)
