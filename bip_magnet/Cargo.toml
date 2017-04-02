@@ -16,6 +16,6 @@ license     = "MIT/Apache-2.0"
 unstable = []
 
 [dependencies]
-bip_util      = { path = "../bip_util", version = "0.4.0" }
+bip_util      = { version = "0.4.0" }
 url           = "^0.5.7"
 base32        = "^0.3.1"
