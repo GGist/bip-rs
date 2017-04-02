@@ -1,4 +1,6 @@
-extern crate bip_handshake;
+fn main() { }
+
+/*extern crate bip_handshake;
 extern crate bip_peer;
 extern crate bip_util;
 extern crate chan;
@@ -95,4 +97,4 @@ fn main() {
             _ => panic!("ASD")
         }
     }
-}
+}*/

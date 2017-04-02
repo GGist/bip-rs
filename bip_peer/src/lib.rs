@@ -1,4 +1,4 @@
-extern crate bip_handshake;
+/*extern crate bip_handshake;
 extern crate bip_metainfo;
 extern crate bip_util;
 extern crate byteorder;
@@ -20,4 +20,4 @@ pub mod selector;
 mod registration;
 pub mod token;
 
-pub use registration::LayerRegistration;
+pub use registration::LayerRegistration;*/
