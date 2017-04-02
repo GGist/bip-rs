@@ -1,17 +1,24 @@
 extern crate bip_utracker;
+extern crate bip_handshake;
 extern crate bip_util;
+extern crate futures;
 
 use std::collections::{HashSet, HashMap};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Sender};
+use std::sync::{Mutex, Arc};
 
 use bip_util::bt::{InfoHash, PeerId};
 use bip_util::trans::{LocallyShuffledIds, TransactionIds};
-use bip_utracker::{ServerHandler, ServerResult, Handshaker, ClientMetadata};
+use bip_handshake::{InitiateMessage, DiscoveryInfo};
+use bip_utracker::{ServerHandler, ServerResult, ClientMetadata};
 use bip_utracker::announce::{AnnounceResponse, AnnounceRequest, AnnounceEvent};
 use bip_utracker::contact::{CompactPeersV4, CompactPeersV6, CompactPeers};
 use bip_utracker::scrape::{ScrapeRequest, ScrapeResponse, ScrapeStats};
+use futures::sync::mpsc::{self, UnboundedSender, UnboundedReceiver, SendError};
+use futures::sink::Sink;
+use futures::stream::{Stream};
+use futures::future::Either;
+use futures::{StartSend, Poll};
 
 mod test_announce_start;
 mod test_announce_stop;
@@ -139,41 +146,51 @@ impl ServerHandler for MockTrackerHandler {
 
 //----------------------------------------------------------------------------//
 
+fn handshaker() -> (MockHandshakerSink, MockHandshakerStream) {
+    let (send, recv) = mpsc::unbounded();
+
+    (MockHandshakerSink{ send: send }, MockHandshakerStream{ recv: recv })
+}
+
 #[derive(Clone)]
-struct MockHandshaker {
-    send:     Sender<ClientMetadata>,
-    connects: Arc<Mutex<Vec<SocketAddr>>>
+struct MockHandshakerSink {
+    send: UnboundedSender<Either<InitiateMessage, ClientMetadata>>
 }
 
-impl MockHandshaker {
-    pub fn new(send: Sender<ClientMetadata>) -> MockHandshaker {
-        MockHandshaker{ send: send, connects: Arc::new(Mutex::new(Vec::new())) }
-    }
-    
-    pub fn connects_received<F>(&self, callback: F)
-        where F: FnOnce(&[SocketAddr]) {
-        let locked = self.connects.lock().unwrap();
-        
-        callback(&*locked);
-    }
+struct MockHandshakerStream {
+    recv: UnboundedReceiver<Either<InitiateMessage, ClientMetadata>>
 }
 
-impl Handshaker for MockHandshaker {
-    type MetadataEnvelope = ClientMetadata;
-    
-    fn id(&self) -> PeerId {
-        [0u8; 20].into()
-    }
-    
+impl DiscoveryInfo for MockHandshakerSink {
     fn port(&self) -> u16 {
         6969
     }
-    
-    fn connect(&mut self, _: Option<PeerId>, _: InfoHash, addr: SocketAddr) {
-        self.connects.lock().unwrap().push(addr);
+
+    fn peer_id(&self) -> PeerId {
+        [0u8; 20].into()
     }
-    
-    fn metadata(&mut self, data: ClientMetadata) {
-        self.send.send(data).unwrap();
+}
+
+impl Sink for MockHandshakerSink {
+    type SinkItem = Either<InitiateMessage, ClientMetadata>;
+    type SinkError = SendError<Self::SinkItem>;
+
+    fn start_send(&mut self,
+                  item: Self::SinkItem)
+                  -> StartSend<Self::SinkItem, Self::SinkError> {
+        self.send.start_send(item)
+    }
+
+    fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
+        self.send.poll_complete()
+    }
+}
+
+impl Stream for MockHandshakerStream {
+    type Item = Either<InitiateMessage, ClientMetadata>;
+    type Error = ();
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        self.recv.poll()
     }
 }

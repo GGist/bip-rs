@@ -1,17 +1,20 @@
 use std::thread::{self};
 use std::time::{Duration};
-use std::sync::mpsc::{self};
+use std::net::SocketAddr;
 
+use bip_handshake::{Protocol};
 use bip_util::bt::{self};
 use bip_utracker::{TrackerClient, TrackerServer, ClientRequest};
 use bip_utracker::announce::{ClientState, AnnounceEvent};
+use futures::stream::Stream;
+use futures::future::Either;
 
-use {MockTrackerHandler, MockHandshaker};
+use {handshaker, MockTrackerHandler};
 
 #[test]
 #[allow(unused)]
 fn positive_announce_started() {
-    let (send, recv) = mpsc::channel();
+    let (sink, stream) = handshaker();
     
     let server_addr = "127.0.0.1:3501".parse().unwrap();
     let mock_handler = MockTrackerHandler::new();
@@ -19,23 +22,34 @@ fn positive_announce_started() {
     
     thread::sleep(Duration::from_millis(100));
     
-    let mock_handshaker = MockHandshaker::new(send);
-    let mut client = TrackerClient::new("127.0.0.1:4501".parse().unwrap(), mock_handshaker.clone()).unwrap();
+    let mut client = TrackerClient::new("127.0.0.1:4501".parse().unwrap(), sink).unwrap();
     
+    let hash = [0u8; bt::INFO_HASH_LEN].into();
     let send_token = client.request(server_addr, ClientRequest::Announce(
-        [0u8; bt::INFO_HASH_LEN].into(),
+        hash,
         ClientState::new(0, 0, 0, AnnounceEvent::Started)
     )).unwrap();
     
-    let metadata = recv.recv().unwrap();
-    assert_eq!(send_token, metadata.token());
-    
-    let response = metadata.result().as_ref().unwrap().announce_response().unwrap();
-    assert_eq!(response.leechers(), 1);
-    assert_eq!(response.seeders(), 1);
-    assert_eq!(response.peers().iter().count(), 1);
-    
-    mock_handshaker.connects_received(|connects| {
-        assert_eq!(connects.len(), 1);
-    });
+    let mut blocking_stream = stream.wait();
+
+    let init_msg = match blocking_stream.next().unwrap().unwrap() {
+        Either::A(a) => a,
+        Either::B(_) => unreachable!()
+    };
+
+    let exp_peer_addr: SocketAddr = "127.0.0.1:6969".parse().unwrap();
+
+    assert_eq!(&Protocol::BitTorrent, init_msg.protocol());
+    assert_eq!(&exp_peer_addr, init_msg.address());
+    assert_eq!(&hash, init_msg.hash());
+
+    let metadata = match blocking_stream.next().unwrap().unwrap() {
+        Either::B(b) => b,
+        Either::A(_) => unreachable!()   
+    };
+    let metadata_result = metadata.result().as_ref().unwrap().announce_response().unwrap();
+
+    assert_eq!(metadata_result.leechers(), 1);
+    assert_eq!(metadata_result.seeders(), 1);
+    assert_eq!(metadata_result.peers().iter().count(), 1);
 }

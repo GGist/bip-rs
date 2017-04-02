@@ -2,7 +2,6 @@ use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::thread;
 
-use bip_handshake::Handshaker;
 use nom::IResult;
 use umio::{ELoopBuilder, Dispatcher, Provider};
 

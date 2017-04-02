@@ -8,6 +8,7 @@ extern crate bip_handshake;
 extern crate bip_util;
 extern crate byteorder;
 extern crate chrono;
+extern crate futures;
 #[macro_use]
 extern crate nom;
 extern crate rand;

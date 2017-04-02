@@ -19,7 +19,7 @@ pub trait ContiguousBuffer<T> {
     /// Read the used capacity of the buffer.
     ///
     /// Implementations will never pass in an empty slice.
-    fn read<F>(&self, mut receive: F) where F: FnMut(&[T]);
+    fn read<F>(&self, receive: F) where F: FnMut(&[T]);
 }
 
 impl<T> ContiguousBuffer<T> for Vec<T> where T: Clone {

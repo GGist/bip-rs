@@ -1,16 +1,16 @@
 use std::thread::{self};
 use std::time::{Duration};
-use std::sync::mpsc::{self};
 
 use bip_util::bt::{self};
 use bip_utracker::{TrackerClient, TrackerServer, ClientRequest};
+use futures::stream::Stream;
 
-use {MockTrackerHandler, MockHandshaker};
+use {handshaker, MockTrackerHandler};
 
 #[test]
 #[allow(unused)]
 fn positive_connection_id_cache() {
-    let (send, recv) = mpsc::channel();
+    let (sink, mut stream) = handshaker();
     
     let server_addr = "127.0.0.1:3506".parse().unwrap();
     let mock_handler = MockTrackerHandler::new();
@@ -18,14 +18,15 @@ fn positive_connection_id_cache() {
     
     thread::sleep(Duration::from_millis(100));
     
-    let mock_handshaker = MockHandshaker::new(send);
-    let mut client = TrackerClient::new("127.0.0.1:4506".parse().unwrap(), mock_handshaker.clone()).unwrap();
+    let mut client = TrackerClient::new("127.0.0.1:4506".parse().unwrap(), sink).unwrap();
     
     let first_hash = [0u8; bt::INFO_HASH_LEN].into();
     let second_hash = [1u8; bt::INFO_HASH_LEN].into();
     
+    let mut blocking_stream = stream.wait();
+
     client.request(server_addr, ClientRequest::Scrape(first_hash)).unwrap();
-    recv.recv().unwrap();
+    blocking_stream.next().unwrap();
     
     assert_eq!(mock_handler.num_active_connect_ids(), 1);
     
@@ -34,7 +35,7 @@ fn positive_connection_id_cache() {
     }
     
     for _ in 0..10 {
-        recv.recv().unwrap();
+        blocking_stream.next().unwrap();
     }
     
     assert_eq!(mock_handler.num_active_connect_ids(), 1);

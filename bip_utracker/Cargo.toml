@@ -14,13 +14,14 @@ keywords      = ["tracker", "bittorrent", "udp"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_handshake = { version = "0.4.0" }
-bip_util      = { version = "0.3.0" }
-byteorder     = "0.5.0"
-chrono        = "0.2.0"
-nom           = "1.2.0"
-rand          = "0.3.0"
-umio          = "0.3.0"
+bip_handshake = { version = "0.5" }
+bip_util      = { version = "0.5" }
+byteorder     = "0.5"
+chrono        = "0.2"
+futures       = "0.1"
+nom           = "1.2"
+rand          = "0.3"
+umio          = "0.3"
 
 [features]
 unstable      = []

@@ -4,8 +4,11 @@ use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::thread;
 
-use bip_handshake::Handshaker;
+use bip_handshake::{DiscoveryInfo, InitiateMessage, Protocol};
+use bip_util::bt::PeerId;
 use chrono::{DateTime, UTC, Duration};
+use futures::future::Either;
+use futures::sink::{Wait, Sink};
 use nom::IResult;
 use rand;
 use umio::{ELoopBuilder, Dispatcher, Provider};
@@ -45,8 +48,8 @@ pub fn create_dispatcher<H>(bind: SocketAddr,
                             msg_capacity: usize,
                             limiter: RequestLimiter)
                             -> io::Result<external::Sender<DispatchMessage>>
-    where H: Handshaker + 'static,
-          H::MetadataEnvelope: From<ClientMetadata>
+    where H: Sink + DiscoveryInfo + 'static + Send,
+          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
 {
     // Timer capacity is plus one for the cache cleanup timer
     let builder = ELoopBuilder::new()
@@ -73,24 +76,29 @@ pub fn create_dispatcher<H>(bind: SocketAddr,
 // ----------------------------------------------------------------------------//
 
 /// Dispatcher that executes requests asynchronously.
-struct ClientDispatcher<H>
-    where H: Handshaker
-{
-    handshaker: H,
-    bound_addr: SocketAddr,
+struct ClientDispatcher<H> {
+    handshaker:      Wait<H>,
+    pid:             PeerId,
+    port:            u16,
+    bound_addr:      SocketAddr,
     active_requests: HashMap<ClientToken, ConnectTimer>,
-    id_cache: ConnectIdCache,
-    limiter: RequestLimiter,
+    id_cache:        ConnectIdCache,
+    limiter:         RequestLimiter,
 }
 
 impl<H> ClientDispatcher<H>
-    where H: Handshaker,
-          H::MetadataEnvelope: From<ClientMetadata>
+    where H: Sink + DiscoveryInfo,
+          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
 {
     /// Create a new ClientDispatcher.
     pub fn new(handshaker: H, bind: SocketAddr, limiter: RequestLimiter) -> ClientDispatcher<H> {
+        let peer_id = handshaker.peer_id();
+        let port = handshaker.port();
+
         ClientDispatcher {
-            handshaker: handshaker,
+            handshaker: handshaker.wait(),
+            pid: peer_id,
+            port: port,
             bound_addr: bind,
             active_requests: HashMap::new(),
             id_cache: ConnectIdCache::new(),
@@ -114,7 +122,8 @@ impl<H> ClientDispatcher<H>
 
     /// Finish a request by sending the result back to the client.
     pub fn notify_client(&mut self, token: ClientToken, result: ClientResult<ClientResponse>) {
-        self.handshaker.metadata(ClientMetadata::new(token, result).into());
+        self.handshaker.send(Either::B(ClientMetadata::new(token, result)).into())
+            .unwrap_or_else(|_| panic!("NEED TO FIX"));
 
         self.limiter.acknowledge();
     }
@@ -172,7 +181,8 @@ impl<H> ClientDispatcher<H>
                 (&ClientRequest::Announce(hash, _), &ResponseType::Announce(ref res)) => {
                     // Forward contact information on to the handshaker
                     for addr in res.peers().iter() {
-                        self.handshaker.connect(None, hash, addr);
+                        self.handshaker.send(Either::A(InitiateMessage::new(Protocol::BitTorrent, hash, addr)).into())
+                            .unwrap_or_else(|_| panic!("NEED TO FIX"));
                     }
 
                     self.notify_client(token, Ok(ClientResponse::Announce(res.to_owned())));
@@ -227,12 +237,12 @@ impl<H> ClientDispatcher<H>
 
                 (id,
                  RequestType::Announce(AnnounceRequest::new(hash,
-                                                            self.handshaker.id(),
+                                                            self.pid,
                                                             state,
                                                             source_ip,
                                                             key,
                                                             DesiredPeers::Default,
-                                                            self.handshaker.port(),
+                                                            self.port,
                                                             AnnounceOptions::new())))
             }
             (Some(id), &ClientRequest::Scrape(hash)) => {
@@ -272,8 +282,8 @@ impl<H> ClientDispatcher<H>
 }
 
 impl<H> Dispatcher for ClientDispatcher<H>
-    where H: Handshaker,
-          H::MetadataEnvelope: From<ClientMetadata>
+    where H: Sink + DiscoveryInfo,
+          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
 {
     type Timeout = DispatchTimeout;
     type Message = DispatchMessage;

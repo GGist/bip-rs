@@ -1,16 +1,17 @@
 use std::thread::{self};
 use std::time::{Duration};
-use std::sync::mpsc::{self};
 
 use bip_util::bt::{self};
 use bip_utracker::{TrackerClient, TrackerServer, ClientRequest};
+use futures::stream::Stream;
+use futures::future::Either;
 
-use {MockTrackerHandler, MockHandshaker};
+use {handshaker, MockTrackerHandler};
 
 #[test]
 #[allow(unused)]
 fn positive_scrape() {
-    let (send, recv) = mpsc::channel();
+    let (sink, stream) = handshaker();
     
     let server_addr = "127.0.0.1:3507".parse().unwrap();
     let mock_handler = MockTrackerHandler::new();
@@ -18,12 +19,16 @@ fn positive_scrape() {
     
     thread::sleep(Duration::from_millis(100));
     
-    let mock_handshaker = MockHandshaker::new(send);
-    let mut client = TrackerClient::new("127.0.0.1:4507".parse().unwrap(), mock_handshaker.clone()).unwrap();
+    let mut client = TrackerClient::new("127.0.0.1:4507".parse().unwrap(), sink).unwrap();
     
     let send_token = client.request(server_addr, ClientRequest::Scrape([0u8; bt::INFO_HASH_LEN].into())).unwrap();
     
-    let metadata = recv.recv().unwrap();
+    let mut blocking_stream = stream.wait();
+
+    let metadata = match blocking_stream.next().unwrap().unwrap() {
+        Either::B(b) => b,
+        Either::A(_) => unreachable!()   
+    };
     
     assert_eq!(send_token, metadata.token());
     
@@ -34,8 +39,4 @@ fn positive_scrape() {
     assert_eq!(stats.num_seeders(), 0);
     assert_eq!(stats.num_downloads(), 0);
     assert_eq!(stats.num_leechers(), 0);
-    
-    mock_handshaker.connects_received(|connects| {
-        assert_eq!(connects.len(), 0);
-    });
 }
