@@ -50,7 +50,7 @@ fn create_torrent<S>(src_path: S) -> ParseResult<Vec<u8>>
     
     let mut prev_progress = 0;
     builder.build_as_bytes(2, src_path, move |progress| {
-        let whole_progress = (progress * (count as f64)) as usize;
+        let whole_progress = (progress * (count as f64)) as u64;
         let delta_progress = whole_progress - prev_progress;
         
         if delta_progress > 0 {

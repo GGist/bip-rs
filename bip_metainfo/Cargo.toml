@@ -23,7 +23,7 @@ error-chain   = "0.7.0"
 
 [dev-dependencies]
 rand          = "0.3.0"
-pbr           = "0.0.5"
+pbr           = "1.0.0-alpha"
 
 [features]
 unstable      = []
