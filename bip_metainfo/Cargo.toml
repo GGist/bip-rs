@@ -1,6 +1,6 @@
 [package]
 name          = "bip_metainfo"
-version       = "0.5.0"
+version       = "0.6.0"
 description   = "Parsing and building of bittorrent metainfo files"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -15,7 +15,7 @@ license       = "MIT/Apache-2.0"
 
 [dependencies]
 bip_bencode   = { version = "0.2.0" }
-bip_util      = { version = "0.4.0" }
+bip_util      = { version = "0.5.0" }
 chrono        = "0.2.0"
 crossbeam     = "0.2.0"
 walkdir       = "0.1.0"
