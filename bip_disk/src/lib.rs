@@ -5,6 +5,7 @@ extern crate futures;
 extern crate futures_cpupool;
 #[macro_use]
 extern crate error_chain;
+extern crate tokio_core;
 
 mod disk;
 mod memory;

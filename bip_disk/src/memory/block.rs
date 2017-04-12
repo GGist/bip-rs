@@ -20,10 +20,36 @@ pub struct BlockMetadata {
     block_length: usize
 }
 
+impl BlockMetadata {
+    pub fn new(info_hash: InfoHash, piece_index: u64, block_offset: u64, block_length: usize) -> BlockMetadata {
+        BlockMetadata{ info_hash: info_hash, piece_index: piece_index,
+                       block_offset: block_offset, block_length: block_length }
+    }
+
+    pub fn with_default_hash(piece_index: u64, block_offset: u64, block_length: usize) -> BlockMetadata {
+        BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), piece_index, block_offset, block_length)
+    }
+
+    pub fn info_hash(&self) -> &InfoHash {
+        &self.info_hash
+    }
+
+    pub fn piece_index(&self) -> u64 {
+        self.piece_index
+    }
+
+    pub fn block_offset(&self) -> u64 {
+        self.block_offset
+    }
+
+    pub fn block_length(&self) -> usize {
+        self.block_length
+    }
+}
+
 impl Default for BlockMetadata {
     fn default() -> BlockMetadata {
-        BlockMetadata{ info_hash: [0u8; bt::INFO_HASH_LEN].into(), piece_index: 0,
-                   block_offset: 0, block_length: 0 }
+        BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 0, 0)
     }
 }
 

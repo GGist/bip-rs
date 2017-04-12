@@ -2,25 +2,26 @@ use disk::fs::FileSystem;
 use disk::manager::{self, DiskManager};
 
 use futures_cpupool::Builder;
+use tokio_core::reactor::Handle;
 
 const DEFAULT_PENDING_SIZE:   usize = 10;
 const DEFAULT_COMPLETED_SIZE: usize = 10;
 
 /// `DiskManagerBuilder` for building `DiskManager`s with different settings.
 pub struct DiskManagerBuilder {
-    cpu_pool:       Builder,
+    builder:        Builder,
     pending_size:   usize,
     completed_size: usize
 }
 
 impl DiskManagerBuilder {
     pub fn new() -> DiskManagerBuilder {
-        DiskManagerBuilder{ cpu_pool: Builder::new(), pending_size: DEFAULT_PENDING_SIZE,
+        DiskManagerBuilder{ builder: Builder::new(), pending_size: DEFAULT_PENDING_SIZE,
                             completed_size: DEFAULT_COMPLETED_SIZE }
     }
 
     pub fn with_worker_config(&mut self, config: Builder) -> &mut DiskManagerBuilder {
-        self.cpu_pool = config;
+        self.builder = config;
         self
     }
 
@@ -36,6 +37,6 @@ impl DiskManagerBuilder {
 
     pub fn build<F>(self, fs: F) -> DiskManager<F>
         where F: FileSystem {
-        manager::new_manager(self.pending_size, self.completed_size, fs, self.cpu_pool)
+        manager::new_manager(self.pending_size, self.completed_size, fs, self.builder)
     }
 }

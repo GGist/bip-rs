@@ -4,13 +4,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use disk::fs::FileSystem;
 use disk::{IDiskMessage, ODiskMessage};
 use disk::tasks;
+use disk::tasks::context::DiskManagerContext;
 
 use futures::sync::mpsc::{self, Sender, Receiver};
 use futures::{StartSend, Poll, Stream, Sink, AsyncSink, Async};
 use futures_cpupool::{Builder, CpuPool};
+use tokio_core::reactor::Handle;
 
 /// `DiskManager` object which handles the storage of `Blocks` to the `FileSystem`.
-pub struct DiskManager<F> where F: FileSystem {
+pub struct DiskManager<F> {
     sink:   DiskManagerSink<F>,
     stream: DiskManagerStream
 }
@@ -18,12 +20,12 @@ pub struct DiskManager<F> where F: FileSystem {
 pub fn new_manager<F>(pending_size: usize, completed_size: usize, fs: F, mut builder: Builder) -> DiskManager<F>
     where F: FileSystem {
     let (out_send, out_recv) = mpsc::channel(completed_size);
+    let context = DiskManagerContext::new(out_send, fs, pending_size);
 
-    DiskManager{ sink: DiskManagerSink::new(builder.create(), out_send, fs, pending_size),
-                 stream: DiskManagerStream::new(out_recv) }
+    DiskManager{ sink: DiskManagerSink::new(builder.create(), context), stream: DiskManagerStream::new(out_recv) }
 }
 
-impl<F> Sink for DiskManager<F> where F: FileSystem {
+impl<F> Sink for DiskManager<F> where F: FileSystem + Send + Sync + 'static {
     type SinkItem = IDiskMessage;
     type SinkError = ();
 
@@ -36,7 +38,7 @@ impl<F> Sink for DiskManager<F> where F: FileSystem {
     }
 }
 
-impl<F> Stream for DiskManager<F> where F: FileSystem {
+impl<F> Stream for DiskManager<F> {
     type Item = ODiskMessage;
     type Error = ();
 
@@ -47,36 +49,27 @@ impl<F> Stream for DiskManager<F> where F: FileSystem {
 
 //----------------------------------------------------------------------------//
 
-pub struct DiskManagerSink<F> where F: FileSystem {
-    cpu_pool:    CpuPool,
-    out_send:    Sender<ODiskMessage>,
-    filesystem:  Arc<F>,
-    cur_pending: Arc<AtomicUsize>,
-    max_pending: usize
+pub struct DiskManagerSink<F> {
+    pool:    CpuPool,
+    context: DiskManagerContext<F>
 }
 
-impl<F> DiskManagerSink<F> where F: FileSystem {
-    fn new(cpu_pool: CpuPool, out_send: Sender<ODiskMessage>, filesystem: F, max_pending: usize) -> DiskManagerSink<F> {
-        DiskManagerSink{ cpu_pool: cpu_pool, out_send: out_send, filesystem: Arc::new(filesystem),
-                         cur_pending: Arc::new(AtomicUsize::new(0)), max_pending: max_pending}
+impl<F> DiskManagerSink<F> {
+    fn new(pool: CpuPool, context: DiskManagerContext<F>) -> DiskManagerSink<F> {
+        DiskManagerSink{ pool: pool, context: context }
     }
 }
 
-impl<F> Sink for DiskManagerSink<F> where F: FileSystem {
+impl<F> Sink for DiskManagerSink<F> where F: FileSystem + Send + Sync + 'static {
     type SinkItem = IDiskMessage;
     type SinkError = ();
 
     fn start_send(&mut self, item: IDiskMessage) -> StartSend<IDiskMessage, ()> {
-        let new_value = self.cur_pending.fetch_add(1, Ordering::SeqCst);
-
-        if new_value <= self.max_pending {
-            tasks::execute_on_pool(&self.cpu_pool, self.cur_pending.clone(), self.out_send.clone(),
-                                  self.filesystem.clone(), item);
+        if self.context.can_submit_work() {
+            tasks::execute_on_pool(item, &self.pool, self.context.clone());
 
             Ok(AsyncSink::Ready)
         } else {
-            self.cur_pending.fetch_sub(1, Ordering::SeqCst);
-
             Ok(AsyncSink::NotReady(item))
         }
     }

@@ -4,6 +4,25 @@ use bip_util::bt::InfoHash;
 
 error_chain! {
     types {
+        BlockError, BlockErrorKind, BlockResultExt, BlockResult;
+    }
+
+    foreign_links {
+        Io(io::Error);
+    }
+
+    errors {
+        InfoHashNotFound {
+            hash: InfoHash
+        } {
+            description("Failed To Load/Process Block Because Torrent Is Not Loaded")
+            display("Failed To Load/Process Block Because The InfoHash {:?} It Is Not Currently Added", hash)
+        }
+    }
+}
+
+error_chain! {
+    types {
         TorrentError, TorrentErrorKind, TorrentResultExt, TorrentResult;
     }
 

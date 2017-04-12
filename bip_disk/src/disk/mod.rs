@@ -1,6 +1,6 @@
 use std::default::Default;
 
-use error::{TorrentError};
+use error::{TorrentError, BlockError};
 use memory::block::{Block, BlockMetadata};
 use token::Token;
 
@@ -29,5 +29,6 @@ pub enum ODiskMessage {
     FoundGoodPiece(InfoHash, u64),
     FoundBadPiece(InfoHash, u64),
     BlockLoaded(Token, Token, Block),
-    TorrentError(InfoHash, TorrentError)
+    TorrentError(InfoHash, TorrentError),
+    BlockError(Block, BlockError)
 }
