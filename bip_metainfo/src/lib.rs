@@ -53,8 +53,8 @@
 //!
 //!         let single_file = file.info().files().next().unwrap();
 //!         assert_eq!(single_file.length() as usize, file_data.len());
-//!         assert_eq!(single_file.paths().count(), 1);
-//!         assert_eq!(single_file.paths().next().unwrap(), file_name);
+//!         assert_eq!(single_file.path().iter().count(), 1);
+//!         assert_eq!(single_file.path().to_str().unwrap(), file_name);
 //!     }
 //! ```
 

@@ -88,8 +88,8 @@ pub fn parse_info_hash<'a>(root_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResu
 // ----------------------------------------------------------------------------//
 
 /// Parses the piece length from the info dictionary.
-pub fn parse_piece_length<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<i64> {
-    CONVERT.lookup_and_convert_int(info_dict, PIECE_LENGTH_KEY)
+pub fn parse_piece_length<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<u64> {
+    CONVERT.lookup_and_convert_int(info_dict, PIECE_LENGTH_KEY).map(|len| len as u64)
 }
 
 /// Parses the pieces from the info dictionary.
@@ -122,8 +122,8 @@ pub fn parse_file_dict<'a, 'b>(file_bencode: &'b Bencode<'a>)
 }
 
 /// Parses the length from the info or file dictionary.
-pub fn parse_length<'a>(info_or_file_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<i64> {
-    CONVERT.lookup_and_convert_int(info_or_file_dict, LENGTH_KEY)
+pub fn parse_length<'a>(info_or_file_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<u64> {
+    CONVERT.lookup_and_convert_int(info_or_file_dict, LENGTH_KEY).map(|len| len as u64)
 }
 
 /// Parses the md5sum from the info or file dictionary.

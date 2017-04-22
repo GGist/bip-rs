@@ -61,33 +61,3 @@ impl<'a> Iterator for Pieces<'a> {
         }
     }
 }
-
-// ----------------------------------------------------------------------------//
-
-/// Iterator over each file path element within the MetainfoFile.
-pub struct Paths<'a> {
-    paths: &'a [String],
-    index: usize,
-}
-
-impl<'a> Paths<'a> {
-    pub fn new(paths: &'a [String]) -> Paths<'a> {
-        Paths {
-            index: 0,
-            paths: paths,
-        }
-    }
-}
-
-impl<'a> Iterator for Paths<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<&'a str> {
-        if let Some(paths) = self.paths.get(self.index) {
-            self.index += 1;
-            Some(&paths)
-        } else {
-            None
-        }
-    }
-}

@@ -1,4 +1,5 @@
 //! Accessing the fields of a MetainfoFile.
+use std::path::{Path, PathBuf};
 
 use bip_bencode::{Bencode, Dictionary};
 use bip_util::bt::InfoHash;
@@ -6,7 +7,7 @@ use bip_util::sha;
 
 use parse;
 use error::{ParseError, ParseErrorKind, ParseResult};
-use iter::{Paths, Files, Pieces};
+use iter::{Files, Pieces};
 
 /// Contains optional and required information for the torrent.
 #[derive(Debug)]
@@ -97,10 +98,10 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
 /// Contains files and checksums for the torrent.
 #[derive(Debug)]
 pub struct InfoDictionary {
-    files: Vec<File>,
-    pieces: Vec<[u8; sha::SHA_HASH_LEN]>,
-    piece_len: i64,
-    is_private: bool,
+    files:          Vec<File>,
+    pieces:         Vec<[u8; sha::SHA_HASH_LEN]>,
+    piece_len:      u64,
+    is_private:     bool,
     // Present only for multi file torrents.
     file_directory: Option<String>,
 }
@@ -121,7 +122,7 @@ impl InfoDictionary {
     }
 
     /// Length in bytes of each piece.
-    pub fn piece_length(&self) -> i64 {
+    pub fn piece_length(&self) -> u64 {
         self.piece_len
     }
 
@@ -221,8 +222,8 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 /// Contains information for a single file.
 #[derive(Debug)]
 pub struct File {
-    len: i64,
-    path: Vec<String>,
+    len:    u64,
+    path:   PathBuf,
     md5sum: Option<Vec<u8>>,
 }
 
@@ -235,7 +236,7 @@ impl File {
 
         Ok(File {
             len: length,
-            path: vec![name.to_owned()],
+            path: name.to_owned().into(),
             md5sum: md5sum,
         })
     }
@@ -247,22 +248,22 @@ impl File {
 
         let path_list_bencode = try!(parse::parse_path_list(file_dict));
 
-        let mut path_list = Vec::with_capacity(path_list_bencode.len());
+        let mut path_buf = PathBuf::new();
         for path_bencode in path_list_bencode {
             let path = try!(parse::parse_path_str(path_bencode));
 
-            path_list.push(path.to_owned());
+            path_buf.push(path);
         }
 
         Ok(File {
             len: length,
-            path: path_list,
+            path: path_buf,
             md5sum: md5sum,
         })
     }
 
     /// Length of the file in bytes.
-    pub fn length(&self) -> i64 {
+    pub fn length(&self) -> u64 {
         self.len
     }
 
@@ -273,17 +274,16 @@ impl File {
         self.md5sum.as_ref().map(|m| &m[..])
     }
 
-    /// Iterator over the path elements of the file.
-    ///
-    /// The last element is the name of the file.
-    pub fn paths<'a>(&'a self) -> Paths<'a> {
-        Paths::new(&self.path)
+    /// Path of the file.
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
 
     use bip_bencode::Bencode;
     use bip_util::sha;
@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(metainfo_file.creation_date, create_date);
 
         assert_eq!(metainfo_file.info().directory(), directory);
-        assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap());
+        assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap() as u64);
         assert_eq!(metainfo_file.info().is_private(), private.unwrap_or(0) == 1);
 
         let pieces = pieces.unwrap();
@@ -393,12 +393,15 @@ mod tests {
             let meta_file = meta_files.next().unwrap();
             let supp_file = supp_files.next().unwrap();
 
-            assert_eq!(meta_file.length(), supp_file.0.unwrap());
+            assert_eq!(meta_file.length(), supp_file.0.unwrap() as u64);
             assert_eq!(meta_file.md5sum(), supp_file.1);
 
-            let meta_paths: Vec<&str> = meta_file.paths().collect();
-            let supp_paths: Vec<&str> =
-                supp_file.2.as_ref().unwrap().iter().map(|p| &p[..]).collect();
+            let meta_paths: &Path = meta_file.path();
+            let supp_paths: PathBuf = supp_file.2.as_ref().unwrap().iter().fold(PathBuf::new(), |mut buf, item| {
+                let item: &str = item;
+                buf.push(item);
+                buf
+            });
             assert_eq!(meta_paths, supp_paths);
         }
     }
