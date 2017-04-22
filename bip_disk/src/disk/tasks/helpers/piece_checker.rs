@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::cmp;
+use std::io;
 
 use disk::tasks::helpers::piece_accessor::PieceAccessor;
 use disk::fs::{FileSystem};
 use memory::block::BlockMetadata;
-use error::{TorrentResult, TorrentError, TorrentErrorKind};
+use error::{TorrentResult, TorrentError, TorrentErrorKind, BlockResult};
 
 use bip_metainfo::{InfoDictionary, File};
 use bip_util::bt::InfoHash;
@@ -13,25 +14,29 @@ use bip_util::bt::InfoHash;
 pub struct PieceChecker<'a, F> {
     fs:            F,
     info_dict:     &'a InfoDictionary,
-    checker_state: PieceCheckerState
+    checker_state: &'a mut PieceCheckerState
 }
 
 impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
-    /// Create a new PieceChecker with an initialized state.
-    pub fn new(fs: F, info_dict: &'a InfoDictionary) -> TorrentResult<PieceChecker<'a, F>> {
+    /// Create the initial PieceCheckerState for the PieceChecker.
+    pub fn init_state(fs: F, info_dict: &'a InfoDictionary) -> TorrentResult<PieceCheckerState> {
         let total_blocks = info_dict.pieces().count();
         let last_piece_size = last_piece_size(info_dict);
 
-        let mut piece_checker = PieceChecker::with_state(fs, info_dict, PieceCheckerState::new(total_blocks, last_piece_size));
-        
-        try!(piece_checker.validate_files_sizes());
-        try!(piece_checker.fill_checker_state());
-        
-        Ok(piece_checker)
+        let mut checker_state = PieceCheckerState::new(total_blocks, last_piece_size);
+        {
+            let mut piece_checker = PieceChecker::with_state(fs, info_dict, &mut checker_state);
+            
+            try!(piece_checker.validate_files_sizes());
+            try!(piece_checker.fill_checker_state());
+            try!(piece_checker.calculate_diff());
+        }
+
+        Ok(checker_state)
     }
 
     /// Create a new PieceChecker with the given state.
-    pub fn with_state(fs: F, info_dict: &'a InfoDictionary, checker_state: PieceCheckerState) -> PieceChecker<'a, F> {
+    pub fn with_state(fs: F, info_dict: &'a InfoDictionary, checker_state: &'a mut PieceCheckerState) -> PieceChecker<'a, F> {
         PieceChecker {
             fs:            fs,
             info_dict:     info_dict,
@@ -41,7 +46,7 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
 
     /// Calculate the diff of old to new good/bad pieces and store them in the piece checker state
     /// to be retrieved by the caller.
-    pub fn calculate_diff(mut self) -> TorrentResult<PieceCheckerState> {
+    pub fn calculate_diff(self) -> io::Result<()> {
         let piece_length = self.info_dict.piece_length() as u64;
         // TODO: Use Block Allocator
         let mut piece_buffer = vec![0u8; piece_length as usize];
@@ -63,14 +68,14 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
             Ok(calculated_hash == expected_hash)
         }));
 
-        Ok(self.checker_state)
+        Ok(())
     }
 
     /// Fill the PieceCheckerState with all piece messages for each file in our info dictionary.
     ///
     /// This is done once when a torrent file is added to see if we have any good pieces that
     /// the caller can use to skip (if the torrent was partially downloaded before).
-    fn fill_checker_state(&mut self) -> TorrentResult<()> {
+    fn fill_checker_state(&mut self) -> io::Result<()> {
         let piece_length = self.info_dict.piece_length() as u64;
         let total_bytes: u64 = self.info_dict.files().map(|file| file.length() as u64).sum();
 
@@ -80,7 +85,7 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
         for piece_index in 0..full_pieces {
             self.checker_state.add_pending_block(BlockMetadata::with_default_hash(piece_index, 0, piece_length as usize));
         }
-
+        
         if last_piece_size != 0 {
             self.checker_state.add_pending_block(BlockMetadata::with_default_hash(full_pieces, 0, last_piece_size as usize));
         }
@@ -195,8 +200,8 @@ impl PieceCheckerState {
 
     /// Pass any pieces that have not been identified as OldGood into the callback which determines
     /// if the piece is good or bad so it can be marked as NewGood or NewBad.
-    fn run_with_whole_pieces<F>(&mut self, piece_length: usize, mut callback: F) -> TorrentResult<()>
-        where F: FnMut(&BlockMetadata) -> TorrentResult<bool> {
+    fn run_with_whole_pieces<F>(&mut self, piece_length: usize, mut callback: F) -> io::Result<()>
+        where F: FnMut(&BlockMetadata) -> io::Result<bool> {
         self.merge_pieces();
 
         let mut new_states = &mut self.new_states;
@@ -216,6 +221,7 @@ impl PieceCheckerState {
                 new_states.push(PieceState::Bad(messages[0].piece_index()));
             }
 
+            // TODO: Should do a partial clear if user callback errors.
             messages.clear();
         }
         

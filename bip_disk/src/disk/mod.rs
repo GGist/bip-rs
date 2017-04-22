@@ -19,7 +19,7 @@ pub enum IDiskMessage {
     AddTorrent(MetainfoFile),
     RemoveTorrent(InfoHash),
     LoadBlock(Token, Token, Block),
-    ProcessBlock(Block)
+    ProcessBlock(Token, Token, Block)
 }
 
 /// Messages that can be received from the `DiskManager`.
@@ -29,6 +29,7 @@ pub enum ODiskMessage {
     FoundGoodPiece(InfoHash, u64),
     FoundBadPiece(InfoHash, u64),
     BlockLoaded(Token, Token, Block),
+    BlockProcessed(Token, Token, Block),
     TorrentError(InfoHash, TorrentError),
     BlockError(Block, BlockError)
 }

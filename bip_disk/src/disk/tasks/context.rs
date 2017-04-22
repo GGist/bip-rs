@@ -13,6 +13,7 @@ use bip_util::bt::InfoHash;
 use futures::sync::mpsc::Sender;
 use futures::sink::Sink;
 use futures::Future;
+use futures::sink::Wait;
 use futures_cpupool::CpuPool;
 use tokio_core::reactor::Handle;
 
@@ -41,6 +42,10 @@ impl<F> DiskManagerContext<F> {
                             cur_pending: Arc::new(AtomicUsize::new(0)), max_pending: max_pending }
     }
 
+    pub fn blocking_sender(&self) -> Wait<Sender<ODiskMessage>> {
+        self.out.clone().wait()
+    }
+
     pub fn filesystem(&self) -> &F {
         &self.fs
     }
@@ -57,31 +62,26 @@ impl<F> DiskManagerContext<F> {
         }
     }
 
-    pub fn complete_work(self, opt_out_msg: Option<ODiskMessage>) {
-        if let Some(out_msg) = opt_out_msg {
-            // TODO: Should we check the result of wait here??
-            self.out.send(out_msg).wait();
-        }
-
+    pub fn complete_work(&self) {
         self.cur_pending.fetch_sub(1, Ordering::SeqCst);
     }
 
-    pub fn insert_torrent(&self, file: MetainfoFile, state: PieceCheckerState) -> TorrentResult<()> {
+    pub fn insert_torrent(&self, file: MetainfoFile, state: PieceCheckerState) -> bool {
         let mut write_torrents = self.torrents.write()
             .expect("bip_disk: DiskManagerContext::insert_torrents Failed To Write Torrent");
 
         let hash = file.info_hash();
-        if write_torrents.contains_key(&hash) {
-            Err(TorrentError::from_kind(TorrentErrorKind::ExistingInfoHash{ hash: hash }))
-        } else {
-            write_torrents.insert(hash, Mutex::new(MetainfoState::new(file, state)));
+        let hash_not_exists = !write_torrents.contains_key(&hash);
 
-            Ok(())
+        if hash_not_exists {
+            write_torrents.insert(hash, Mutex::new(MetainfoState::new(file, state)));
         }
+
+        hash_not_exists
     }
 
-    pub fn update_torrent<C>(&self, hash: InfoHash, call: C) -> TorrentResult<()>
-        where C: FnOnce(&MetainfoFile, PieceCheckerState) -> PieceCheckerState {
+    pub fn update_torrent<C>(&self, hash: InfoHash, call: C) -> bool
+        where C: FnOnce(&MetainfoFile, &mut PieceCheckerState) {
         let read_torrents = self.torrents.read()
             .expect("bip_disk: DiskManagerContext::update_torrent Failed To Read Torrent");
 
@@ -89,27 +89,23 @@ impl<F> DiskManagerContext<F> {
             Some(state) => {
                 let mut lock_state = state.lock()
                     .expect("bip_disk: DiskManagerContext::update_torrent Failed To Lock State");
-                
-                let old_state = mem::replace(&mut lock_state.state, PieceCheckerState::new(0, 0));
+                let mut deref_state = &mut *lock_state;
 
-                let new_state = call(&lock_state.file, old_state);
-                lock_state.state = new_state;
+                call(&deref_state.file, &mut deref_state.state);
 
-                Ok(())
+                true
             },
-            None => Err(TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound{ hash: hash }))
+            None => false
         }
     }
 
-    pub fn remove_torrent(&self, hash: InfoHash) -> TorrentResult<()> {
+    pub fn remove_torrent(&self, hash: InfoHash) -> bool {
         let mut write_torrents = self.torrents.write()
             .expect("bip_disk: DiskManagerContext::remove_torrent Failed To Write Torrent");
 
         write_torrents.remove(&hash)
-            .map(|_| ())
-            .ok_or_else(|| {
-                TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound{ hash: hash })
-            })
+            .map(|_| true)
+            .unwrap_or(false)
     }
 }
 

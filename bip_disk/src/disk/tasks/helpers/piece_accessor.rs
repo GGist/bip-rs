@@ -1,6 +1,7 @@
 use std::cmp;
+use std::io;
 
-use error::{TorrentResult};
+use error::{BlockResult};
 use disk::fs::{FileSystem};
 use memory::block::BlockMetadata;
 
@@ -19,7 +20,7 @@ impl<'a, F> PieceAccessor<'a, F> where F: FileSystem {
         }
     }
 
-    pub fn read_piece(&self, piece_buffer: &mut [u8], message: &BlockMetadata) -> TorrentResult<()> {
+    pub fn read_piece(&self, piece_buffer: &mut [u8], message: &BlockMetadata) -> io::Result<()> {
         self.run_with_file_regions(message, |mut file, offset, begin, end| {
             let bytes_read = try!(self.fs.read_file(&mut file, offset, &mut piece_buffer[begin..end]));
             assert_eq!(bytes_read, end - begin);
@@ -28,7 +29,7 @@ impl<'a, F> PieceAccessor<'a, F> where F: FileSystem {
         })
     }
 
-    pub fn write_piece(&self, piece_buffer: &[u8], message: &BlockMetadata) -> TorrentResult<()> {
+    pub fn write_piece(&self, piece_buffer: &[u8], message: &BlockMetadata) -> io::Result<()> {
         self.run_with_file_regions(message, |mut file, offset, begin, end| {
             let bytes_written = try!(self.fs.write_file(&mut file, offset, &piece_buffer[begin..end]));
             assert_eq!(bytes_written, end - begin);
@@ -39,8 +40,8 @@ impl<'a, F> PieceAccessor<'a, F> where F: FileSystem {
 
     /// Run the given closure with the file, the file offset, and the read/write buffer stard (inclusive) and end (exclusive) indices.
     /// TODO: We do not detect when/if the file size changes after the initial file size check, so the returned number of 
-    fn run_with_file_regions<C>(&self, message: &BlockMetadata, mut callback: C) -> TorrentResult<()>
-        where C: FnMut(F::File, u64, usize, usize) -> TorrentResult<()> {
+    fn run_with_file_regions<C>(&self, message: &BlockMetadata, mut callback: C) -> io::Result<()>
+        where C: FnMut(F::File, u64, usize, usize) -> io::Result<()> {
         let piece_length = self.info_dict.piece_length() as u64;
 
         let mut total_bytes_to_skip = (message.piece_index() * piece_length) + message.block_offset();

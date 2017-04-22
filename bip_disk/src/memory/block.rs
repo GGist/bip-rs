@@ -13,6 +13,7 @@ use futures::Future;
 //----------------------------------------------------------------------------//
 
 /// `BlockMetadata` which tracks metadata associated with a `Block` of memory.
+#[derive(Copy, Clone)]
 pub struct BlockMetadata {
     info_hash:    InfoHash,
     piece_index:  u64,

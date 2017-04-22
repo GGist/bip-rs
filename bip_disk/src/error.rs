@@ -27,6 +27,7 @@ error_chain! {
     }
 
     foreign_links {
+        Block(BlockError);
         Io(io::Error);
     }
 
