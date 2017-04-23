@@ -20,6 +20,7 @@ env:
     - CRATE_DIR=bip
     - CRATE_DIR=bip_bencode
     - CRATE_DIR=bip_dht
+    - CRATE_DIR=bip_disk
     - CRATE_DIR=bip_handshake
     - CRATE_DIR=bip_htracker
     - CRATE_DIR=bip_lpd
