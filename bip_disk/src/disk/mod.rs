@@ -12,6 +12,7 @@ mod tasks;
 //----------------------------------------------------------------------------//
 
 /// Messages that can be sent to the `DiskManager`.
+#[derive(Debug)]
 pub enum IDiskMessage {
     AddTorrent(MetainfoFile),
     RemoveTorrent(InfoHash),
@@ -20,6 +21,7 @@ pub enum IDiskMessage {
 }
 
 /// Messages that can be received from the `DiskManager`.
+#[derive(Debug)]
 pub enum ODiskMessage {
     TorrentAdded(InfoHash),
     TorrentRemoved(InfoHash),

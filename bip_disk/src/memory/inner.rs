@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 use memory::block::BlockMetadata;
 
 /// `InnerBlock` holding block data.
+#[derive(Debug)]
 pub struct InnerBlock {
     metadata: BlockMetadata,
     buffer:   Vec<u8>

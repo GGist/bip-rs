@@ -9,12 +9,14 @@ extern crate tokio_core;
 
 mod disk;
 mod memory;
-mod error;
+
+/// Both `Block` and `Torrent` error types.
+pub mod error;
 
 pub use disk::{IDiskMessage, ODiskMessage};
 pub use disk::fs::FileSystem;
 pub use disk::builder::DiskManagerBuilder;
-pub use disk::manager::{DiskManager, DiskManagerSink, DiskManagerStream};
+pub use disk::manager::{DiskManager};
 
 pub use memory::manager::BlockManager;
 pub use memory::block::{Block, BlockMetadata};

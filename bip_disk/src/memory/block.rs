@@ -54,6 +54,7 @@ impl Default for BlockMetadata {
 //----------------------------------------------------------------------------//
 
 /// `Block` of memory which is tracked by the underlying `MemoryManager`.
+#[derive(Debug)]
 pub struct Block {
     inner: InnerBlock,
     free:  Arc<TreiberStack<InnerBlock>>
