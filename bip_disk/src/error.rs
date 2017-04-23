@@ -1,4 +1,5 @@
 use std::io;
+use std::path::PathBuf;
 
 use bip_util::bt::InfoHash;
 
@@ -33,12 +34,12 @@ error_chain! {
 
     errors {
         ExistingFileSizeCheck {
-            file_path:     String,
+            file_path:     PathBuf,
             expected_size: u64,
             actual_size:   u64
         } {
             description("Failed To Add Torrent Because Size Checker Failed For A File")
-            display("Failed To Add Torrent Because Size Checker Failed For {} Where File Size Was {} But Should Have Been {}", file_path, actual_size, expected_size)
+            display("Failed To Add Torrent Because Size Checker Failed For {:?} Where File Size Was {} But Should Have Been {}", file_path, actual_size, expected_size)
         }
         ExistingInfoHash {
             hash: InfoHash

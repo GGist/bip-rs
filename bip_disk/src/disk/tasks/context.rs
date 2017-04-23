@@ -1,21 +1,15 @@
 use std::sync::{Arc, RwLock, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::collections::HashMap;
-use std::mem;
 
-use disk::fs::FileSystem;
 use disk::ODiskMessage;
 use disk::tasks::helpers::piece_checker::PieceCheckerState;
-use error::{TorrentResult, TorrentError, TorrentErrorKind};
 
 use bip_metainfo::MetainfoFile;
 use bip_util::bt::InfoHash;
 use futures::sync::mpsc::Sender;
 use futures::sink::Sink;
-use futures::Future;
 use futures::sink::Wait;
-use futures_cpupool::CpuPool;
-use tokio_core::reactor::Handle;
 
 pub struct DiskManagerContext<F> {
     torrents:    Arc<RwLock<HashMap<InfoHash, Mutex<MetainfoState>>>>,

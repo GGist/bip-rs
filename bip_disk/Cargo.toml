@@ -1,6 +1,6 @@
 [package]
 name        = "bip_disk"
-version     = "0.0.0"
+version     = "0.1.0"
 description = "Bittorrent Infrastructure Project Disk Module"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -13,7 +13,7 @@ keywords    = ["filesystem", "fs", "disk"]
 license     = "MIT/Apache-2.0"
 
 [dependencies]
-bip_metainfo    = { version = "0.6" }
+bip_metainfo    = { version = "0.7" }
 bip_util        = { version = "0.5" }
 crossbeam       = "0.2"
 futures         = "0.1"

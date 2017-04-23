@@ -1,15 +1,11 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
 use disk::fs::FileSystem;
 use disk::{IDiskMessage, ODiskMessage};
 use disk::tasks;
 use disk::tasks::context::DiskManagerContext;
 
-use futures::sync::mpsc::{self, Sender, Receiver};
+use futures::sync::mpsc::{self, Receiver};
 use futures::{StartSend, Poll, Stream, Sink, AsyncSink, Async};
 use futures_cpupool::{Builder, CpuPool};
-use tokio_core::reactor::Handle;
 
 /// `DiskManager` object which handles the storage of `Blocks` to the `FileSystem`.
 pub struct DiskManager<F> {

@@ -1,11 +1,6 @@
 use std::path::{Path};
 use std::io::{self};
 
-use futures::Future;
-
-use memory::block::Block;
-
-pub mod memory;
 pub mod native;
 
 /// Trait for performing operations on some file system.

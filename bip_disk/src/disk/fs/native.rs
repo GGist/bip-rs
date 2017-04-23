@@ -3,10 +3,6 @@ use std::io::{self, Write, Read, Seek, SeekFrom};
 use std::fs::{self, File, OpenOptions};
 use std::borrow::Cow;
 
-use bip_util::bt::InfoHash;
-use bip_util::sha::ShaHashBuilder;
-use bip_util::convert;
-
 use disk::fs::FileSystem;
 
 // TODO: This should be sanitizing paths passed into it so they don't escape the base directory!!!
@@ -35,19 +31,6 @@ impl NativeFileSystem {
         where P: AsRef<Path> {
         NativeFileSystem{ current_dir: default.as_ref().to_path_buf() }
     }
-}
-
-/// Create a hex representation of the given InfoHash.
-fn info_hash_to_hex(hash: InfoHash) -> String {
-    let hex_len = hash.as_ref().len() * 2;
-
-    hash.as_ref()
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .fold(String::with_capacity(hex_len), |mut acc, nex| {
-            acc.push_str(&nex);
-            acc
-        })
 }
 
 impl FileSystem for NativeFileSystem {

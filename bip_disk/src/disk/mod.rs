@@ -1,11 +1,8 @@
-use std::default::Default;
-
 use error::{TorrentError, BlockError};
-use memory::block::{Block, BlockMetadata};
-use token::Token;
+use memory::block::{Block};
 
 use bip_metainfo::MetainfoFile;
-use bip_util::bt::{self, InfoHash};
+use bip_util::bt::{InfoHash};
 
 pub mod builder;
 pub mod manager;
@@ -18,8 +15,8 @@ mod tasks;
 pub enum IDiskMessage {
     AddTorrent(MetainfoFile),
     RemoveTorrent(InfoHash),
-    LoadBlock(Token, Token, Block),
-    ProcessBlock(Token, Token, Block)
+    LoadBlock(Block),
+    ProcessBlock(Block)
 }
 
 /// Messages that can be received from the `DiskManager`.
@@ -28,8 +25,8 @@ pub enum ODiskMessage {
     TorrentRemoved(InfoHash),
     FoundGoodPiece(InfoHash, u64),
     FoundBadPiece(InfoHash, u64),
-    BlockLoaded(Token, Token, Block),
-    BlockProcessed(Token, Token, Block),
+    BlockLoaded(Block),
+    BlockProcessed(Block),
     TorrentError(InfoHash, TorrentError),
     BlockError(Block, BlockError)
 }

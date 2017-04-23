@@ -3,11 +3,8 @@ use std::ops::{Deref, DerefMut};
 
 use memory::block::BlockMetadata;
 
-use bip_util::bt::{self, InfoHash};
-
 /// `InnerBlock` holding block data.
 pub struct InnerBlock {
-    hash:     InfoHash,
     metadata: BlockMetadata,
     buffer:   Vec<u8>
 }
@@ -15,8 +12,7 @@ pub struct InnerBlock {
 impl InnerBlock {
     /// Create a new `InnerBlock` with a fixed length.
     pub fn new(len: usize) -> InnerBlock {
-        InnerBlock{ hash: [0u8; bt::INFO_HASH_LEN].into(), metadata: BlockMetadata::default(),
-                    buffer: vec![0u8; len] }
+        InnerBlock{ metadata: BlockMetadata::default(), buffer: vec![0u8; len] }
     }
 
     /// Immutable access to the contained metadata.

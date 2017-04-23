@@ -5,9 +5,10 @@ use std::io;
 use disk::tasks::helpers::piece_accessor::PieceAccessor;
 use disk::fs::{FileSystem};
 use memory::block::BlockMetadata;
-use error::{TorrentResult, TorrentError, TorrentErrorKind, BlockResult};
+use error::{TorrentResult, TorrentError, TorrentErrorKind};
+use disk::tasks::helpers;
 
-use bip_metainfo::{InfoDictionary, File};
+use bip_metainfo::{InfoDictionary};
 use bip_util::bt::InfoHash;
 
 /// Calculates hashes on existing files within the file system given and reports good/bad pieces.
@@ -101,7 +102,7 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     /// name as a file in our dictionary.
     fn validate_files_sizes(&mut self) -> TorrentResult<()> {
         for file in self.info_dict.files() {
-            let file_path = build_path(self.info_dict.directory(), file);
+            let file_path = helpers::build_path(self.info_dict.directory(), file);
             let expected_size = file.length() as u64;
 
             try!(self.fs.open_file(file_path.clone())
@@ -138,17 +139,6 @@ fn last_piece_size(info_dict: &InfoDictionary) -> usize {
     let total_bytes: u64 = info_dict.files().map(|file| file.length() as u64).sum();
 
     (total_bytes % piece_length) as usize
-}
-
-fn build_path(parent_directory: Option<&str>, file: &File) -> String {
-    let parent_directory = parent_directory.unwrap_or(".");
-
-    file.paths().fold(parent_directory.to_string(), |mut acc, item| {
-        acc.push_str("/");
-        acc.push_str(item);
-
-        acc
-    })
 }
 
 // ----------------------------------------------------------------------------//
@@ -277,6 +267,12 @@ fn piece_is_complete(total_blocks: usize, last_block_size: usize, piece_length: 
 ///
 /// First message's block offset should come before (or at) the block offset of the second message.
 fn merge_piece_messages(message_a: &BlockMetadata, message_b: &BlockMetadata) -> Option<BlockMetadata> {
+    if message_a.info_hash() != message_b.info_hash() || message_a.piece_index() != message_b.piece_index() {
+        return None
+    }
+    let info_hash = *message_a.info_hash();
+    let piece_index = message_a.piece_index();
+
     // Check if the pieces overlap
     let start_a = message_a.block_offset();
     let end_a = start_a + message_a.block_length() as u64;
@@ -290,13 +286,83 @@ fn merge_piece_messages(message_a: &BlockMetadata, message_b: &BlockMetadata) ->
         let end_to_take = cmp::max(end_a, end_b);
         let length = end_to_take - start_a;
 
-        Some(BlockMetadata::with_default_hash(message_a.piece_index(), start_a, length as usize))
+        Some(BlockMetadata::new(info_hash, piece_index, start_a, length as usize))
     } else if start_a >= start_b && start_a <= end_b {
         let end_to_take = cmp::max(end_a, end_b);
         let length = end_to_take - start_b;
 
-        Some(BlockMetadata::with_default_hash(message_b.piece_index(), start_b, length as usize))
+        Some(BlockMetadata::new(info_hash, piece_index, start_b, length as usize))
     } else {
         None
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use memory::block::BlockMetadata;
+
+    use bip_util::bt;
+
+    #[test]
+    fn positive_merge_duplicate_messages() {
+        let metadata_a = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+
+        let merged = super::merge_piece_messages(&metadata_a, &metadata_a);
+
+        assert_eq!(metadata_a, merged.unwrap());
+    }
+
+    #[test]
+    fn negative_merge_duplicate_messages_diff_hash() {
+        let metadata_a = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+        let metadata_b = BlockMetadata::new([1u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+
+        let merged = super::merge_piece_messages(&metadata_a, &metadata_b);
+
+        assert_eq!(None, merged);
+    }
+
+    #[test]
+    fn negative_merge_duplicate_messages_diff_index() {
+        let metadata_a = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+        let metadata_b = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 1, 5, 5);
+
+        let merged = super::merge_piece_messages(&metadata_a, &metadata_b);
+
+        assert_eq!(None, merged);
+    }
+
+    #[test]
+    fn positive_merge_no_overlap_messages() {
+        let metadata_a = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+        let metadata_b = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 11, 5);
+
+        let merged = super::merge_piece_messages(&metadata_a, &metadata_b);
+
+        assert_eq!(None, merged);
+    }
+
+    #[test]
+    fn positive_merge_overlap_messages() {
+        let metadata_a = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+        let metadata_b = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 8, 5);
+
+        let merged = super::merge_piece_messages(&metadata_a, &metadata_b);
+        let expected = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 8);
+
+        assert_eq!(expected, merged.unwrap());
+    }
+
+    #[test]
+    fn positive_merge_neighbor_messages() {
+        let metadata_a = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 5);
+        let metadata_b = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 10, 5);
+
+        let merged = super::merge_piece_messages(&metadata_a, &metadata_b);
+        let expected = BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), 0, 5, 10);
+
+        assert_eq!(expected, merged.unwrap());
+    }
+
+
 }

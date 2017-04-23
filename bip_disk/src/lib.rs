@@ -10,7 +10,6 @@ extern crate tokio_core;
 mod disk;
 mod memory;
 mod error;
-mod token;
 
 pub use disk::{IDiskMessage, ODiskMessage};
 pub use disk::fs::FileSystem;

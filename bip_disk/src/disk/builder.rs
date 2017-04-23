@@ -2,7 +2,6 @@ use disk::fs::FileSystem;
 use disk::manager::{self, DiskManager};
 
 use futures_cpupool::Builder;
-use tokio_core::reactor::Handle;
 
 const DEFAULT_PENDING_SIZE:   usize = 10;
 const DEFAULT_COMPLETED_SIZE: usize = 10;

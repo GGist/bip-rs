@@ -1,11 +1,11 @@
 use std::cmp;
 use std::io;
 
-use error::{BlockResult};
 use disk::fs::{FileSystem};
 use memory::block::BlockMetadata;
+use disk::tasks::helpers;
 
-use bip_metainfo::{InfoDictionary, File};
+use bip_metainfo::{InfoDictionary};
 
 pub struct PieceAccessor<'a, F> {
     fs:        F,
@@ -58,7 +58,7 @@ impl<'a, F> PieceAccessor<'a, F> where F: FileSystem {
             bytes_to_access -= min_bytes_to_skip;
 
             if bytes_to_access > 0 && total_bytes_accessed < total_block_length {
-                let file_path = build_path(self.info_dict.directory(), file);
+                let file_path = helpers::build_path(self.info_dict.directory(), file);
                 let fs_file = try!(self.fs.open_file(file_path));
 
                 let total_max_bytes_to_access = total_block_length - total_bytes_accessed;
@@ -73,15 +73,4 @@ impl<'a, F> PieceAccessor<'a, F> where F: FileSystem {
 
         Ok(())
     }
-}
-
-fn build_path(parent_directory: Option<&str>, file: &File) -> String {
-    let parent_directory = parent_directory.unwrap_or(".");
-
-    file.paths().fold(parent_directory.to_string(), |mut acc, item| {
-        acc.push_str("/");
-        acc.push_str(item);
-
-        acc
-    })
 }

@@ -1,12 +1,8 @@
-use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-
 use disk::fs::FileSystem;
 use disk::{IDiskMessage, ODiskMessage};
 use disk::tasks::helpers::piece_checker::{PieceChecker, PieceCheckerState, PieceState};
 use disk::tasks::helpers::piece_accessor::PieceAccessor;
 use disk::tasks::context::DiskManagerContext;
-use token::Token;
 use memory::block::Block;
 use error::{TorrentResult, BlockResult, BlockError, BlockErrorKind, TorrentError, TorrentErrorKind};
 
@@ -15,7 +11,6 @@ use bip_util::bt::InfoHash;
 use futures::sink::Wait;
 use futures::sync::mpsc::Sender;
 use futures_cpupool::CpuPool;
-use tokio_core::reactor::Handle;
 
 pub mod context;
 mod helpers;
@@ -40,15 +35,15 @@ pub fn execute_on_pool<F>(msg: IDiskMessage, pool: &CpuPool, context: DiskManage
                     Err(err) => ODiskMessage::TorrentError(hash, err)
                 }
             },
-            IDiskMessage::LoadBlock(namespace, request, mut block) => {
+            IDiskMessage::LoadBlock(mut block) => {
                 match execute_load_block(&mut block, &context) {
-                    Ok(_)    => ODiskMessage::BlockLoaded(namespace, request, block),
+                    Ok(_)    => ODiskMessage::BlockLoaded(block),
                     Err(err) => ODiskMessage::BlockError(block, err)
                 }
             },
-            IDiskMessage::ProcessBlock(namespace, request, mut block) => {
+            IDiskMessage::ProcessBlock(mut block) => {
                 match execute_process_block(&mut block, &context, &mut blocking_sender) {
-                    Ok(_)    => ODiskMessage::BlockProcessed(namespace, request, block),
+                    Ok(_)    => ODiskMessage::BlockProcessed(block),
                     Err(err) => ODiskMessage::BlockError(block, err)
                 }
             }

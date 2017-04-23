@@ -22,8 +22,8 @@ fn main() {
     for out_msg in recv.wait() {
         match out_msg.unwrap() {
             ODiskMessage::TorrentAdded(hash) => println!("Torrent Added: {:?}", hash),
-            ODiskMessage::FoundGoodPiece(hash, index) => println!("Found {} As Good Piece", index),
-            ODiskMessage::TorrentError(hash, err) => println!("Got Torrent Error: {:?}", err),
+            ODiskMessage::FoundGoodPiece(_, index) => println!("Found {} As Good Piece", index),
+            ODiskMessage::TorrentError(_, err) => println!("Got Torrent Error: {:?}", err),
             _ => panic!("ASD")
         }
     }

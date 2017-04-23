@@ -6,14 +6,11 @@ use memory::inner::InnerBlock;
 
 use bip_util::bt::{self, InfoHash};
 use crossbeam::sync::TreiberStack;
-use futures::sync::mpsc::Sender;
-use futures::sink::{Sink, Wait};
-use futures::Future;
 
 //----------------------------------------------------------------------------//
 
 /// `BlockMetadata` which tracks metadata associated with a `Block` of memory.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub struct BlockMetadata {
     info_hash:    InfoHash,
     piece_index:  u64,
@@ -63,7 +60,9 @@ pub struct Block {
 }
 
 /// Create a new `Block` of memory from the given arguments.
-pub fn new_block(inner: InnerBlock, free: Arc<TreiberStack<InnerBlock>>) -> Block {
+pub fn new_block(mut inner: InnerBlock, free: Arc<TreiberStack<InnerBlock>>) -> Block {
+    inner.set_metadata(BlockMetadata::default());
+
     Block{ inner: inner, free: free }
 }
 
