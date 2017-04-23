@@ -8,6 +8,7 @@ use bip_metainfo::MetainfoFile;
 use futures::{Stream, Sink, Future};
 
 fn main() {
+    /*
     let metainfo_bytes = include_bytes!("C://Users//GG/Desktop//Test.torrent");
     let metainfo_file = MetainfoFile::from_bytes(&metainfo_bytes[..]).unwrap();
 
@@ -27,4 +28,5 @@ fn main() {
             _ => panic!("ASD")
         }
     }
+    */
 }
