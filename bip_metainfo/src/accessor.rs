@@ -50,8 +50,8 @@ impl<'a, T> Accessor for &'a T
 
 /// Accessor that pulls data in from the file system.
 pub struct FileAccessor {
-    absolute_path: PathBuf,
-    directory_name: Option<String>,
+    absolute_path:  PathBuf,
+    directory_name: Option<PathBuf>,
 }
 
 impl FileAccessor {
@@ -61,7 +61,9 @@ impl FileAccessor {
     {
         let absolute_path = try!(path.as_ref().canonicalize());
         let directory_name = if absolute_path.is_dir() {
-            Some(absolute_path.iter().last().unwrap().to_string_lossy().into_owned())
+            let dir_name: &Path = absolute_path.iter().last().unwrap().as_ref();
+
+            Some(dir_name.to_path_buf())
         } else {
             None
         };
@@ -93,7 +95,7 @@ impl<T> IntoAccessor for T
 
 impl Accessor for FileAccessor {
     fn access_directory(&self) -> Option<&Path> {
-        self.directory_name.as_ref().map(|s| &s[..])
+        self.directory_name.as_ref().map(|s| s.as_ref())
     }
 
     fn access_metadata<C>(&self, mut callback: C) -> io::Result<()>

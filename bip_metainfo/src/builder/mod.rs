@@ -158,6 +158,7 @@ impl<'a> MetainfoBuilder<'a> {
         let pieces = map_pieces_list(pieces_list.into_iter().map(|(_, piece)| piece));
 
         let mut single_file_name = String::new();
+        let access_owner = access_owner.access_directory().map(|path| path.to_string_lossy());
         // Move these here so they are destroyed before the info they borrow
         let mut root = self.root;
         let mut info = self.info;
@@ -167,8 +168,8 @@ impl<'a> MetainfoBuilder<'a> {
 
         // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
         // If the directory is not present but there are multiple files, the direcotry field will be set to empty
-        match (access_owner.access_directory(), files_info.len() > 1) {
-            (Some(directory), _) => {
+        match (&access_owner, files_info.len() > 1) {
+            (&Some(ref directory), _) => {
                 // Multi File
                 let bencode_files = Bencode::List(files_info.iter()
                     .map(|&(len, ref path)| {
@@ -181,10 +182,10 @@ impl<'a> MetainfoBuilder<'a> {
                     })
                     .collect());
 
-                info.insert(parse::NAME_KEY, ben_bytes!(directory));
+                info.insert(parse::NAME_KEY, ben_bytes!(directory.as_ref()));
                 info.insert(parse::FILES_KEY, bencode_files);
             }
-            (None, true) => {
+            (&None, true) => {
                 // Multi File
                 let bencode_files = Bencode::List(files_info.iter()
                     .map(|&(len, ref path)| {
@@ -200,7 +201,7 @@ impl<'a> MetainfoBuilder<'a> {
                 info.insert(parse::NAME_KEY, ben_bytes!(""));
                 info.insert(parse::FILES_KEY, bencode_files);
             }
-            (None, false) => {
+            (&None, false) => {
                 // Single File
                 for name_component in files_info[0].1.iter() {
                     single_file_name.push_str(name_component);
