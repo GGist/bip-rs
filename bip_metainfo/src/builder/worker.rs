@@ -244,7 +244,7 @@ mod tests {
 
     impl Accessor for MockAccessor {
         /// Access the directory that all files should be relative to.
-        fn access_directory(&self) -> Option<&str> {
+        fn access_directory(&self) -> Option<&Path> {
             panic!("Accessor::access_directory should not be called with MockAccessor...");
         }
 

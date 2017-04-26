@@ -16,7 +16,7 @@ pub trait IntoAccessor {
 /// Trait for accessing the data used to construct a torrent file.
 pub trait Accessor {
     /// Access the directory that all files should be relative to.
-    fn access_directory(&self) -> Option<&str>;
+    fn access_directory(&self) -> Option<&Path>;
 
     /// Access the metadata for all files including their length and path.
     fn access_metadata<C>(&self, callback: C) -> io::Result<()> where C: FnMut(u64, &Path);
@@ -29,7 +29,7 @@ pub trait Accessor {
 impl<'a, T> Accessor for &'a T
     where T: Accessor
 {
-    fn access_directory(&self) -> Option<&str> {
+    fn access_directory(&self) -> Option<&Path> {
         Accessor::access_directory(*self)
     }
 
@@ -50,8 +50,8 @@ impl<'a, T> Accessor for &'a T
 
 /// Accessor that pulls data in from the file system.
 pub struct FileAccessor {
-    absolute_path: PathBuf,
-    directory_name: Option<String>,
+    absolute_path:  PathBuf,
+    directory_name: Option<PathBuf>,
 }
 
 impl FileAccessor {
@@ -61,7 +61,9 @@ impl FileAccessor {
     {
         let absolute_path = try!(path.as_ref().canonicalize());
         let directory_name = if absolute_path.is_dir() {
-            Some(absolute_path.iter().last().unwrap().to_string_lossy().into_owned())
+            let dir_name: &Path = absolute_path.iter().last().unwrap().as_ref();
+
+            Some(dir_name.to_path_buf())
         } else {
             None
         };
@@ -92,8 +94,8 @@ impl<T> IntoAccessor for T
 }
 
 impl Accessor for FileAccessor {
-    fn access_directory(&self) -> Option<&str> {
-        self.directory_name.as_ref().map(|s| &s[..])
+    fn access_directory(&self) -> Option<&Path> {
+        self.directory_name.as_ref().map(|s| s.as_ref())
     }
 
     fn access_metadata<C>(&self, mut callback: C) -> io::Result<()>
@@ -169,7 +171,7 @@ impl<'a> IntoAccessor for DirectAccessor<'a> {
 }
 
 impl<'a> Accessor for DirectAccessor<'a> {
-    fn access_directory(&self) -> Option<&str> {
+    fn access_directory(&self) -> Option<&Path> {
         None
     }
 
