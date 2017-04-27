@@ -101,7 +101,6 @@ fn start_hash_master<A>(accessor: A,
                 try!(curr_piece_buffer.write_bytes(|buffer| piece_region.read(buffer))) == 0;
 
             if curr_piece_buffer.is_whole() {
-                println!("ASD");
                 work.push(WorkerMessage::HashPiece(piece_index, curr_piece_buffer));
 
                 piece_index += 1;
@@ -280,8 +279,7 @@ mod tests {
                                                            num_threads,
                                                            move |update| {
                                                                prog_send.send(update).unwrap();
-                                                           })
-            .unwrap();
+                                                           }).unwrap();
 
         let computed_pieces = accessor.as_slice()
             .chunks(piece_length)
