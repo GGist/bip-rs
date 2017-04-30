@@ -115,6 +115,8 @@ fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, 
         // Write Out Piece Out To The Filesystem And Recalculate The Diff
         block_result = piece_accessor.write_piece(&block, &metadata)
             .and_then(|_| {
+                checker_state.add_pending_block(metadata);
+                
                 PieceChecker::with_state(context.filesystem(), metainfo_file.info(), &mut checker_state)
                     .calculate_diff()
             });
@@ -140,6 +142,8 @@ fn send_piece_diff(checker_state: &mut PieceCheckerState, hash: InfoHash, blocki
         if let Some(out_msg) = opt_out_msg {
             blocking_sender.send(out_msg)
                 .expect("bip_disk: Failed To Send Piece State Message");
+            blocking_sender.flush()
+            .expect("bip_disk: Failed To Flush Piece State Message");
         }
     })
 }

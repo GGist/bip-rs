@@ -259,7 +259,7 @@ fn piece_is_complete(total_blocks: usize, last_block_size: usize, piece_length: 
     let is_last_block_length = messages.get(0)
         .map(|message| message.block_length() == last_block_size)
         .unwrap_or(false);
-
+    
     is_single_message && (is_piece_length || (is_last_block && is_last_block_length))
 }
 

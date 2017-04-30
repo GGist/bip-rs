@@ -1,5 +1,6 @@
 extern crate bip_metainfo;
 extern crate bip_disk;
+extern crate bip_util;
 extern crate futures;
 extern crate tokio_core;
 extern crate rand;
@@ -15,10 +16,11 @@ use bip_metainfo::{IntoAccessor, Accessor};
 use rand::Rng;
 
 mod add_torrent;
+mod complete_torrent;
 mod load_block;
 mod process_block;
 
-/// Buffer of size random bytes.
+/// Generate buffer of size random bytes.
 fn random_buffer(size: usize) -> Vec<u8> {
     let mut buffer = vec![0u8; size];
 
