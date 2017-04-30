@@ -16,6 +16,7 @@ use rand::Rng;
 
 mod add_torrent;
 mod load_block;
+mod process_block;
 
 /// Buffer of size random bytes.
 fn random_buffer(size: usize) -> Vec<u8> {

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use {MultiFileDirectAccessor, InMemoryFileSystem};
-use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem, BlockManager, BlockMetadata};
+use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockManager, BlockMetadata};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
 use tokio_core::reactor::{Core, Timeout};
 use futures::future::{self, Loop, Future};
@@ -43,11 +43,10 @@ fn positive_load_block() {
     let mut blocking_send = send.wait();
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file)).unwrap();
 
-    // Verify that zero pieces are marked as good
     let mut core = Core::new().unwrap();
     let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
         .then(|_| Err(()));
-    core.run(
+    let (pblock, lblock) = core.run(
         future::loop_fn((blocking_send, recv, Some(process_block), Some(load_block)), |(mut blocking_send, recv, opt_pblock, opt_lblock)| {
             recv.into_future()
             .map(move |(opt_msg, recv)| {
@@ -56,12 +55,11 @@ fn positive_load_block() {
                         blocking_send.send(IDiskMessage::ProcessBlock(opt_pblock.unwrap())).unwrap();
                         Loop::Continue((blocking_send, recv, None, opt_lblock))
                     },
-                    ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((blocking_send, recv, opt_pblock, opt_lblock)),
-                    ODiskMessage::BlockProcessed(_) => {
+                    ODiskMessage::BlockProcessed(block) => {
                         blocking_send.send(IDiskMessage::LoadBlock(opt_lblock.unwrap())).unwrap();
-                        Loop::Continue((blocking_send, recv, None, None))
-                    }
-                    ODiskMessage::BlockLoaded(lblock) => Loop::Break(lblock),
+                        Loop::Continue((blocking_send, recv, Some(block), None))
+                    },
+                    ODiskMessage::BlockLoaded(block) => Loop::Break((opt_pblock.unwrap(), block)),
                     unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
                 }
             })
@@ -71,14 +69,6 @@ fn positive_load_block() {
         .map(|(item, _)| item)
     ).unwrap_or_else(|_| panic!("Operation Failed Or Timed Out"));
     
-    // Verify block was updated in data_b
-    let mut received_file_b = filesystem.open_file(data_b.1).unwrap();
-    assert_eq!(2000, filesystem.file_size(&received_file_b).unwrap());
-
-    let mut recevied_file_b_data = vec![0u8; 2000];
-    assert_eq!(2000, filesystem.read_file(&mut received_file_b, 0, &mut recevied_file_b_data).unwrap());
-
-    let mut expected_file_b_data = vec![0u8; 2000];
-    (&mut expected_file_b_data[1..(1 + 50)]).copy_from_slice(&data_b.0[1..(50 + 1)]);
-    assert_eq!(expected_file_b_data, recevied_file_b_data);
+    // Verify lblock contains our data
+    assert_eq!(*pblock, *lblock);
 }

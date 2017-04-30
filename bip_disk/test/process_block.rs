@@ -28,32 +28,31 @@ fn positive_process_block() {
         .build(filesystem.clone());
 
     // Spin up a block manager for allocating blocks
-    let mut block_manager = BlockManager::new(1, 500).wait();
-    let mut block = block_manager.next().unwrap().unwrap();
+    let mut block_manager = BlockManager::new(2, 500).wait();
+
+    let mut process_block = block_manager.next().unwrap().unwrap();
     // Start at the second byte of data_b and write 50 bytes
-    block.set_metadata(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50));
+    process_block.set_metadata(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50));
     // Copy over the actual data from data_b
-    (&mut block[..50]).copy_from_slice(&data_b.0[1..(50 + 1)]);
+    (&mut process_block[..50]).copy_from_slice(&data_b.0[1..(50 + 1)]);
 
     let (send, recv) = disk_manager.split();
     let mut blocking_send = send.wait();
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file)).unwrap();
 
-    // Verify that zero pieces are marked as good
     let mut core = Core::new().unwrap();
     let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
         .then(|_| Err(()));
     core.run(
-        future::loop_fn((blocking_send, recv, Some(block)), |(mut blocking_send, recv, opt_block)| {
+        future::loop_fn((blocking_send, recv, Some(process_block)), |(mut blocking_send, recv, opt_pblock)| {
             recv.into_future()
             .map(move |(opt_msg, recv)| {
                 match opt_msg.unwrap() {
                     ODiskMessage::TorrentAdded(_) => {
-                        blocking_send.send(IDiskMessage::LoadBlock(opt_block.unwrap())).unwrap();
+                        blocking_send.send(IDiskMessage::ProcessBlock(opt_pblock.unwrap())).unwrap();
                         Loop::Continue((blocking_send, recv, None))
                     },
-                    ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((blocking_send, recv, opt_block)),
-                    ODiskMessage::BlockLoaded(_) => Loop::Break(()),
+                    ODiskMessage::BlockProcessed(_)    => Loop::Break(()),
                     unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
                 }
             })
@@ -62,7 +61,7 @@ fn positive_process_block() {
         .select(timeout)
         .map(|(item, _)| item)
     ).unwrap_or_else(|_| panic!("Operation Failed Or Timed Out"));
-
+    
     // Verify block was updated in data_b
     let mut received_file_b = filesystem.open_file(data_b.1).unwrap();
     assert_eq!(2000, filesystem.file_size(&received_file_b).unwrap());
