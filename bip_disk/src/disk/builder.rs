@@ -35,7 +35,7 @@ impl DiskManagerBuilder {
     }
 
     pub fn build<F>(self, fs: F) -> DiskManager<F>
-        where F: FileSystem {
+        where F: FileSystem + Send + Sync + 'static {
         manager::new_manager(self.pending_size, self.completed_size, fs, self.builder)
     }
 }

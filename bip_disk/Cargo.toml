@@ -13,7 +13,7 @@ keywords    = ["filesystem", "fs", "disk"]
 license     = "MIT/Apache-2.0"
 
 [dependencies]
-bip_metainfo    = { version = "0.7" }
+bip_metainfo    = { version = "0.9" }
 bip_util        = { version = "0.5" }
 crossbeam       = "0.2"
 futures         = "0.1"
@@ -21,5 +21,12 @@ futures-cpupool = "0.1"
 error-chain     = "0.7"
 tokio-core      = "0.1"
 
+[dev-dependencies]
+rand            = "0.3"
+
 [features]
-unstable = []
+unstable        = []
+
+[[test]]
+name            = "test"
+path            = "test/mod.rs"
