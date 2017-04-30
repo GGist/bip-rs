@@ -10,7 +10,7 @@ use error::{ParseError, ParseErrorKind, ParseResult};
 use iter::{Files, Pieces};
 
 /// Contains optional and required information for the torrent.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MetainfoFile {
     comment: Option<String>,
     announce: Option<String>,
@@ -96,14 +96,14 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
 // ----------------------------------------------------------------------------//
 
 /// Contains files and checksums for the torrent.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InfoDictionary {
     files:          Vec<File>,
     pieces:         Vec<[u8; sha::SHA_HASH_LEN]>,
     piece_len:      u64,
     is_private:     bool,
     // Present only for multi file torrents.
-    file_directory: Option<String>,
+    file_directory: Option<PathBuf>,
 }
 
 impl InfoDictionary {
@@ -117,8 +117,8 @@ impl InfoDictionary {
     /// If you want to check to see if this is a multi-file torrent, you should
     /// check whether or not this returns Some. Checking the number of files
     /// present is NOT the correct method.
-    pub fn directory(&self) -> Option<&str> {
-        self.file_directory.as_ref().map(|d| &d[..])
+    pub fn directory(&self) -> Option<&Path> {
+        self.file_directory.as_ref().map(|d| d.as_ref())
     }
 
     /// Length in bytes of each piece.
@@ -160,7 +160,10 @@ fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>)
     let piece_buffers = try!(allocate_pieces(pieces));
 
     if is_multi_file_torrent(info_dict) {
-        let file_directory = try!(parse::parse_name(info_dict)).to_owned();
+        let file_directory = try!(parse::parse_name(info_dict));
+        let mut file_directory_path = PathBuf::new();
+        file_directory_path.push(file_directory);
+
         let files_bencode = try!(parse::parse_files_list(info_dict));
 
         let mut files_list = Vec::with_capacity(files_bencode.len());
@@ -176,7 +179,7 @@ fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>)
             pieces: piece_buffers,
             piece_len: piece_len,
             is_private: is_private,
-            file_directory: Some(file_directory),
+            file_directory: Some(file_directory_path),
         })
     } else {
         let file = try!(File::as_single_file(info_dict));
@@ -220,7 +223,7 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 // ----------------------------------------------------------------------------//
 
 /// Contains information for a single file.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct File {
     len:    u64,
     path:   PathBuf,
@@ -372,7 +375,7 @@ mod tests {
         assert_eq!(metainfo_file.encoding(), encoding);
         assert_eq!(metainfo_file.creation_date, create_date);
 
-        assert_eq!(metainfo_file.info().directory(), directory);
+        assert_eq!(metainfo_file.info().directory(), directory.map(|d| d.as_ref()));
         assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap() as u64);
         assert_eq!(metainfo_file.info().is_private(), private.unwrap_or(0) == 1);
 

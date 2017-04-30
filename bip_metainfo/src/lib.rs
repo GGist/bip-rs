@@ -21,7 +21,7 @@
 //!         }).unwrap();
 //!         let file = MetainfoFile::from_bytes(&bytes).unwrap();
 //!
-//!         assert_eq!(file.info().directory(), Some("src"));
+//!         assert_eq!(file.info().directory(), Some("src".as_ref()));
 //!     }
 //! ```
 //!
