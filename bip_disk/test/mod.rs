@@ -19,6 +19,7 @@ mod add_torrent;
 mod complete_torrent;
 mod load_block;
 mod process_block;
+mod remove_torrent;
 
 /// Generate buffer of size random bytes.
 fn random_buffer(size: usize) -> Vec<u8> {
