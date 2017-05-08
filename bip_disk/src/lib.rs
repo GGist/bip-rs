@@ -25,3 +25,5 @@ pub use memory::block::{Block, BlockMetadata};
 pub mod fs {
     pub use disk::fs::native::{NativeFile, NativeFileSystem};
 }
+
+pub use bip_util::bt::InfoHash;

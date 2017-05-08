@@ -26,7 +26,7 @@ pub struct NativeFileSystem {
 }
 
 impl NativeFileSystem {
-    /// Initialize a new NativeFileSystem with the default directory set.
+    /// Initialize a new `NativeFileSystem` with the default directory set.
     pub fn with_directory<P>(default: P) -> NativeFileSystem
         where P: AsRef<Path> {
         NativeFileSystem{ current_dir: default.as_ref().to_path_buf() }

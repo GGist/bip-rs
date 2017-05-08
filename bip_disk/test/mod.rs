@@ -33,6 +33,9 @@ fn random_buffer(size: usize) -> Vec<u8> {
     buffer
 }
 
+/// Initiate a loop with the given core.
+fn core_loop<>() -> 
+
 //----------------------------------------------------------------------------//
 
 /// Allow us to mock out multi file torrents.
