@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
-use tokio_core::reactor::{Core, Timeout};
-use futures::future::{self, Loop, Future};
+use tokio_core::reactor::{Core};
+use futures::future::{Loop, Future};
 use futures::stream::Stream;
 use futures::sink::Sink;
 
@@ -33,23 +31,15 @@ fn positive_add_torrent() {
 
     // Verify that zero pieces are marked as good
     let mut core = Core::new().unwrap();
-    let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
-        .then(|_| Err(()));
-    let good_pieces = core.run(
-        future::loop_fn((0, recv), |(good, recv)| {
-            recv.into_future()
-            .map(move |(opt_msg, recv)| {
-                match opt_msg.unwrap() {
-                    ODiskMessage::TorrentAdded(_)      => Loop::Break(good),
-                    ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((good + 1, recv)),
-                    unexpected @ _                     => panic!("Unexpected Message: {:?}", unexpected)
-                }
-            })
-        })
-        .map_err(|_| ())
-        .select(timeout)
-        .map(|(item, _)| item)
-    ).unwrap_or_else(|_| panic!("Add Torrent Operation Failed Or Timed Out"));
+
+    // Run a core loop until we get the TorrentAdded message
+    let good_pieces = ::core_loop_with_timeout(&mut core, 100, (0, recv), |good_pieces, recv, msg| {
+        match msg {
+            ODiskMessage::TorrentAdded(_)      => Loop::Break(good_pieces),
+            ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((good_pieces + 1, recv)),
+            unexpected @ _                     => panic!("Unexpected Message: {:?}", unexpected)
+        }
+    });
 
     assert_eq!(0, good_pieces);
 

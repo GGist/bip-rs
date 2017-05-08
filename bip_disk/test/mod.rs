@@ -10,10 +10,14 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, Arc};
 use std::cmp;
+use std::time::Duration;
 
 use bip_disk::FileSystem;
 use bip_metainfo::{IntoAccessor, Accessor};
 use rand::Rng;
+use tokio_core::reactor::{Core, Timeout};
+use futures::future::{self, Loop, Future};
+use futures::stream::Stream;
 
 mod add_torrent;
 mod complete_torrent;
@@ -33,8 +37,35 @@ fn random_buffer(size: usize) -> Vec<u8> {
     buffer
 }
 
-/// Initiate a loop with the given core.
-fn core_loop<>() -> 
+/// Initiate a core loop with the given timeout, state, and closure.
+///
+/// Returns R or panics if an error occurred in the loop (including a timeout).
+fn core_loop_with_timeout<I, S, F, R>(core: &mut Core, timeout_ms: u64, state: (I, S), call: F) -> R
+    where F: FnMut(I, S, S::Item) -> Loop<R, (I, S)>,
+          S: Stream {
+    let timeout = Timeout::new(Duration::from_millis(timeout_ms), &core.handle())
+        .unwrap()
+        .then(|_| Err(()));
+
+    // Have to stick the call in our init state so that we transfer ownership between loops
+    core.run(
+        future::loop_fn((call, state), |(mut call, (init, stream))| {
+            stream.into_future()
+            .map(|(opt_msg, stream)| {
+                let msg = opt_msg
+                    .unwrap_or_else(|| panic!("End Of Stream Reached"));
+
+                match call(init, stream, msg) {
+                    Loop::Continue((init, stream)) => Loop::Continue((call, (init, stream))),
+                    Loop::Break(ret)               => Loop::Break(ret)
+                }
+            })
+        })
+        .map_err(|_| ())
+        .select(timeout)
+        .map(|(item, _)| item)
+    ).unwrap_or_else(|_| panic!("Core Loop Timed Out"))
+}
 
 //----------------------------------------------------------------------------//
 
