@@ -12,18 +12,21 @@ use std::sync::{Mutex, Arc};
 use std::cmp;
 use std::time::Duration;
 
-use bip_disk::FileSystem;
+use bip_disk::{FileSystem, IDiskMessage, BlockManager, BlockMetadata};
 use bip_metainfo::{IntoAccessor, Accessor};
+use bip_util::bt::InfoHash;
 use rand::Rng;
 use tokio_core::reactor::{Core, Timeout};
 use futures::future::{self, Loop, Future};
 use futures::stream::Stream;
+use futures::sink::{Sink, Wait};
 
 mod add_torrent;
 mod complete_torrent;
 mod load_block;
 mod process_block;
 mod remove_torrent;
+mod resume_torrent;
 
 /// Generate buffer of size random bytes.
 fn random_buffer(size: usize) -> Vec<u8> {
@@ -65,6 +68,21 @@ fn core_loop_with_timeout<I, S, F, R>(core: &mut Core, timeout_ms: u64, state: (
         .select(timeout)
         .map(|(item, _)| item)
     ).unwrap_or_else(|_| panic!("Core Loop Timed Out"))
+}
+
+/// Send block with the given metadata and entire data given.
+fn send_block<S, M>(blocking_send: &mut Wait<S>, data: &[u8], hash: InfoHash, piece_index: u64, block_offset: u64, block_len: usize, modify: M)
+    where S: Sink<SinkItem=IDiskMessage>, M: Fn(&mut [u8]) {
+    let mut block_manager = BlockManager::new(1, block_len).wait();
+
+    let mut block = block_manager.next().unwrap().unwrap();
+    block.set_metadata(BlockMetadata::new(hash, piece_index, block_offset, block_len));
+
+    (&mut block[..block_len]).copy_from_slice(data);
+
+    modify(&mut block[..]);
+
+    blocking_send.send(IDiskMessage::ProcessBlock(block)).unwrap_or_else(|_| panic!("Failed To Send Process Block Message"));
 }
 
 //----------------------------------------------------------------------------//

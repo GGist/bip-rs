@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockManager, BlockMetadata};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
-use tokio_core::reactor::{Core, Timeout};
-use futures::future::{self, Loop, Future};
+use tokio_core::reactor::{Core};
+use futures::future::{Loop};
 use futures::stream::Stream;
 use futures::sink::Sink;
 
@@ -35,27 +33,19 @@ fn positive_remove_torrent() {
 
     // Verify that zero pieces are marked as good
     let mut core = Core::new().unwrap();
-    let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
-        .then(|_| Err(()));
-    let (good_pieces, mut blocking_send, recv) = core.run(
-        future::loop_fn((recv, blocking_send, 0), |(recv, mut blocking_send, good)| {
-            recv.into_future()
-            .map(move |(opt_msg, recv)| {
-                match opt_msg.unwrap() {
-                    ODiskMessage::TorrentAdded(_)      => {
-                        blocking_send.send(IDiskMessage::RemoveTorrent(info_hash)).unwrap();
-                        Loop::Continue((recv, blocking_send, good))
-                    },
-                    ODiskMessage::TorrentRemoved(_)    => Loop::Break((good, blocking_send, recv)),
-                    ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((recv, blocking_send, good + 1)),
-                    unexpected @ _                     => panic!("Unexpected Message: {:?}", unexpected)
-                }
-            })
-        })
-        .map_err(|_| ())
-        .select(timeout)
-        .map(|(item, _)| item)
-    ).unwrap_or_else(|_| panic!("Add Torrent Operation Failed Or Timed Out"));
+
+    let (mut blocking_send, good_pieces, recv) = ::core_loop_with_timeout(&mut core, 100, ((blocking_send, 0), recv),
+        |(mut blocking_send, good_pieces), recv, msg| {
+            match msg {
+                ODiskMessage::TorrentAdded(_)      => {
+                    blocking_send.send(IDiskMessage::RemoveTorrent(info_hash)).unwrap();
+                    Loop::Continue(((blocking_send, good_pieces), recv))
+                },
+                ODiskMessage::TorrentRemoved(_)    => Loop::Break((blocking_send, good_pieces, recv)),
+                ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue(((blocking_send, good_pieces + 1), recv)),
+                unexpected @ _                     => panic!("Unexpected Message: {:?}", unexpected)
+            }
+    });
 
     assert_eq!(0, good_pieces);
 
@@ -70,20 +60,11 @@ fn positive_remove_torrent() {
 
     blocking_send.send(IDiskMessage::ProcessBlock(process_block)).unwrap();
 
-    let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
-        .then(|_| Err(()));
-    core.run(
-        future::loop_fn(recv, |recv| {
-            recv.into_future()
-            .map(move |(opt_msg, _)| {
-                match opt_msg.unwrap() {
-                    ODiskMessage::BlockError(_, _) => Loop::Break(()),
-                    unexpected @ _                 => panic!("Unexpected Message: {:?}", unexpected)
-                }
-            })
-        })
-        .map_err(|_| ())
-        .select(timeout)
-        .map(|(item, _)| item)
-    ).unwrap_or_else(|_| panic!("Process Block Operation Failed Or Timed Out"));
+    ::core_loop_with_timeout(&mut core, 100, ((), recv),
+        |_, _, msg| {
+            match msg {
+                ODiskMessage::BlockError(_, _) => Loop::Break(()),
+                unexpected @ _                 => panic!("Unexpected Message: {:?}", unexpected)
+            }
+    });
 }

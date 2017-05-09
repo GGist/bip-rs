@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockManager, BlockMetadata};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
-use tokio_core::reactor::{Core, Timeout};
-use futures::future::{self, Loop, Future};
+use tokio_core::reactor::{Core};
+use futures::future::{Loop};
 use futures::stream::Stream;
 use futures::sink::Sink;
 
@@ -44,30 +42,22 @@ fn positive_load_block() {
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file)).unwrap();
 
     let mut core = Core::new().unwrap();
-    let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
-        .then(|_| Err(()));
-    let (pblock, lblock) = core.run(
-        future::loop_fn((blocking_send, recv, Some(process_block), Some(load_block)), |(mut blocking_send, recv, opt_pblock, opt_lblock)| {
-            recv.into_future()
-            .map(move |(opt_msg, recv)| {
-                match opt_msg.unwrap() {
-                    ODiskMessage::TorrentAdded(_) => {
-                        blocking_send.send(IDiskMessage::ProcessBlock(opt_pblock.unwrap())).unwrap();
-                        Loop::Continue((blocking_send, recv, None, opt_lblock))
-                    },
-                    ODiskMessage::BlockProcessed(block) => {
-                        blocking_send.send(IDiskMessage::LoadBlock(opt_lblock.unwrap())).unwrap();
-                        Loop::Continue((blocking_send, recv, Some(block), None))
-                    },
-                    ODiskMessage::BlockLoaded(block) => Loop::Break((opt_pblock.unwrap(), block)),
-                    unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
-                }
-            })
-        })
-        .map_err(|_| ())
-        .select(timeout)
-        .map(|(item, _)| item)
-    ).unwrap_or_else(|_| panic!("Operation Failed Or Timed Out"));
+    let (pblock, lblock) = ::core_loop_with_timeout(&mut core, 100, ((blocking_send, Some(process_block), Some(load_block)), recv),
+        |(mut blocking_send, opt_pblock, opt_lblock), recv, msg| {
+            match msg {
+                ODiskMessage::TorrentAdded(_) => {
+                    blocking_send.send(IDiskMessage::ProcessBlock(opt_pblock.unwrap())).unwrap();
+                    Loop::Continue(((blocking_send, None, opt_lblock), recv))
+                },
+                ODiskMessage::BlockProcessed(block) => {
+                    blocking_send.send(IDiskMessage::LoadBlock(opt_lblock.unwrap())).unwrap();
+                    Loop::Continue(((blocking_send, Some(block), None), recv))
+                },
+                ODiskMessage::BlockLoaded(block) => Loop::Break((opt_pblock.unwrap(), block)),
+                unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
+            }
+        }
+    );
     
     // Verify lblock contains our data
     assert_eq!(*pblock, *lblock);

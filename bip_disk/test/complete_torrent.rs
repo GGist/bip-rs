@@ -1,11 +1,10 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
-use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockManager, BlockMetadata};
+use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
-use bip_util::bt::InfoHash;
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
 use futures::stream::Stream;
-use futures::sink::{Wait, Sink};
+use futures::sink::{Sink};
 
 #[test]
 fn positive_complete_torrent() {
@@ -51,18 +50,18 @@ fn positive_complete_torrent() {
     files_bytes.extend_from_slice(&data_b.0);
 
     // Send piece 0 with a bad last block
-    send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info_hash(), 0, 0, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info_hash(), 0, 500, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |bytes| { bytes[0] = !bytes[0]; });
+    ::send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info_hash(), 0, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info_hash(), 0, 500, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |bytes| { bytes[0] = !bytes[0]; });
 
     // Send piece 1 with good blocks
-    send_block(&mut blocking_send, &files_bytes[(1024 + 0)..(1024 + 500)], metainfo_file.info_hash(), 1, 0, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[(1024 + 500)..(1024 + 1000)], metainfo_file.info_hash(), 1, 500, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[(1024 + 1000)..(1024 + 1024)], metainfo_file.info_hash(), 1, 1000, 24, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(1024 + 0)..(1024 + 500)], metainfo_file.info_hash(), 1, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(1024 + 500)..(1024 + 1000)], metainfo_file.info_hash(), 1, 500, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(1024 + 1000)..(1024 + 1024)], metainfo_file.info_hash(), 1, 1000, 24, |_| ());
 
     // Send piece 2 with good blocks
-    send_block(&mut blocking_send, &files_bytes[(2048 + 0)..(2048 + 500)], metainfo_file.info_hash(), 2, 0, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[(2048 + 500)..(2048 + 975)], metainfo_file.info_hash(), 2, 500, 475, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(2048 + 0)..(2048 + 500)], metainfo_file.info_hash(), 2, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(2048 + 500)..(2048 + 975)], metainfo_file.info_hash(), 2, 500, 475, |_| ());
 
     // Verify that piece 0 is bad, but piece 1 and 2 are good
     let (recv, piece_zero_good, piece_one_good, piece_two_good) = ::core_loop_with_timeout(&mut core, 100, ((false, false, false, 0), recv),
@@ -100,9 +99,9 @@ fn positive_complete_torrent() {
     assert_eq!(true, piece_two_good);
 
     // Resend piece 0 with good blocks
-    send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info_hash(), 0, 0, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info_hash(), 0, 500, 500, |_| ());
-    send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info_hash(), 0, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info_hash(), 0, 500, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |_| ());
 
     /// Verify that piece 0 is now good
     let piece_zero_good = ::core_loop_with_timeout(&mut core, 100, ((false, 0), recv),
@@ -134,19 +133,4 @@ fn positive_complete_torrent() {
 
     // Assert whether or not piece was good
     assert_eq!(true, piece_zero_good);
-}
-
-/// Send block with the given metadata and entire data given.
-fn send_block<S, M>(blocking_send: &mut Wait<S>, data: &[u8], hash: InfoHash, piece_index: u64, block_offset: u64, block_len: usize, modify: M)
-    where S: Sink<SinkItem=IDiskMessage>, M: Fn(&mut [u8]) {
-    let mut block_manager = BlockManager::new(1, block_len).wait();
-
-    let mut block = block_manager.next().unwrap().unwrap();
-    block.set_metadata(BlockMetadata::new(hash, piece_index, block_offset, block_len));
-
-    (&mut block[..block_len]).copy_from_slice(data);
-
-    modify(&mut block[..]);
-
-    blocking_send.send(IDiskMessage::ProcessBlock(block)).unwrap_or_else(|_| panic!("Failed To Send Process Block Message"));
 }

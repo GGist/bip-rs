@@ -1,10 +1,8 @@
-use std::time::Duration;
-
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem, BlockManager, BlockMetadata};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
-use tokio_core::reactor::{Core, Timeout};
-use futures::future::{self, Loop, Future};
+use tokio_core::reactor::{Core};
+use futures::future::{Loop};
 use futures::stream::Stream;
 use futures::sink::Sink;
 
@@ -41,26 +39,18 @@ fn positive_process_block() {
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file)).unwrap();
 
     let mut core = Core::new().unwrap();
-    let timeout = Timeout::new(Duration::from_millis(100), &core.handle()).unwrap()
-        .then(|_| Err(()));
-    core.run(
-        future::loop_fn((blocking_send, recv, Some(process_block)), |(mut blocking_send, recv, opt_pblock)| {
-            recv.into_future()
-            .map(move |(opt_msg, recv)| {
-                match opt_msg.unwrap() {
-                    ODiskMessage::TorrentAdded(_) => {
-                        blocking_send.send(IDiskMessage::ProcessBlock(opt_pblock.unwrap())).unwrap();
-                        Loop::Continue((blocking_send, recv, None))
-                    },
-                    ODiskMessage::BlockProcessed(_)    => Loop::Break(()),
-                    unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
-                }
-            })
-        })
-        .map_err(|_| ())
-        .select(timeout)
-        .map(|(item, _)| item)
-    ).unwrap_or_else(|_| panic!("Operation Failed Or Timed Out"));
+    ::core_loop_with_timeout(&mut core, 100, ((blocking_send, Some(process_block)), recv),
+        |(mut blocking_send, opt_pblock), recv, msg| {
+            match msg {
+                ODiskMessage::TorrentAdded(_) => {
+                    blocking_send.send(IDiskMessage::ProcessBlock(opt_pblock.unwrap())).unwrap();
+                    Loop::Continue(((blocking_send, None), recv))
+                },
+                ODiskMessage::BlockProcessed(_) => Loop::Break(()),
+                unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
+            }
+        }
+    );
     
     // Verify block was updated in data_b
     let mut received_file_b = filesystem.open_file(data_b.1).unwrap();
