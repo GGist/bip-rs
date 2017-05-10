@@ -6,6 +6,9 @@ environment:
   - CRATE_DIR: bip_dht
     TARGET: i686-pc-windows-msvc
 
+  - CRATE_DIR: bip_disk
+    TARGET: i686-pc-windows-msvc
+
   - CRATE_DIR: bip_handshake
     TARGET: i686-pc-windows-msvc
 
