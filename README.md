@@ -9,7 +9,7 @@ A collection of crates for building applications using bittorrent technologies.
 
 ## Disk (bip_disk) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](https://docs.rs/bip_disk) [![Crate](http://meritbadge.herokuapp.com/bip_disk)](https://crates.io/crates/bip_disk)
 
-**About**: Disk management is all about storing/loading pieces to/from and object implementing the ```FileSystem``` interface, which means torrent storage could be transparently sent to disk, stored in memory, pushed to a distributed file system, or even uploaded to the cloud as pieces come in. In addition, notifications are sent when good or bad pieces are detected as soon as enough blocks are sent to the disk manager that make up a full piece.
+**About**: Disk management is all about storing/loading pieces to/from any object implementing the ```FileSystem``` interface, which means torrent storage could be transparently sent to disk, stored in memory, pushed to a distributed file system, or even uploaded to the cloud as pieces come in. In addition, notifications are sent when good or bad pieces are detected as soon as enough blocks are sent to the disk manager that make up a full piece.
 
 ## Handshake (bip_handshake) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](https://docs.rs/bip_handshake) [![Crate](http://meritbadge.herokuapp.com/bip_handshake)](https://crates.io/crates/bip_handshake)
 
