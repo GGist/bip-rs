@@ -6,16 +6,7 @@ rust:
 
 sudo: false
 
-addons:
-  apt:
-    packages:
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-
 env:
-  global:
-    - secure: Mjlxy0VaJeBRsLHMRCZ2S+L13l5REhI+1wmPayNfcDPRFFy8ZwGGY/M5Y3poBGEafqwSKsDhI7E0z4an2s/Wa941hn48dXi3We8HBcqlh3m3pkwFU56YlYjKXN161xgRCI899070P5R1gxNpjIOqk/3vCdi12DYSXPlU5sgMN6I=
   matrix:
     - CRATE_DIR=bip
     - CRATE_DIR=bip_bencode
@@ -33,17 +24,3 @@ env:
 branches:
   only:
     - master
-
-before_script:
-    - |
-        pip install 'travis-cargo<0.2' --user &&
-        export PATH=$HOME/.local/bin:$PATH
-
-script:
-  - cd $CRATE_DIR
-  - travis-cargo build
-  - travis-cargo test
-  - if [ $CRATE_DIR == "bip" ]; then
-    travis-cargo doc;
-    travis-cargo doc-upload;
-    fi
