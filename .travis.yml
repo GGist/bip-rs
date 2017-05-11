@@ -24,3 +24,6 @@ env:
 branches:
   only:
     - master
+
+before_script:
+  - cd $CRATE_DIR
