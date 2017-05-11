@@ -98,6 +98,7 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
 /// Contains files and checksums for the torrent.
 #[derive(Debug, Clone)]
 pub struct InfoDictionary {
+    name:           String,
     files:          Vec<File>,
     pieces:         Vec<[u8; sha::SHA_HASH_LEN]>,
     piece_len:      u64,
@@ -110,6 +111,11 @@ impl InfoDictionary {
     /// Builds the InfoDictionary from the root bencode of the metainfo file.
     fn new<'a>(info_dict: &Dictionary<'a, Bencode<'a>>) -> ParseResult<InfoDictionary> {
         parse_from_info_dictionary(info_dict)
+    }
+
+    /// Metainfo name.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Some file directory if this is a multi-file torrent, otherwise None.
@@ -153,6 +159,7 @@ impl InfoDictionary {
 /// Parses the given info dictionary and builds an InfoDictionary from it.
 fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>)
                                   -> ParseResult<InfoDictionary> {
+    let name = try!(parse::parse_name(info_dict));
     let piece_len = try!(parse::parse_piece_length(info_dict));
     let is_private = parse::parse_private(info_dict);
 
@@ -175,6 +182,7 @@ fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>)
         }
 
         Ok(InfoDictionary {
+            name: name.to_owned(),
             files: files_list,
             pieces: piece_buffers,
             piece_len: piece_len,
@@ -185,6 +193,7 @@ fn parse_from_info_dictionary<'a>(info_dict: &Dictionary<'a, Bencode<'a>>)
         let file = try!(File::as_single_file(info_dict));
 
         Ok(InfoDictionary {
+            name: name.to_owned(),
             files: vec![file],
             pieces: piece_buffers,
             piece_len: piece_len,
@@ -378,6 +387,13 @@ mod tests {
         assert_eq!(metainfo_file.info().directory(), directory.map(|d| d.as_ref()));
         assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap() as u64);
         assert_eq!(metainfo_file.info().is_private(), private.unwrap_or(0) == 1);
+
+        if let Some(d) = directory {
+            assert_eq!(metainfo_file.info().name(), d);
+        } else {
+            let (_, _, ref path) = files.as_ref().unwrap()[0];
+            assert_eq!(metainfo_file.info().name(), path.clone().unwrap()[0]);
+        }
 
         let pieces = pieces.unwrap();
         assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(),
