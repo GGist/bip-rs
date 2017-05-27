@@ -1,32 +1,36 @@
 [package]
-name        = "bip_peer"
-version     = "0.1.0"
-description = "Communication with bittorrent peers via peer wire protocol"
+name          = "bip_peer"
+version       = "0.1.0"
+description   = "Communication with bittorrent peers via peer wire protocol"
 
-authors     = ["Andrew <amiller4421@gmail.com>"]
+authors       = ["Andrew <amiller4421@gmail.com>"]
 
-homepage    = "https://github.com/GGist/bip-rs/bip_peer"
-repository  = "https://github.com/GGist/bip-rs/bip_peer"
+homepage      = "https://github.com/GGist/bip-rs"
+repository    = "https://github.com/GGist/bip-rs/tree/master/bip_peer"
+documentation = "https://docs.rs/bip_peer/"
 
-keywords    = ["peer", "wire", "protocol", "pwp", "bittorrent"]
+keywords      = ["peer", "wire", "protocol", "pwp", "bittorrent"]
 
-license     = "MIT/Apache-2.0"
+license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_handshake = { version = "0.4.0" }
-bip_metainfo  = { version = "0.5.0" }
-bip_util      = { version = "0.4.0" }
-byteorder     = "0.5.0"
-rotor         = "0.6.0"
-rotor-stream  = { git = "https://github.com/GGist/rotor-stream.git", branch = "reclaim_stream_socket" }
-nom           = "1.2.0"
-rand          = "0.3.0"
-chan          = "0.1.0"
-crossbeam     = "0.2.0"
-error-chain   = "0.7.0"
+bytes         = "0.4"
+byteorder     = "1.0"
+tokio-core    = "0.1"
+tokio-io      = "0.1"
+nom           = "3.0"
+
+#bip_handshake = { version = "0.4.0" }
+#bip_metainfo  = { version = "0.5.0" }
+#bip_util      = { version = "0.4.0" }
+#byteorder     = "0.5.0"
+#rotor         = "0.6.0"
+#rotor-stream  = { git = "https://github.com/GGist/rotor-stream.git", branch = "reclaim_stream_socket" }
+#nom           = "1.2.0"
+#rand          = "0.3.0"
+#chan          = "0.1.0"
+#crossbeam     = "0.2.0"
+#error-chain   = "0.7.0"
 
 [features]
 unstable = []
-
-[profile.release]
-panic = "abort"
