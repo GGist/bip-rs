@@ -1,6 +1,6 @@
 [package]
 name          = "bip_handshake"
-version       = "0.5.1"
+version       = "0.5.2"
 description   = "Common handshaking interface as well as a default handshake implementation"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -17,7 +17,7 @@ license       = "MIT/Apache-2.0"
 bip_util      = { version = "0.5" }
 bytes         = "0.4"
 futures       = "0.1"
-nom           = "2.1"
+nom           = "3.0"
 rand          = "0.3"
 tokio-core    = "0.1"
 tokio-io      = "0.1"
@@ -27,5 +27,5 @@ tokio-timer   = "0.1"
 unstable      = []
 
 [[test]]
-name = "test"
-path = "test/mod.rs"
+name          = "test"
+path          = "test/mod.rs"
