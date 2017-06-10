@@ -1,5 +1,3 @@
-//! Standard wire protocol message parsing and serializing.
-
 use std::borrow::ToOwned;
 use std::io::{self, Write};
 
@@ -10,6 +8,7 @@ use message;
 
 const BITS_PER_BYTE: u32 = 8;
 
+/// Message for notifying a peer of a piece that you have.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct HaveMessage {
     piece_index: u32,
@@ -20,7 +19,7 @@ impl HaveMessage {
         HaveMessage { piece_index: piece_index }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
+    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
         parse_have(bytes)
     }
 
@@ -43,6 +42,9 @@ fn parse_have(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
 
 // ----------------------------------------------------------------------------//
 
+/// Message for notifying a peer of all of the pieces you have.
+///
+/// This should be sent immediately after the handshake.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct BitFieldMessage {
     bytes: Vec<u8>,
@@ -60,7 +62,7 @@ impl BitFieldMessage {
         BitFieldMessage { bytes: vec![0u8; message::u32_to_usize(bytes_needed)] }
     }
 
-    pub fn from_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], BitFieldMessage> {
+    pub fn parse_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], BitFieldMessage> {
         parse_bitfield(bytes, message::u32_to_usize(len))
     }
 
@@ -72,6 +74,10 @@ impl BitFieldMessage {
 
         writer.write_all(&self.bytes)
     }
+
+    pub fn bitfield(&self) -> &[u8] {
+        &self.bytes[..]
+    }
 }
 
 fn parse_bitfield(bytes: &[u8], len: usize) -> IResult<&[u8], BitFieldMessage> {
@@ -80,6 +86,7 @@ fn parse_bitfield(bytes: &[u8], len: usize) -> IResult<&[u8], BitFieldMessage> {
 
 // ----------------------------------------------------------------------------//
 
+/// Message for requesting a block from a peer.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct RequestMessage {
     piece_index: u32,
@@ -96,7 +103,7 @@ impl RequestMessage {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
+    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
         parse_request(bytes)
     }
 
@@ -131,6 +138,10 @@ fn parse_request(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
 
 // ----------------------------------------------------------------------------//
 
+/// Message for sending a block to a peer.
+///
+/// This message is shallow, meaning it contains the initial message data,
+/// but the actual block should be sent to the peer after sending this message.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PieceMessage {
     piece_index: u32,
@@ -147,7 +158,7 @@ impl PieceMessage {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], PieceMessage> {
+    pub fn parse_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], PieceMessage> {
         parse_piece(bytes, message::u32_to_usize(len))
     }
 
@@ -175,16 +186,17 @@ impl PieceMessage {
 }
 
 fn parse_piece(bytes: &[u8], len: usize) -> IResult<&[u8], PieceMessage> {
-    chain!(bytes,
-        piece_index:  be_u32 ~
-        block_offset: be_u32 ~
-        block_length: value!(len) ,
-        || { PieceMessage::new(piece_index, block_offset, block_length) }
+    do_parse!(bytes,
+        piece_index:  be_u32       >>
+        block_offset: be_u32      >>
+        block_length: value!(len) >>
+        (PieceMessage::new(piece_index, block_offset, block_length))
     )
 }
 
 // ----------------------------------------------------------------------------//
 
+/// Message for cancelling a `RequestMessage` sent to a peer.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct CancelMessage {
     piece_index: u32,
@@ -201,7 +213,7 @@ impl CancelMessage {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], CancelMessage> {
+    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], CancelMessage> {
         parse_cancel(bytes)
     }
 

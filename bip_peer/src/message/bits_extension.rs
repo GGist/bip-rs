@@ -1,5 +1,3 @@
-//! Extended wire protocol message parsing and serializing.
-
 use std::io::{self, Write};
 
 use byteorder::{WriteBytesExt, BigEndian};
@@ -11,13 +9,16 @@ const PORT_MESSAGE_LEN: u32 = 3;
 
 const PORT_MESSAGE_ID: u8 = 9;
 
+/// Message for notifying a peer of the port the DHT is listening on.
+///
+/// Sent after the handshake if the corresponding extension bit is set.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub enum ExtensionType {
+pub enum BitsExtensionMessage {
     Port(PortMessage),
 }
 
-impl ExtensionType {
-    pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], ExtensionType> {
+impl BitsExtensionMessage {
+    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], BitsExtensionMessage> {
         parse_extension(bytes)
     }
 
@@ -25,15 +26,15 @@ impl ExtensionType {
         where W: Write
     {
         match self {
-            &ExtensionType::Port(msg) => msg.write_bytes(writer),
+            &BitsExtensionMessage::Port(msg) => msg.write_bytes(writer),
         }
     }
 }
 
-fn parse_extension(bytes: &[u8]) -> IResult<&[u8], ExtensionType> {
+fn parse_extension(bytes: &[u8]) -> IResult<&[u8], BitsExtensionMessage> {
     switch!(bytes, tuple!(be_u32, be_u8),
         (PORT_MESSAGE_LEN, PORT_MESSAGE_ID) => map!(
-            call!(PortMessage::from_bytes), |port| ExtensionType::Port(port)
+            call!(PortMessage::parse_bytes), |port| BitsExtensionMessage::Port(port)
         )
     )
 }
@@ -50,7 +51,7 @@ impl PortMessage {
         PortMessage { port: port }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
+    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
         parse_port(bytes)
     }
 
