@@ -1,7 +1,6 @@
-use std::collections::BTreeMap;
 use std::iter::ExactSizeIterator;
 
-use bip_bencode::Bencode;
+use bip_bencode::{BencodeMut, BMutAccess};
 use bip_util::sha::{self, ShaHash};
 use chrono::UTC;
 
@@ -53,8 +52,8 @@ pub enum PieceLength {
 
 /// Builder for generating a torrent file from some accessor.
 pub struct MetainfoBuilder<'a> {
-    root: BTreeMap<&'a [u8], Bencode<'a>>,
-    info: BTreeMap<&'a [u8], Bencode<'a>>,
+    root: BencodeMut<'a>,
+    info: BencodeMut<'a>,
     // Stored outside of root as some of the variants need the total
     // file sizes in order for the final piece length to be calculated.
     piece_length: PieceLength,
@@ -68,7 +67,9 @@ impl<'a> MetainfoBuilder<'a> {
 
     /// Set the main tracker that this torrent file points to.
     pub fn set_main_tracker(mut self, tracker_url: &'a str) -> MetainfoBuilder<'a> {
-        self.root.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url));
+        self.root.dict_mut()
+            .unwrap()
+            .insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url));
 
         self
     }
@@ -77,21 +78,27 @@ impl<'a> MetainfoBuilder<'a> {
     ///
     /// Defaults to the current time when the builder was created.
     pub fn set_creation_date(mut self, secs_epoch: i64) -> MetainfoBuilder<'a> {
-        self.root.insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch));
+        self.root.dict_mut()
+            .unwrap()
+            .insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch));
 
         self
     }
 
     /// Set a comment for the torrent file.
     pub fn set_comment(mut self, comment: &'a str) -> MetainfoBuilder<'a> {
-        self.root.insert(parse::COMMENT_KEY, ben_bytes!(comment));
+        self.root.dict_mut()
+            .unwrap()
+            .insert(parse::COMMENT_KEY, ben_bytes!(comment));
 
         self
     }
 
     /// Set the created by for the torrent file.
     pub fn set_created_by(mut self, created_by: &'a str) -> MetainfoBuilder<'a> {
-        self.root.insert(parse::CREATED_BY_KEY, ben_bytes!(created_by));
+        self.root.dict_mut()
+            .unwrap()
+            .insert(parse::CREATED_BY_KEY, ben_bytes!(created_by));
 
         self
     }
@@ -103,7 +110,9 @@ impl<'a> MetainfoBuilder<'a> {
         } else {
             0
         };
-        self.info.insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private));
+        self.info.dict_mut()
+            .unwrap()
+            .insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private));
 
         self
     }
@@ -163,59 +172,90 @@ impl<'a> MetainfoBuilder<'a> {
         let mut root = self.root;
         let mut info = self.info;
 
-        info.insert(parse::PIECE_LENGTH_KEY, ben_int!(piece_length as i64));
-        info.insert(parse::PIECES_KEY, ben_bytes!(&pieces));
+        {
+            let root_access = root.dict_mut().unwrap();
+            {
+                let info_access = info.dict_mut().unwrap();
 
-        // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
-        // If the directory is not present but there are multiple files, the direcotry field will be set to empty
-        match (&access_owner, files_info.len() > 1) {
-            (&Some(ref directory), _) => {
-                // Multi File
-                let bencode_files = Bencode::List(files_info.iter()
-                    .map(|&(len, ref path)| {
-                        let bencode_path = path.iter().map(|p| ben_bytes!(p)).collect();
+                info_access.insert(parse::PIECE_LENGTH_KEY, ben_int!(piece_length as i64));
+                info_access.insert(parse::PIECES_KEY, ben_bytes!(&pieces));
 
-                        ben_map! {
-                        parse::LENGTH_KEY => ben_int!(len as i64),
-                        parse::PATH_KEY   => Bencode::List(bencode_path)
+                // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
+                // If the directory is not present but there are multiple files, the direcotry field will be set to empty
+                match (&access_owner, files_info.len() > 1) {
+                    (&Some(ref directory), _) => {
+                        let mut bencode_files = BencodeMut::new_list();
+
+                        {
+                            let bencode_files_access = bencode_files.list_mut().unwrap();
+
+                            // Multi File
+                            for &(len, ref path) in files_info.iter() {
+                                let mut bencode_path = BencodeMut::new_list();
+
+                                {
+                                    let bencode_path_access = bencode_path.list_mut().unwrap();
+
+                                    for path_element in path.iter() {
+                                        bencode_path_access.push(ben_bytes!(path_element));
+                                    }
+                                }
+
+                                bencode_files_access.push(ben_map!{
+                                    parse::LENGTH_KEY => ben_int!(len as i64),
+                                    parse::PATH_KEY   => bencode_path
+                                });
+                            }
+                        }
+
+                        info_access.insert(parse::NAME_KEY, ben_bytes!(directory.as_ref()));
+                        info_access.insert(parse::FILES_KEY, bencode_files);
                     }
-                    })
-                    .collect());
+                    (&None, true) => {
+                        let mut bencode_files = BencodeMut::new_list();
 
-                info.insert(parse::NAME_KEY, ben_bytes!(directory.as_ref()));
-                info.insert(parse::FILES_KEY, bencode_files);
-            }
-            (&None, true) => {
-                // Multi File
-                let bencode_files = Bencode::List(files_info.iter()
-                    .map(|&(len, ref path)| {
-                        let bencode_path = path.iter().map(|p| ben_bytes!(p)).collect();
+                        {
+                            let bencode_files_access = bencode_files.list_mut().unwrap();
 
-                        ben_map! {
-                        parse::LENGTH_KEY => ben_int!(len as i64),
-                        parse::PATH_KEY   => Bencode::List(bencode_path)
+                            // Multi File
+                            for &(len, ref path) in files_info.iter() {
+                                let mut bencode_path = BencodeMut::new_list();
+
+                                {
+                                    let bencode_path_access = bencode_path.list_mut().unwrap();
+
+                                    for path_element in path.iter() {
+                                        bencode_path_access.push(ben_bytes!(path_element));
+                                    }
+                                }
+
+                                bencode_files_access.push(ben_map!{
+                                    parse::LENGTH_KEY => ben_int!(len as i64),
+                                    parse::PATH_KEY   => bencode_path
+                                });
+                            }
+                        }
+
+                        info_access.insert(parse::NAME_KEY, ben_bytes!(""));
+                        info_access.insert(parse::FILES_KEY, bencode_files);
                     }
-                    })
-                    .collect());
+                    (&None, false) => {
+                        // Single File
+                        for name_component in files_info[0].1.iter() {
+                            single_file_name.push_str(name_component);
+                        }
 
-                info.insert(parse::NAME_KEY, ben_bytes!(""));
-                info.insert(parse::FILES_KEY, bencode_files);
-            }
-            (&None, false) => {
-                // Single File
-                for name_component in files_info[0].1.iter() {
-                    single_file_name.push_str(name_component);
+                        info_access.insert(parse::LENGTH_KEY, ben_int!(files_info[0].0 as i64));
+                        info_access.insert(parse::NAME_KEY, ben_bytes!(&single_file_name));
+                    }
                 }
-
-                info.insert(parse::LENGTH_KEY, ben_int!(files_info[0].0 as i64));
-                info.insert(parse::NAME_KEY, ben_bytes!(&single_file_name));
             }
+            // Move the info dictionary into the root dictionary
+            root_access.insert(parse::INFO_KEY, info);
         }
-        // Move the info dictionary into the root dictionary
-        root.insert(parse::INFO_KEY, Bencode::Dict(info));
 
         // Return the bencoded root dictionary
-        Ok(Bencode::Dict(root).encode())
+        Ok(root.encode())
     }
 }
 
@@ -224,8 +264,8 @@ impl<'a> MetainfoBuilder<'a> {
 /// Generates a default MetainfoBuilder.
 fn generate_default_builder<'a>() -> MetainfoBuilder<'a> {
     let builder = MetainfoBuilder {
-        root: BTreeMap::new(),
-        info: BTreeMap::new(),
+        root: BencodeMut::new_dict(),
+        info: BencodeMut::new_dict(),
         piece_length: PieceLength::OptBalanced,
     };
     let default_creation_date = UTC::now().timestamp();
