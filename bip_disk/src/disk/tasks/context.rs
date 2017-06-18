@@ -48,16 +48,22 @@ impl<F> DiskManagerContext<F> {
         let prev_value = self.cur_pending.fetch_add(1, Ordering::SeqCst);
 
         if prev_value < self.max_pending {
+            info!("Submitted Work, Previous Pending Was {} New Pending Is {} Of Max {}", prev_value, prev_value + 1, self.max_pending);
+
             true
         } else {
             self.cur_pending.fetch_sub(1, Ordering::SeqCst);
+
+            info!("Failed To Submit Work, Pending Is {} Of Max {}", prev_value, self.max_pending);
 
             false
         }
     }
 
     pub fn complete_work(&self) {
-        self.cur_pending.fetch_sub(1, Ordering::SeqCst);
+        let prev_pending = self.cur_pending.fetch_sub(1, Ordering::SeqCst);
+
+        info!("Completed Work, Previous Pending Was {} New Pending Is {}", prev_pending, prev_pending - 1);
     }
 
     pub fn insert_torrent(&self, file: MetainfoFile, state: PieceCheckerState) -> bool {

@@ -110,6 +110,8 @@ fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, 
 
     let mut block_result = Ok(());
     let found_hash = context.update_torrent(info_hash, |metainfo_file, mut checker_state| {
+        info!("Processsing Block, Acquired Torrent Lock For {:?}", metainfo_file.info_hash());
+
         let piece_accessor = PieceAccessor::new(context.filesystem(), metainfo_file.info());
 
         // Write Out Piece Out To The Filesystem And Recalculate The Diff
@@ -122,6 +124,8 @@ fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, 
             });
 
         send_piece_diff(checker_state, metainfo_file.info_hash(), blocking_sender, false);
+
+        info!("Processsing Block, Released Torrent Lock For {:?}", metainfo_file.info_hash());
     });
 
     if found_hash {

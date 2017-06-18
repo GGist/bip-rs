@@ -1,10 +1,12 @@
 extern crate bip_metainfo;
 extern crate bip_util;
 extern crate crossbeam;
+#[macro_use]
+extern crate error_chain;
 extern crate futures;
 extern crate futures_cpupool;
 #[macro_use]
-extern crate error_chain;
+extern crate log;
 extern crate tokio_core;
 
 mod disk;

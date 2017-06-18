@@ -61,11 +61,19 @@ impl<F> Sink for DiskManagerSink<F> where F: FileSystem + Send + Sync + 'static 
     type SinkError = ();
 
     fn start_send(&mut self, item: IDiskMessage) -> StartSend<IDiskMessage, ()> {
+        info!("Starting Send For DiskManagerSink With IDiskMessage");
+
         if self.context.can_submit_work() {
+            info!("DiskManagerSink Ready For New Work");
+
             tasks::execute_on_pool(item, &self.pool, self.context.clone());
+
+            info!("DiskManagerSink Submitted Work To Pool");
 
             Ok(AsyncSink::Ready)
         } else {
+            info!("DiskManagerSink Not Ready For New Work");
+
             Ok(AsyncSink::NotReady(item))
         }
     }
@@ -92,6 +100,8 @@ impl Stream for DiskManagerStream {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<ODiskMessage>, ()> {
+        info!("Polling DiskManagerStream For ODiskMessage");
+
         self.recv.poll()
     }
 }
