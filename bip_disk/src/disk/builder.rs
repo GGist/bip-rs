@@ -21,19 +21,19 @@ impl DiskManagerBuilder {
     }
 
     /// Use a custom `Builder` for the `CpuPool`.
-    pub fn with_worker_config(&mut self, config: Builder) -> &mut DiskManagerBuilder {
+    pub fn with_worker_config(mut self, config: Builder) -> DiskManagerBuilder {
         self.builder = config;
         self
     }
 
     /// Specify the buffer size for pending `IDiskMessage`s.
-    pub fn with_pending_buffer_size(&mut self, size: usize) -> &mut DiskManagerBuilder {
+    pub fn with_pending_buffer_size(mut self, size: usize) -> DiskManagerBuilder {
         self.pending_size = size;
         self
     }
 
     /// Specify the buffer size for completed `ODiskMessage`s.
-    pub fn with_completed_buffer_size(&mut self, size: usize) -> &mut DiskManagerBuilder {
+    pub fn with_completed_buffer_size(mut self, size: usize) -> DiskManagerBuilder {
         self.completed_size = size;
         self
     }

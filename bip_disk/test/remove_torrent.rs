@@ -1,5 +1,5 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
-use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockManager, BlockMetadata};
+use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockMetadata, Block};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
@@ -49,14 +49,7 @@ fn positive_remove_torrent() {
 
     assert_eq!(0, good_pieces);
 
-    // Try to process a block for our removed torrent
-    let mut block_manager = BlockManager::new(1, 50).wait();
-
-    let mut process_block = block_manager.next().unwrap().unwrap();
-    // Start at the first byte of data_a and write 50 bytes
-    process_block.set_metadata(BlockMetadata::new(info_hash, 0, 0, 50));
-    // Copy over the actual data from data_a
-    (&mut process_block[..50]).copy_from_slice(&data_a.0[0..50]);
+    let process_block = Block::new(BlockMetadata::new(info_hash, 0, 0, 50), data_a.0[0..50].to_vec());
 
     blocking_send.send(IDiskMessage::ProcessBlock(process_block)).unwrap();
 

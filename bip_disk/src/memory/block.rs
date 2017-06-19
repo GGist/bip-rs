@@ -1,11 +1,6 @@
-use std::sync::{Arc};
-use std::mem;
 use std::ops::{Deref, DerefMut};
 
-use memory::inner::InnerBlock;
-
 use bip_util::bt::{self, InfoHash};
-use crossbeam::sync::TreiberStack;
 
 //----------------------------------------------------------------------------//
 
@@ -56,26 +51,19 @@ impl Default for BlockMetadata {
 /// `Block` of memory which is tracked by the underlying `MemoryManager`.
 #[derive(Debug)]
 pub struct Block {
-    inner: InnerBlock,
-    free:  Arc<TreiberStack<InnerBlock>>
-}
-
-/// Create a new `Block` of memory from the given arguments.
-pub fn new_block(mut inner: InnerBlock, free: Arc<TreiberStack<InnerBlock>>) -> Block {
-    inner.set_metadata(BlockMetadata::default());
-
-    Block{ inner: inner, free: free }
+    metadata:   BlockMetadata,
+    block_data: Vec<u8>
 }
 
 impl Block {
-    /// Access the metadata for the block.
-    pub fn metadata(&self) -> &BlockMetadata {
-        self.inner.metadata()
+    /// Create a new `Block`.
+    pub fn new(metadata: BlockMetadata, block_data: Vec<u8>) -> Block {
+        Block{ metadata: metadata, block_data: block_data }
     }
 
-    /// Set the metadata for the block.
-    pub fn set_metadata(&mut self, metadata: BlockMetadata) {
-        self.inner.set_metadata(metadata)
+    /// Access the metadata for the block.
+    pub fn metadata(&self) -> &BlockMetadata {
+        &self.metadata
     }
 }
 
@@ -83,21 +71,12 @@ impl Deref for Block {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
-        Deref::deref(&self.inner)
+        &self.block_data
     }
 }
 
 impl DerefMut for Block {
     fn deref_mut(&mut self) -> &mut [u8] {
-        DerefMut::deref_mut(&mut self.inner)
-    }
-}
-
-impl Drop for Block {
-    fn drop(&mut self) {
-        // Swap in an empty InnerBlock so we can push ours back to the stack
-        let inner = mem::replace(&mut self.inner, InnerBlock::new(0));
-
-        self.free.push(inner);
+        &mut self.block_data
     }
 }

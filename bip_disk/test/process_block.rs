@@ -1,5 +1,5 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
-use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem, BlockManager, BlockMetadata};
+use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem, BlockMetadata, Block};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
@@ -25,14 +25,7 @@ fn positive_process_block() {
     let disk_manager = DiskManagerBuilder::new()
         .build(filesystem.clone());
 
-    // Spin up a block manager for allocating blocks
-    let mut block_manager = BlockManager::new(2, 500).wait();
-
-    let mut process_block = block_manager.next().unwrap().unwrap();
-    // Start at the second byte of data_b and write 50 bytes
-    process_block.set_metadata(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50));
-    // Copy over the actual data from data_b
-    (&mut process_block[..50]).copy_from_slice(&data_b.0[1..(50 + 1)]);
+    let process_block = Block::new(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50), data_b.0[1..(50 + 1)].to_vec());
 
     let (send, recv) = disk_manager.split();
     let mut blocking_send = send.wait();

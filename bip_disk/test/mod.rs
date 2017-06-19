@@ -12,7 +12,7 @@ use std::sync::{Mutex, Arc};
 use std::cmp;
 use std::time::Duration;
 
-use bip_disk::{FileSystem, IDiskMessage, BlockManager, BlockMetadata};
+use bip_disk::{FileSystem, IDiskMessage, BlockMetadata, Block};
 use bip_metainfo::{IntoAccessor, Accessor};
 use bip_util::bt::InfoHash;
 use rand::Rng;
@@ -73,13 +73,8 @@ fn core_loop_with_timeout<I, S, F, R>(core: &mut Core, timeout_ms: u64, state: (
 /// Send block with the given metadata and entire data given.
 fn send_block<S, M>(blocking_send: &mut Wait<S>, data: &[u8], hash: InfoHash, piece_index: u64, block_offset: u64, block_len: usize, modify: M)
     where S: Sink<SinkItem=IDiskMessage>, M: Fn(&mut [u8]) {
-    let mut block_manager = BlockManager::new(1, block_len).wait();
-
-    let mut block = block_manager.next().unwrap().unwrap();
-    block.set_metadata(BlockMetadata::new(hash, piece_index, block_offset, block_len));
-
-    (&mut block[..block_len]).copy_from_slice(data);
-
+    let mut block = Block::new(BlockMetadata::new(hash, piece_index, block_offset, block_len), data.to_vec());
+    
     modify(&mut block[..]);
 
     blocking_send.send(IDiskMessage::ProcessBlock(block)).unwrap_or_else(|_| panic!("Failed To Send Process Block Message"));
