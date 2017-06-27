@@ -52,13 +52,13 @@ impl<F> FileSystem for FileHandleCache<F> where F: FileSystem {
         })
     }
 
-    fn sync_file<P>(&self, _path: P) -> io::Result<()>
+    fn sync_file<P>(&self, path: P) -> io::Result<()>
         where P: AsRef<Path> + Send + 'static {
         self.run_with_lock(|cache, _| {
             cache.clear()
         });
 
-        Ok(())
+        self.inner.sync_file(path)
     }
 
     fn file_size(&self, file: &Self::File) -> io::Result<u64> {
