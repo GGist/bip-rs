@@ -35,6 +35,12 @@ pub fn execute_on_pool<F>(msg: IDiskMessage, pool: &CpuPool, context: DiskManage
                     Err(err) => ODiskMessage::TorrentError(hash, err)
                 }
             },
+            IDiskMessage::SyncTorrent(hash) => {
+                match execute_sync_torrent(hash, &context) {
+                    Ok(_)    => ODiskMessage::TorrentSynced(hash),
+                    Err(err) => ODiskMessage::TorrentError(hash, err)
+                }
+            },
             IDiskMessage::LoadBlock(mut block) => {
                 match execute_load_block(&mut block, &context) {
                     Ok(_)    => ODiskMessage::BlockLoaded(block),
@@ -78,6 +84,28 @@ fn execute_remove_torrent<F>(hash: InfoHash, context: &DiskManagerContext<F>) ->
     where F: FileSystem {
     if context.remove_torrent(hash) {
         Ok(())
+    } else {
+        Err(TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound{ hash: hash }))
+    }
+}
+
+fn execute_sync_torrent<F>(hash: InfoHash, context: &DiskManagerContext<F>) -> TorrentResult<()>
+    where F: FileSystem {
+    let filesystem = context.filesystem();
+
+    let mut sync_result = Ok(());
+    let found_hash = context.update_torrent(hash, |metainfo_file, _| {
+        let opt_parent_dir = metainfo_file.info().directory();
+
+        for file in metainfo_file.info().files() {
+            let path = helpers::build_path(opt_parent_dir, file);
+
+            sync_result = filesystem.sync_file(path);
+        }
+    });
+
+    if found_hash {
+        Ok(try!(sync_result))
     } else {
         Err(TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound{ hash: hash }))
     }

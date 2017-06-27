@@ -11,6 +11,7 @@ mod benches {
     use std::fs;
 
     use bip_disk::fs::NativeFileSystem;
+    use bip_disk::fs_cache::FileHandleCache;
     use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, InfoHash, Block, BlockMetadata, FileSystem};
     use bip_metainfo::{DirectAccessor, MetainfoBuilder, MetainfoFile, PieceLength};
     use futures::stream::{self, Stream};
@@ -155,6 +156,51 @@ mod benches {
             let _ = fs::remove_dir_all(data_directory);
         }
         let filesystem = NativeFileSystem::with_directory(data_directory);
+
+        bench_process_file_with_fs(b, piece_length, block_length, file_length, filesystem);
+    }
+
+    #[bench]
+    fn bench_file_handle_cache_fs_1_mb_pieces_128_kb_blocks(b: &mut Bencher) {
+        let piece_length = 1 * 1024 * 1024;
+        let block_length = 128 * 1024;
+        let file_length = 2 * 1024 * 1024;
+        let data_directory = "target/bench_data/bench_native_fs_1_mb_pieces_128_kb_blocks";
+
+        if WIPE_DATA_DIR {
+            let _ = fs::remove_dir_all(data_directory);
+        }
+        let filesystem = FileHandleCache::new(NativeFileSystem::with_directory(data_directory), 1);
+
+        bench_process_file_with_fs(b, piece_length, block_length, file_length, filesystem);
+    }
+
+    #[bench]
+    fn bench_file_handle_cache_fs_1_mb_pieces_16_kb_blocks(b: &mut Bencher) {
+        let piece_length = 1 * 1024 * 1024;
+        let block_length = 16 * 1024;
+        let file_length = 2 * 1024 * 1024;
+        let data_directory = "target/bench_data/bench_native_fs_1_mb_pieces_16_kb_blocks";
+
+        if WIPE_DATA_DIR {
+            let _ = fs::remove_dir_all(data_directory);
+        }
+        let filesystem = FileHandleCache::new(NativeFileSystem::with_directory(data_directory), 1);
+
+        bench_process_file_with_fs(b, piece_length, block_length, file_length, filesystem);
+    }
+
+    #[bench]
+    fn bench_file_handle_cache_fs_1_mb_pieces_2_kb_blocks(b: &mut Bencher) {
+        let piece_length = 1 * 1024 * 1024;
+        let block_length = 2 * 1024;
+        let file_length = 2 * 1024 * 1024;
+        let data_directory = "target/bench_data/bench_native_fs_1_mb_pieces_2_kb_blocks";
+
+        if WIPE_DATA_DIR {
+            let _ = fs::remove_dir_all(data_directory);
+        }
+        let filesystem = FileHandleCache::new(NativeFileSystem::with_directory(data_directory), 1);
 
         bench_process_file_with_fs(b, piece_length, block_length, file_length, filesystem);
     }

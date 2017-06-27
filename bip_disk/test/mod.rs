@@ -170,18 +170,15 @@ impl FileSystem for InMemoryFileSystem {
         Ok(InMemoryFile{ path: file_path })
     }
 
+    fn sync_file<P>(&self, _path: P) -> io::Result<()>
+        where P: AsRef<Path> + Send + 'static {
+        Ok(())
+    }
+
     fn file_size(&self, file: &Self::File) -> io::Result<u64> {
         self.run_with_lock(|files| {
             files.get(&file.path)
                 .map(|file| file.len() as u64)
-                .ok_or(io::Error::new(io::ErrorKind::NotFound, "File Not Found"))
-        })
-    }
-
-    fn remove_file(&self, file: Self::File) -> io::Result<()> {
-        self.run_with_lock(|files| {
-            files.remove(&file.path)
-                .map(|_| ())
                 .ok_or(io::Error::new(io::ErrorKind::NotFound, "File Not Found"))
         })
     }

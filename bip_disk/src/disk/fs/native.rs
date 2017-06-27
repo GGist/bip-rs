@@ -9,14 +9,13 @@ use disk::fs::FileSystem;
 
 /// File that exists on disk.
 pub struct NativeFile {
-    file: File,
-    path: PathBuf,
+    file: File
 }
 
 impl NativeFile {
     /// Create a new NativeFile.
-    fn new(file: File, path: PathBuf) -> NativeFile {
-        NativeFile{ file: file, path: path }
+    fn new(file: File) -> NativeFile {
+        NativeFile{ file: file }
     }
 }
 
@@ -41,15 +40,16 @@ impl FileSystem for NativeFileSystem {
         let combine_path = combine_user_path(&path, &self.current_dir);
         let file = try!(create_new_file(&combine_path));
 
-        Ok(NativeFile::new(file, combine_path.into_owned()))
+        Ok(NativeFile::new(file))
+    }
+
+    fn sync_file<P>(&self, _path: P) -> io::Result<()>
+        where P: AsRef<Path> + Send + 'static {
+        Ok(())
     }
 
     fn file_size(&self, file: &NativeFile) -> io::Result<u64> {
         file.file.metadata().map(|metadata| metadata.len())
-    }
-
-    fn remove_file(&self, file: NativeFile) -> io::Result<()> {
-        fs::remove_file(&file.path)
     }
 
     fn read_file(&self, file: &mut NativeFile, offset: u64, buffer: &mut [u8]) -> io::Result<usize> {

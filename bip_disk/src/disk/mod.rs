@@ -18,8 +18,21 @@ pub enum IDiskMessage {
     AddTorrent(MetainfoFile),
     /// Message to remove a torrent from the disk manager.
     ///
-    /// Note, this will NOT remove any data from the `FileSystem`.
+    /// Note, this will NOT remove any data from the `FileSystem`,
+    /// and as an added convenience, this message will also trigger
+    /// a `IDiskMessage::SyncTorrent` message.
     RemoveTorrent(InfoHash),
+    /// Message to tell the `FileSystem` to sync the torrent.
+    ///
+    /// This message will trigger a call to `FileSystem::sync` for every
+    /// file in the torrent, so the semantics will differ depending on the
+    /// `FileSystem` in use.
+    ///
+    /// In general, if a torrent has finished downloading, but will be kept
+    /// in the `DiskManager` to, for example, seed the torrent, then this
+    /// message should be sent, otherwise, `IDiskMessage::RemoveTorrent` is
+    /// sufficient.
+    SyncTorrent(InfoHash),
     /// Message to load the given block in to memory.
     LoadBlock(Block),
     /// Message to process the given block and persist it.
@@ -34,8 +47,10 @@ pub enum ODiskMessage {
     /// Any good pieces already existing for the torrent will be sent
     /// as `FoundGoodPiece` messages BEFORE this message is sent.
     TorrentAdded(InfoHash),
-    /// Message indicating the the torrent has been removed.
+    /// Message indicating that the torrent has been removed.
     TorrentRemoved(InfoHash),
+    /// Message indicating that the torrent has been synced.
+    TorrentSynced(InfoHash),
     /// Message indicating that a good piece has been identified for
     /// the given torrent (hash), as well as the piece index.
     FoundGoodPiece(InfoHash, u64),

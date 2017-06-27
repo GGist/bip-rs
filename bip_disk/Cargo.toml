@@ -1,6 +1,6 @@
 [package]
 name             = "bip_disk"
-version          = "0.1.0"
+version          = "0.2.0"
 description      = "Bittorrent Infrastructure Project Disk Module"
 
 authors          = ["Andrew <amiller4421@gmail.com>"]
@@ -19,6 +19,7 @@ futures          = "0.1"
 futures-cpupool  = "0.1"
 error-chain      = "0.10"
 log              = "0.3"
+lru-cache        = "0.1"
 tokio-core       = "0.1"
 
 [dev-dependencies]
