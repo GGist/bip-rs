@@ -1,6 +1,7 @@
 use std::path::{Path};
 use std::io::{self};
 
+pub mod cache;
 pub mod native;
 
 /// Trait for performing operations on some file system.
@@ -16,11 +17,12 @@ pub trait FileSystem {
     fn open_file<P>(&self, path: P) -> io::Result<Self::File>
         where P: AsRef<Path> + Send + 'static;
 
+    /// Sync the file.
+    fn sync_file<P>(&self, path: P) -> io::Result<()>
+        where P: AsRef<Path> + Send + 'static;
+
     /// Get the size of the file in bytes.
     fn file_size(&self, file: &Self::File) -> io::Result<u64>;
-
-    /// Remove a given file from the file system.
-    fn remove_file(&self, file: Self::File) -> io::Result<()>;
 
     /// Read the contents of the file at the given offset.
     ///
@@ -42,12 +44,13 @@ impl<'a, F> FileSystem for &'a F where F: FileSystem {
         FileSystem::open_file(*self, path)
     }
 
-    fn file_size(&self, file: &Self::File) -> io::Result<u64> {
-        FileSystem::file_size(*self, file)
+    fn sync_file<P>(&self, path: P) -> io::Result<()>
+        where P: AsRef<Path> + Send + 'static {
+        FileSystem::sync_file(*self, path)
     }
 
-    fn remove_file(&self, file: Self::File) -> io::Result<()> {
-        FileSystem::remove_file(*self, file)
+    fn file_size(&self, file: &Self::File) -> io::Result<u64> {
+        FileSystem::file_size(*self, file)
     }
 
     fn read_file(&self, file: &mut Self::File, offset: u64, buffer: &mut [u8]) -> io::Result<usize> {
