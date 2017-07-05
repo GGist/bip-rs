@@ -4,9 +4,8 @@ use std::io::{self, Write};
 
 use nom::IResult;
 
-mod wire;
-
-pub use protocol::wire::PeerWireProtocol;
+pub mod null;
+pub mod wire;
 
 /// Trait for implementing a bittorrent protocol message.
 pub trait PeerProtocol {
@@ -19,4 +18,7 @@ pub trait PeerProtocol {
     /// Write a `ProtocolMessage` to the given writer.
     fn write_bytes<W>(&mut self, message: &Self::ProtocolMessage, writer: W) -> io::Result<()>
         where W: Write;
+
+    /// Retrieve how many bytes the message will occupy on the wire.
+    fn message_size(&mut self, message: &Self::ProtocolMessage) -> usize;
 }

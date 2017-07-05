@@ -142,19 +142,21 @@ fn parse_request(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
 ///
 /// This message is shallow, meaning it contains the initial message data,
 /// but the actual block should be sent to the peer after sending this message.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PieceMessage {
-    piece_index: u32,
+    piece_index:  u32,
     block_offset: u32,
     block_length: usize,
+    block:        Vec<u8>
 }
 
 impl PieceMessage {
-    pub fn new(piece_index: u32, block_offset: u32, block_length: usize) -> PieceMessage {
+    pub fn new(piece_index: u32, block_offset: u32, block_length: usize, block: Vec<u8>) -> PieceMessage {
         PieceMessage {
             piece_index: piece_index,
             block_offset: block_offset,
             block_length: block_length,
+            block: block
         }
     }
 
@@ -169,7 +171,9 @@ impl PieceMessage {
         try!(message::write_length_id_pair(&mut writer, actual_length, Some(message::PIECE_MESSAGE_ID)));
 
         try!(writer.write_u32::<BigEndian>(self.piece_index));
-        writer.write_u32::<BigEndian>(self.block_offset)
+        try!(writer.write_u32::<BigEndian>(self.block_offset));
+
+        writer.write_all(&self.block[..])
     }
 
     pub fn piece_index(&self) -> u32 {
@@ -183,14 +187,19 @@ impl PieceMessage {
     pub fn block_length(&self) -> usize {
         self.block_length
     }
+
+    pub fn block(&self) -> Vec<u8> {
+        self.block.clone()
+    }
 }
 
 fn parse_piece(bytes: &[u8], len: usize) -> IResult<&[u8], PieceMessage> {
     do_parse!(bytes,
-        piece_index:  be_u32       >>
+        piece_index:  be_u32      >>
         block_offset: be_u32      >>
         block_length: value!(len) >>
-        (PieceMessage::new(piece_index, block_offset, block_length))
+        block:        map!(take!(block_length), |bytes: &[u8]| bytes.to_vec()) >>
+        (PieceMessage::new(piece_index, block_offset, block_length, block))
     )
 }
 

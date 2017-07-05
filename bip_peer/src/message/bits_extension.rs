@@ -9,7 +9,7 @@ const PORT_MESSAGE_LEN: u32 = 3;
 
 const PORT_MESSAGE_ID: u8 = 9;
 
-/// Message for notifying a peer of the port the DHT is listening on.
+/// Enumeration of messages for `PeerWireProtocolMessage`, activated via `Extensions` bits.
 ///
 /// Sent after the handshake if the corresponding extension bit is set.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -29,6 +29,12 @@ impl BitsExtensionMessage {
             &BitsExtensionMessage::Port(msg) => msg.write_bytes(writer),
         }
     }
+
+    pub fn message_size(&self) -> usize {
+        match self {
+            &BitsExtensionMessage::Port(msg) => PORT_MESSAGE_LEN as usize
+        }
+    }
 }
 
 fn parse_extension(bytes: &[u8]) -> IResult<&[u8], BitsExtensionMessage> {
@@ -41,6 +47,7 @@ fn parse_extension(bytes: &[u8]) -> IResult<&[u8], BitsExtensionMessage> {
 
 // ----------------------------------------------------------------------------//
 
+/// Message for notifying a peer of our DHT port.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PortMessage {
     port: u16,

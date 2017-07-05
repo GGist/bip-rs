@@ -14,23 +14,15 @@ keywords      = ["peer", "wire", "protocol", "pwp", "bittorrent"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
+bip_util      = "0.5"
 bytes         = "0.4"
 byteorder     = "1.0"
+error-chain   = "0.9"
+futures       = "0.1"
 tokio-core    = "0.1"
 tokio-io      = "0.1"
-nom           = "3.0"
-
-#bip_handshake = { version = "0.4.0" }
-#bip_metainfo  = { version = "0.5.0" }
-#bip_util      = { version = "0.4.0" }
-#byteorder     = "0.5.0"
-#rotor         = "0.6.0"
-#rotor-stream  = { git = "https://github.com/GGist/rotor-stream.git", branch = "reclaim_stream_socket" }
-#nom           = "1.2.0"
-#rand          = "0.3.0"
-#chan          = "0.1.0"
-#crossbeam     = "0.2.0"
-#error-chain   = "0.7.0"
+tokio-timer   = "0.1"
+nom           = "3.1"
 
 [features]
 unstable = []

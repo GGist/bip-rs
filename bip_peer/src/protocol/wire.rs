@@ -28,4 +28,8 @@ impl<P> PeerProtocol for PeerWireProtocol<P> where P: PeerProtocol {
         where W: Write {
         message.write_bytes(writer, &mut self.ext_protocol)
     }
+
+    fn message_size(&mut self, message: &Self::ProtocolMessage) -> usize {
+        message.message_size(&mut self.ext_protocol)
+    }
 }
