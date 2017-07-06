@@ -1,7 +1,7 @@
 use std::io;
 use std::time::Duration;
 
-use tokio_timer::{Timer, TimeoutError, TimeoutStream, Sleep};
+use tokio_timer::{Timer, TimeoutError, Sleep};
 use futures::{Poll, Async, Future};
 use futures::stream::{Stream, Fuse};
 

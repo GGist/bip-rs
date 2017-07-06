@@ -7,6 +7,7 @@ use futures::sink::Sink;
 use futures::stream::Stream;
 use tokio_core::reactor::Handle;
 
+const DEFAULT_PEER_CAPACITY:             usize = 1000;
 const DEFAULT_SINK_BUFFER_CAPACITY:      usize = 100;
 const DEFAULT_STREAM_BUFFER_CAPACITY:    usize = 100;
 const DEFAULT_HEARTBEAT_INTERVAL_MILLIS: u64   = 1 * 60 * 1000;
@@ -15,6 +16,7 @@ const DEFAULT_HEARTBEAT_TIMEOUT_MILLIS:  u64   = 2 * 60 * 1000;
 /// Builder for configuring a `PeerManager`.
 #[derive(Copy, Clone)]
 pub struct PeerManagerBuilder {
+    peer:               usize,
     sink_buffer:        usize,
     stream_buffer:      usize,
     heartbeat_interval: Duration,
@@ -25,11 +27,18 @@ impl PeerManagerBuilder {
     /// Create a new `PeerManagerBuilder`.
     pub fn new() -> PeerManagerBuilder {
         PeerManagerBuilder {
+            peer:               DEFAULT_PEER_CAPACITY,
             sink_buffer:        DEFAULT_SINK_BUFFER_CAPACITY,
             stream_buffer:      DEFAULT_STREAM_BUFFER_CAPACITY,
             heartbeat_interval: Duration::from_millis(DEFAULT_HEARTBEAT_INTERVAL_MILLIS),
             heartbeat_timeout:  Duration::from_millis(DEFAULT_HEARTBEAT_TIMEOUT_MILLIS)
         }
+    }
+
+    /// Max number of peers we can manage.
+    pub fn with_peer_capacity(mut self, capacity: usize) -> PeerManagerBuilder {
+        self.peer = capacity;
+        self
     }
 
     /// Capacity of pending sent messages.
@@ -54,6 +63,11 @@ impl PeerManagerBuilder {
     pub fn with_heartbeat_timeout(mut self, timeout: Duration) -> PeerManagerBuilder {
         self.heartbeat_timeout = timeout;
         self
+    }
+
+    /// Retrieve the peer capacity.
+    pub fn peer_capacity(&self) -> usize {
+        self.peer
     }
 
     /// Retrieve the sink buffer capacity.

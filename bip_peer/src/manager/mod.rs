@@ -1,6 +1,8 @@
 use std::io;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::cmp;
+use std::time::Duration;
 
 use manager::builder::PeerManagerBuilder;
 use manager::peer_info::PeerInfo;
@@ -10,6 +12,7 @@ use futures::{StartSend, Poll, AsyncSink, Async};
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::sync::mpsc::{self, Sender, Receiver};
+use futures::task::{self as futures_task, Task};
 use tokio_core::reactor::Handle;
 use tokio_timer::{self, Timer};
 
@@ -22,12 +25,13 @@ mod task;
 
 /// Manages a set of peers with heartbeating heartbeating.
 pub struct PeerManager<P> where P: Sink + Stream {
-    handle: Handle,
-    timer:  Timer,
-    build:  PeerManagerBuilder,
-    send:   Sender<OPeerManagerMessage<P::Item>>,
-    peers:  HashMap<PeerInfo, Sender<IPeerManagerMessage<P>>>,
-    recv:   Receiver<OPeerManagerMessage<P::Item>>
+    handle:   Handle,
+    timer:    Timer,
+    build:    PeerManagerBuilder,
+    send:     Sender<OPeerManagerMessage<P::Item>>,
+    peers:    HashMap<PeerInfo, Sender<IPeerManagerMessage<P>>>,
+    recv:     Receiver<OPeerManagerMessage<P::Item>>,
+    opt_task: Option<Task>
 }
 
 impl<P> PeerManager<P>
@@ -37,11 +41,24 @@ impl<P> PeerManager<P>
           P::Item:     ManagedMessage {
     /// Create a new `PeerManager` from the given `PeerManagerBuilder`.
     pub fn from_builder(builder: PeerManagerBuilder, handle: Handle) -> PeerManager<P> {
+        // We use one timer for manager heartbeat intervals, and one for peer heartbeat timeouts
+        let maximum_timers = builder.peer_capacity() * 2;
+
+        // Figure out the right tick duration to get num slots of 2048.
+        // TODO: We could probably let users change this in the future...
+        let max_duration = cmp::max(builder.heartbeat_interval(), builder.heartbeat_timeout());
+        let tick_duration = Duration::from_millis(cmp::max(max_duration.as_secs() * 1000 / 2048, 1));
+        
         let timer = tokio_timer::wheel()
+            .tick_duration(tick_duration)
+            .max_capacity(maximum_timers)
+            .channel_capacity(maximum_timers)
+            .num_slots(2048)
             .build();
+        
         let (res_send, res_recv) = mpsc::channel(builder.stream_buffer_capacity());
 
-        PeerManager{ handle: handle, timer: timer, build: builder, send: res_send, peers: HashMap::new(), recv: res_recv }
+        PeerManager{ handle: handle, timer: timer, build: builder, send: res_send, peers: HashMap::new(), recv: res_recv, opt_task: None }
     }
 }
 
@@ -57,6 +74,12 @@ impl<P> Sink for PeerManager<P>
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         match item {
             IPeerManagerMessage::AddPeer(info, peer) => {
+                if self.peers.len() >= self.build.peer_capacity() {
+                    self.opt_task = Some(futures_task::current());
+
+                    return Ok(AsyncSink::NotReady(IPeerManagerMessage::AddPeer(info, peer)))
+                }
+
                 match self.peers.entry(info) {
                     Entry::Occupied(_) => Err(PeerManagerError::from_kind(PeerManagerErrorKind::PeerNotFound{ info: info })),
                     Entry::Vacant(vac) => {
@@ -110,20 +133,23 @@ impl<P> Stream for PeerManager<P>
                 match result {
                     Async::Ready(Some(OPeerManagerMessage::PeerRemoved(info))) => {
                         self.peers.remove(&info).unwrap_or_else(|| panic!("bip_peer: Received PeerRemoved Message With No Matching Peer In Map"));
+                        self.opt_task.take().map(|task| task.notify());
 
                         Async::Ready(Some(OPeerManagerMessage::PeerRemoved(info)))
                     },
                     Async::Ready(Some(OPeerManagerMessage::PeerDisconnect(info))) => {
                         self.peers.remove(&info).unwrap_or_else(|| panic!("bip_peer: Received PeerDisconnect Message With No Matching Peer In Map"));
+                        self.opt_task.take().map(|task| task.notify());
 
                         Async::Ready(Some(OPeerManagerMessage::PeerDisconnect(info)))
                     },
                     Async::Ready(Some(OPeerManagerMessage::PeerError(info, error))) => {
                         self.peers.remove(&info).unwrap_or_else(|| panic!("bip_peer: Received PeerError Message With No Matching Peer In Map"));
+                        self.opt_task.take().map(|task| task.notify());
 
                         Async::Ready(Some(OPeerManagerMessage::PeerError(info, error)))
-                    }
-                    other @ _ => other
+                    },
+                    other => other
                 }
             })
     }
