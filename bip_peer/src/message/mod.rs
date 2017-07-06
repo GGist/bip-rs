@@ -1,21 +1,28 @@
 //! Serializable and deserializable protocol messages.
+
+// Nom has lots of unused warnings atm, keep this here for now.
 #![allow(unused)]
 
 use std::io::{self, Write};
 
 use protocol::PeerProtocol;
+use manager::ManagedMessage;
 
 use byteorder::{WriteBytesExt, BigEndian};
 use nom::{IResult, be_u32, be_u8};
 
-const KEEP_ALIVE_MESSAGE_LEN:   u32 = 0;
-const CHOKE_MESSAGE_LEN:        u32 = 1;
-const UNCHOKE_MESSAGE_LEN:      u32 = 1;
-const INTERESTED_MESSAGE_LEN:   u32 = 1;
-const UNINTERESTED_MESSAGE_LEN: u32 = 1;
-const HAVE_MESSAGE_LEN:         u32 = 5;
-const REQUEST_MESSAGE_LEN:      u32 = 13;
-const CANCEL_MESSAGE_LEN:       u32 = 13;
+// TODO: Propogate failures to cast values to/from usize
+
+const KEEP_ALIVE_MESSAGE_LEN:    u32 = 0;
+const CHOKE_MESSAGE_LEN:         u32 = 1;
+const UNCHOKE_MESSAGE_LEN:       u32 = 1;
+const INTERESTED_MESSAGE_LEN:    u32 = 1;
+const UNINTERESTED_MESSAGE_LEN:  u32 = 1;
+const HAVE_MESSAGE_LEN:          u32 = 5;
+const BASE_BITFIELD_MESSAGE_LEN: u32 = 1;
+const REQUEST_MESSAGE_LEN:       u32 = 13;
+const BASE_PIECE_MESSAGE_LEN:    u32 = 9;
+const CANCEL_MESSAGE_LEN:        u32 = 13;
 
 const CHOKE_MESSAGE_ID:        u8 = 0;
 const UNCHOKE_MESSAGE_ID:      u8 = 1;
@@ -31,11 +38,13 @@ const MESSAGE_LENGTH_LEN_BYTES: usize = 4;
 
 mod bits_extension;
 mod standard;
+mod null;
 
 pub use message::bits_extension::{BitsExtensionMessage, PortMessage};
 pub use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
+pub use message::null::NullProtocolMessage;
 
-/// Enumeration of all `PeerWireMessage` types.
+/// Enumeration of messages for `PeerWireProtocol`.
 pub enum PeerWireProtocolMessage<P> where P: PeerProtocol {
     /// Message to keep the connection alive.
     KeepAlive,
@@ -70,7 +79,22 @@ pub enum PeerWireProtocolMessage<P> where P: PeerProtocol {
     ProtExtension(P::ProtocolMessage)
 }
 
-impl<P> PeerWireProtocolMessage<P> where P: PeerProtocol {
+impl<P> ManagedMessage for PeerWireProtocolMessage<P>
+    where P: PeerProtocol {
+    fn keep_alive() -> PeerWireProtocolMessage<P> {
+        PeerWireProtocolMessage::KeepAlive
+    }
+
+    fn is_keep_alive(&self) -> bool {
+        match self {
+            &PeerWireProtocolMessage::KeepAlive => true,
+            _                                   => false
+        }
+    }
+}
+
+impl<P> PeerWireProtocolMessage<P>
+    where P: PeerProtocol {
     pub fn parse_bytes<'a>(bytes: &'a [u8], ext_protocol: &mut P) -> IResult<&'a [u8], PeerWireProtocolMessage<P>> {
         parse_message(bytes, ext_protocol)
     }
@@ -92,6 +116,25 @@ impl<P> PeerWireProtocolMessage<P> where P: PeerProtocol {
             &PeerWireProtocolMessage::BitsExtension(ref ext) => ext.write_bytes(writer),
             &PeerWireProtocolMessage::ProtExtension(ref ext) => ext_protocol.write_bytes(ext, writer)
         }
+    }
+
+    pub fn message_size(&self, ext_protocol: &mut P) -> usize {
+        let message_specific_len = match self {
+            &PeerWireProtocolMessage::KeepAlive              => KEEP_ALIVE_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Choke                  => CHOKE_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::UnChoke                => UNCHOKE_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Interested             => INTERESTED_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::UnInterested           => UNINTERESTED_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Have(ref msg)          => HAVE_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::BitField(ref msg)      => BASE_BITFIELD_MESSAGE_LEN as usize + msg.bitfield().len(),
+            &PeerWireProtocolMessage::Request(ref msg)       => REQUEST_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Piece(ref msg)         => BASE_PIECE_MESSAGE_LEN as usize + msg.block().len(),
+            &PeerWireProtocolMessage::Cancel(ref msg)        => CANCEL_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::BitsExtension(ref ext) => ext.message_size(),
+            &PeerWireProtocolMessage::ProtExtension(ref ext) => ext_protocol.message_size(ext)
+        };
+
+        MESSAGE_LENGTH_LEN_BYTES + message_specific_len
     }
 }
 
