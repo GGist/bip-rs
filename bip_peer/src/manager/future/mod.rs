@@ -1,7 +1,7 @@
 use std::io;
 use std::time::Duration;
 
-use tokio_timer::{Timer, TimeoutError, TimeoutStream, Sleep};
+use tokio_timer::{Timer, TimeoutError, Sleep};
 use futures::{Poll, Async, Future};
 use futures::stream::{Stream, Fuse};
 
@@ -15,7 +15,7 @@ pub enum PersistentError {
 impl<T> From<TimeoutError<T>> for PersistentError {
     fn from(error: TimeoutError<T>) -> PersistentError {
         match error {
-            TimeoutError::Timer(_, _) => panic!("bip_peer: Timer Error In Peer Stream, Timer Capacity Is Probably Too Small..."),
+            TimeoutError::Timer(_, err) => panic!("bip_peer: Timer Error In Peer Stream, Timer Capacity Is Probably Too Small: {}", err),
             TimeoutError::TimedOut(_) => PersistentError::Timeout
         }
     }
