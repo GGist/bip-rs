@@ -22,6 +22,7 @@ use futures::stream::Stream;
 use futures::sink::{Sink, Wait};
 
 mod add_torrent;
+mod disk_manager_send_backpressure;
 mod complete_torrent;
 mod load_block;
 mod process_block;

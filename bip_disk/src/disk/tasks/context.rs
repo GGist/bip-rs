@@ -44,7 +44,7 @@ impl<F> DiskManagerContext<F> {
         &self.fs
     }
 
-    pub fn can_submit_work(&self) -> bool {
+    pub fn try_submit_work(&self) -> bool {
         let prev_value = self.cur_pending.fetch_add(1, Ordering::SeqCst);
 
         if prev_value < self.max_pending {
@@ -58,6 +58,10 @@ impl<F> DiskManagerContext<F> {
 
             false
         }
+    }
+
+    pub fn can_submit_work(&self) -> bool {
+        self.cur_pending.load(Ordering::SeqCst) < self.max_pending
     }
 
     pub fn complete_work(&self) {
