@@ -15,7 +15,7 @@ pub enum PersistentError {
 impl<T> From<TimeoutError<T>> for PersistentError {
     fn from(error: TimeoutError<T>) -> PersistentError {
         match error {
-            TimeoutError::Timer(_, _) => panic!("bip_peer: Timer Error In Peer Stream, Timer Capacity Is Probably Too Small..."),
+            TimeoutError::Timer(_, err) => panic!("bip_peer: Timer Error In Peer Stream, Timer Capacity Is Probably Too Small: {}", err),
             TimeoutError::TimedOut(_) => PersistentError::Timeout
         }
     }

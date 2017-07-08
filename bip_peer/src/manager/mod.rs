@@ -23,6 +23,9 @@ pub mod error;
 mod future;
 mod task;
 
+// We configure our tick duration based on this, could let users configure this in the future...
+const DEFAULT_TIMER_SLOTS: usize = 2048;
+
 /// Manages a set of peers with heartbeating heartbeating.
 pub struct PeerManager<P> where P: Sink + Stream {
     handle:   Handle,
@@ -43,17 +46,21 @@ impl<P> PeerManager<P>
     pub fn from_builder(builder: PeerManagerBuilder, handle: Handle) -> PeerManager<P> {
         // We use one timer for manager heartbeat intervals, and one for peer heartbeat timeouts
         let maximum_timers = builder.peer_capacity() * 2;
+        let pow_maximum_timers = if maximum_timers & (maximum_timers - 1) == 0 {
+            maximum_timers
+        } else {
+            maximum_timers.next_power_of_two()
+        };
 
         // Figure out the right tick duration to get num slots of 2048.
         // TODO: We could probably let users change this in the future...
         let max_duration = cmp::max(builder.heartbeat_interval(), builder.heartbeat_timeout());
-        let tick_duration = Duration::from_millis(cmp::max(max_duration.as_secs() * 1000 / 2048, 1));
-        
+        let tick_duration = Duration::from_millis(max_duration.as_secs() * 1000 / DEFAULT_TIMER_SLOTS + 1);
         let timer = tokio_timer::wheel()
             .tick_duration(tick_duration)
-            .max_capacity(maximum_timers)
-            .channel_capacity(maximum_timers)
-            .num_slots(2048)
+            .max_capacity(pow_maximum_timers + 1)
+            .channel_capacity(pow_maximum_timers)
+            .num_slots(DEFAULT_TIMER_SLOTS)
             .build();
         
         let (res_send, res_recv) = mpsc::channel(builder.stream_buffer_capacity());
