@@ -55,7 +55,7 @@ impl<P> PeerManager<P>
         // Figure out the right tick duration to get num slots of 2048.
         // TODO: We could probably let users change this in the future...
         let max_duration = cmp::max(builder.heartbeat_interval(), builder.heartbeat_timeout());
-        let tick_duration = Duration::from_millis(max_duration.as_secs() * 1000 / DEFAULT_TIMER_SLOTS + 1);
+        let tick_duration = Duration::from_millis(max_duration.as_secs() * 1000 / (DEFAULT_TIMER_SLOTS as u64) + 1);
         let timer = tokio_timer::wheel()
             .tick_duration(tick_duration)
             .max_capacity(pow_maximum_timers + 1)
