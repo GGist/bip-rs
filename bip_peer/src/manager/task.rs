@@ -75,6 +75,10 @@ pub fn run_peer<P>(peer: P, info: PeerInfo, o_send: Sender<OPeerManagerMessage<P
                             IPeerManagerMessage::SendMessage(p_info, mid, p_message))),
                             merged_stream
                         ))                                                              => Ok((merged_stream, Some(p_message), None, Some(OPeerManagerMessage::SentMessage(p_info, mid)), true)),
+                        Ok((Some(MergedItem::First(
+                            IPeerManagerMessage::RemovePeer(p_info))),
+                            merged_stream
+                        ))                                                              => Ok((merged_stream, None, None, Some(OPeerManagerMessage::PeerRemoved(p_info)), false)),
                         Ok((Some(MergedItem::Second(
                             peer_message)),
                             merged_stream
@@ -84,6 +88,11 @@ pub fn run_peer<P>(peer: P, info: PeerInfo, o_send: Sender<OPeerManagerMessage<P
                             peer_message)),
                             merged_stream
                         ))                                                               => Ok((merged_stream, Some(p_message), Some(peer_message), Some(OPeerManagerMessage::SentMessage(p_info, mid)), true)),
+                        Ok((Some(MergedItem::Both(
+                            IPeerManagerMessage::RemovePeer(p_info),
+                            peer_message)),
+                            merged_stream
+                        ))                                                               => Ok((merged_stream, None, Some(peer_message), Some(OPeerManagerMessage::PeerRemoved(p_info)), false)),
                         Ok((Some(_), _))                                                 => panic!("bip_peer: Peer Future Received Invalid Message From Peer Manager"),
                         Err((PeerError::ManagerHeartbeatInterval, merged_stream))        => Ok((merged_stream, Some(P::SinkItem::keep_alive()), None, None, true)),
                         // In this case, the manager and peer probably both disconnected at the same time? Treat as a manager disconnect.
