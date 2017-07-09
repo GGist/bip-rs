@@ -2,23 +2,52 @@ use disk::fs::FileSystem;
 use disk::{IDiskMessage, ODiskMessage};
 use disk::tasks;
 use disk::tasks::context::DiskManagerContext;
+use disk::builder::DiskManagerBuilder;
 
+use futures::task::{self, Task};
 use futures::sync::mpsc::{self, Receiver};
 use futures::{StartSend, Poll, Stream, Sink, AsyncSink, Async};
-use futures_cpupool::{Builder, CpuPool};
+use futures_cpupool::{CpuPool};
 
 /// `DiskManager` object which handles the storage of `Blocks` to the `FileSystem`.
 pub struct DiskManager<F> {
-    sink:   DiskManagerSink<F>,
-    stream: DiskManagerStream
+    pool:         CpuPool,
+    context:      DiskManagerContext<F>,
+    recv:         Receiver<ODiskMessage>,
+    max_capacity: usize,
+    cur_capacity: usize,
+    opt_task:     Option<Task>
 }
 
-pub fn new_manager<F>(pending_size: usize, completed_size: usize, fs: F, mut builder: Builder) -> DiskManager<F>
-    where F: FileSystem {
-    let (out_send, out_recv) = mpsc::channel(completed_size);
-    let context = DiskManagerContext::new(out_send, fs, pending_size);
+impl<F> DiskManager<F> {
+    fn try_submit_work(&mut self) -> bool {
+        let can_submit_work = self.cur_capacity < self.max_capacity;
 
-    DiskManager{ sink: DiskManagerSink::new(builder.create(), context), stream: DiskManagerStream::new(out_recv) }
+        if can_submit_work {
+            self.cur_capacity += 1;
+        }
+
+        can_submit_work
+    }
+
+    fn complete_work(&mut self) {
+        self.cur_capacity -= 1;
+    }
+}
+
+impl<F> DiskManager<F> {
+    /// Create a `DiskManager` from the given `DiskManagerBuilder`.
+    pub fn from_builder(mut builder: DiskManagerBuilder, fs: F) -> DiskManager<F> {
+        let sink_capacity = builder.sink_buffer_capacity();
+        let stream_capacity = builder.stream_buffer_capacity();
+        let pool_builder = builder.worker_config();
+
+        let (out_send, out_recv) = mpsc::channel(stream_capacity);
+        let context = DiskManagerContext::new(out_send, fs);
+
+        DiskManager{ pool: pool_builder.create(), context: context, recv: out_recv,
+                     max_capacity: sink_capacity, cur_capacity: 0, opt_task: None }
+    }
 }
 
 impl<F> Sink for DiskManager<F> where F: FileSystem + Send + Sync + 'static {
@@ -26,53 +55,17 @@ impl<F> Sink for DiskManager<F> where F: FileSystem + Send + Sync + 'static {
     type SinkError = ();
 
     fn start_send(&mut self, item: IDiskMessage) -> StartSend<IDiskMessage, ()> {
-        self.sink.start_send(item)
-    }
-    
-    fn poll_complete(&mut self) -> Poll<(), ()> {
-        self.sink.poll_complete()
-    }
-}
-
-impl<F> Stream for DiskManager<F> {
-    type Item = ODiskMessage;
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Option<ODiskMessage>, ()> {
-        self.stream.poll()
-    }
-}
-
-//----------------------------------------------------------------------------//
-
-pub struct DiskManagerSink<F> {
-    pool:    CpuPool,
-    context: DiskManagerContext<F>
-}
-
-impl<F> DiskManagerSink<F> {
-    fn new(pool: CpuPool, context: DiskManagerContext<F>) -> DiskManagerSink<F> {
-        DiskManagerSink{ pool: pool, context: context }
-    }
-}
-
-impl<F> Sink for DiskManagerSink<F> where F: FileSystem + Send + Sync + 'static {
-    type SinkItem = IDiskMessage;
-    type SinkError = ();
-
-    fn start_send(&mut self, item: IDiskMessage) -> StartSend<IDiskMessage, ()> {
         info!("Starting Send For DiskManagerSink With IDiskMessage");
 
-        if self.context.can_submit_work() {
+        if self.try_submit_work() {
             info!("DiskManagerSink Ready For New Work");
-
             tasks::execute_on_pool(item, &self.pool, self.context.clone());
-
             info!("DiskManagerSink Submitted Work To Pool");
 
             Ok(AsyncSink::Ready)
         } else {
             info!("DiskManagerSink Not Ready For New Work");
+            self.opt_task = Some(task::current());
 
             Ok(AsyncSink::NotReady(item))
         }
@@ -83,25 +76,27 @@ impl<F> Sink for DiskManagerSink<F> where F: FileSystem + Send + Sync + 'static 
     }
 }
 
-//----------------------------------------------------------------------------//
-
-pub struct DiskManagerStream {
-    recv: Receiver<ODiskMessage>
-}
-
-impl DiskManagerStream {
-    fn new(recv: Receiver<ODiskMessage>) -> DiskManagerStream {
-        DiskManagerStream{ recv: recv }
-    }
-}
-
-impl Stream for DiskManagerStream {
+impl<F> Stream for DiskManager<F> {
     type Item = ODiskMessage;
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<ODiskMessage>, ()> {
         info!("Polling DiskManagerStream For ODiskMessage");
 
-        self.recv.poll()
+        match self.recv.poll() {
+            res @ Ok(Async::Ready(Some(ODiskMessage::TorrentAdded(_)))) |
+            res @ Ok(Async::Ready(Some(ODiskMessage::TorrentRemoved(_)))) |
+            res @ Ok(Async::Ready(Some(ODiskMessage::TorrentSynced(_)))) |
+            res @ Ok(Async::Ready(Some(ODiskMessage::BlockLoaded(_)))) |
+            res @ Ok(Async::Ready(Some(ODiskMessage::BlockProcessed(_)))) => {
+                self.complete_work();
+
+                info!("Notifying DiskManager That We Can Submit More Work");
+                self.opt_task.take().map(|task| task.notify());
+
+                res
+            },
+            other => other
+        }
     }
 }
