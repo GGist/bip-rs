@@ -10,7 +10,7 @@ use futures::stream::Stream;
 use tokio_core::reactor::Core;
 
 #[test]
-fn positive_peer_backpressure() {
+fn positive_peer_manager_send_backpressure() {
     let mut core = Core::new().unwrap();
     let manager = PeerManagerBuilder::new()
         .with_peer_capacity(1)

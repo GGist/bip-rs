@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use message::NullProtocolMessage;
 use protocol::PeerProtocol;
 
-use nom::{IResult, ErrorKind};
+use bytes::Bytes;
 
 /// Null protocol which will return an error if called.
 ///
@@ -25,8 +25,12 @@ impl NullProtocol {
 impl PeerProtocol for NullProtocol {
     type ProtocolMessage = NullProtocolMessage;
 
-    fn parse_bytes<'a>(&mut self, _bytes: &'a [u8]) -> IResult<&'a [u8], Self::ProtocolMessage> {
-        IResult::Error(ErrorKind::Custom(0))
+    fn bytes_needed(&mut self, _bytes: &[u8]) -> io::Result<Option<usize>> {
+        Ok(Some(0))
+    }
+
+    fn parse_bytes(&mut self, _bytes: Bytes) -> io::Result<Self::ProtocolMessage> {
+        Err(io::Error::new(io::ErrorKind::Other, "Attempted To Parse Bytes As Null Protocol"))
     }
 
     fn write_bytes<W>(&mut self, _message: &Self::ProtocolMessage, _writer: W) -> io::Result<()>

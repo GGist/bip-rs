@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+use bytes::Bytes;
 use byteorder::{WriteBytesExt, BigEndian};
 use nom::{IResult, be_u32, be_u8, be_u16};
 
@@ -18,7 +19,7 @@ pub enum BitsExtensionMessage {
 }
 
 impl BitsExtensionMessage {
-    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], BitsExtensionMessage> {
+    pub fn parse_bytes(_input: (), bytes: Bytes) -> IResult<(), io::Result<BitsExtensionMessage>> {
         parse_extension(bytes)
     }
 
@@ -37,10 +38,13 @@ impl BitsExtensionMessage {
     }
 }
 
-fn parse_extension(bytes: &[u8]) -> IResult<&[u8], BitsExtensionMessage> {
-    switch!(bytes, tuple!(be_u32, be_u8),
+fn parse_extension(mut bytes: Bytes) -> IResult<(), io::Result<BitsExtensionMessage>> {
+    let header_bytes = bytes.clone();
+
+    switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, be_u8)),
         (PORT_MESSAGE_LEN, PORT_MESSAGE_ID) => map!(
-            call!(PortMessage::parse_bytes), |port| BitsExtensionMessage::Port(port)
+            call!(PortMessage::parse_bytes, bytes.split_off(message::HEADER_LEN)),
+            |res_port| res_port.map(|port| BitsExtensionMessage::Port(port))
         )
     )
 }
@@ -58,8 +62,12 @@ impl PortMessage {
         PortMessage { port: port }
     }
 
-    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
-        parse_port(bytes)
+    pub fn parse_bytes(_input: (), bytes: Bytes) -> IResult<(), io::Result<PortMessage>> {
+        match parse_port(bytes.as_ref()) {
+            IResult::Done(_, result)  => IResult::Done((), Ok(result)),
+            IResult::Error(err)       => IResult::Error(err),
+            IResult::Incomplete(need) => IResult::Incomplete(need)
+        }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
