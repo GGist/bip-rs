@@ -101,8 +101,8 @@ mod benches {
         let info_hash = metainfo.info_hash();
 
         let disk_manager = DiskManagerBuilder::new()
-            .with_pending_buffer_size(1000000)
-            .with_completed_buffer_size(1000000)
+            .with_sink_buffer_capacity(1000000)
+            .with_stream_buffer_capacity(1000000)
             .build(fs);
 
         let (d_send, d_recv) = disk_manager.split();
