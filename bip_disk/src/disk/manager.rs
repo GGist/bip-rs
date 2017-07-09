@@ -65,12 +65,10 @@ impl<F> Stream for DiskManager<F> {
 
     fn poll(&mut self) -> Poll<Option<ODiskMessage>, ()> {
         info!("Polling DiskManagerStream For ODiskMessage");
+        info!("Notifying DiskManager That We Can Submit More Work");
 
-        if self.context.can_submit_work() {
-            info!("Notifying DiskManager That We Can Submit More Work");
-
-            self.opt_task.take().map(|task| task.notify());
-        }
+        // TODO: Should only do this for certain message types
+        self.opt_task.take().map(|task| task.notify());
         
         self.recv.poll()
     }

@@ -60,10 +60,6 @@ impl<F> DiskManagerContext<F> {
         }
     }
 
-    pub fn can_submit_work(&self) -> bool {
-        self.cur_pending.load(Ordering::SeqCst) < self.max_pending
-    }
-
     pub fn complete_work(&self) {
         let prev_pending = self.cur_pending.fetch_sub(1, Ordering::SeqCst);
 
