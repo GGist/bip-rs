@@ -59,8 +59,7 @@ pub fn execute_on_pool<F>(msg: IDiskMessage, pool: &CpuPool, context: DiskManage
             .expect("bip_disk: Failed To Send Out Message In execute_on_pool");
         blocking_sender.flush()
             .expect("bip_disk: Failed to Flush Out Messages In execute_on_pool");
-
-        context.complete_work();
+        
         Ok::<(),()>(())
     }).forget()
 }

@@ -1,5 +1,4 @@
 use std::sync::{Arc, RwLock, Mutex};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::collections::HashMap;
 
 use disk::ODiskMessage;
@@ -14,9 +13,7 @@ use futures::sink::Wait;
 pub struct DiskManagerContext<F> {
     torrents:    Arc<RwLock<HashMap<InfoHash, Mutex<MetainfoState>>>>,
     out:         Sender<ODiskMessage>,
-    fs:          Arc<F>,
-    cur_pending: Arc<AtomicUsize>,
-    max_pending: usize
+    fs:          Arc<F>
 }
 
 pub struct MetainfoState {
@@ -31,9 +28,8 @@ impl MetainfoState {
 }
 
 impl<F> DiskManagerContext<F> {
-    pub fn new(out: Sender<ODiskMessage>, fs: F, max_pending: usize) -> DiskManagerContext<F> {
-        DiskManagerContext{ torrents: Arc::new(RwLock::new(HashMap::new())), out: out, fs: Arc::new(fs),
-                            cur_pending: Arc::new(AtomicUsize::new(0)), max_pending: max_pending }
+    pub fn new(out: Sender<ODiskMessage>, fs: F) -> DiskManagerContext<F> {
+        DiskManagerContext{ torrents: Arc::new(RwLock::new(HashMap::new())), out: out, fs: Arc::new(fs) }
     }
 
     pub fn blocking_sender(&self) -> Wait<Sender<ODiskMessage>> {
@@ -42,28 +38,6 @@ impl<F> DiskManagerContext<F> {
 
     pub fn filesystem(&self) -> &F {
         &self.fs
-    }
-
-    pub fn try_submit_work(&self) -> bool {
-        let prev_value = self.cur_pending.fetch_add(1, Ordering::SeqCst);
-
-        if prev_value < self.max_pending {
-            info!("Submitted Work, Previous Pending Was {} New Pending Is {} Of Max {}", prev_value, prev_value + 1, self.max_pending);
-
-            true
-        } else {
-            self.cur_pending.fetch_sub(1, Ordering::SeqCst);
-
-            info!("Failed To Submit Work, Pending Is {} Of Max {}", prev_value, self.max_pending);
-
-            false
-        }
-    }
-
-    pub fn complete_work(&self) {
-        let prev_pending = self.cur_pending.fetch_sub(1, Ordering::SeqCst);
-
-        info!("Completed Work, Previous Pending Was {} New Pending Is {}", prev_pending, prev_pending - 1);
     }
 
     pub fn insert_torrent(&self, file: MetainfoFile, state: PieceCheckerState) -> bool {
@@ -111,8 +85,6 @@ impl<F> DiskManagerContext<F> {
 
 impl<F> Clone for DiskManagerContext<F> {
     fn clone(&self) -> DiskManagerContext<F> {
-        DiskManagerContext{ torrents: self.torrents.clone(), out: self.out.clone(),
-                            fs: self.fs.clone(), cur_pending: self.cur_pending.clone(),
-                            max_pending: self.max_pending }
+        DiskManagerContext{ torrents: self.torrents.clone(), out: self.out.clone(), fs: self.fs.clone() }
     }
 }
