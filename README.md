@@ -19,6 +19,13 @@ A collection of crates for building applications using bittorrent technologies.
 
 **About**: Communicating with bittorrent peers involves choking (telling someone we won't respond to them now), expressing interest (telling someone, if we were unchoked, we would be interested in some data they hold), as well as downloading and uploading blocks to peers. This package defines some common bittorrent messages, including those as part of the `ExtensionBits` in `bip_handshake`, as well as those included in the [extension protocol](http://www.bittorrent.org/beps/bep_0010.html). We also provide a `PeerManager` for heartbeating peers and multiplexing messages sent to/from peers so that clients have an easier time communicating asynchronously with many peers.
 
+## Select (bip_select) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](https://docs.rs/bip_select) [![Crate](http://meritbadge.herokuapp.com/bip_select)](https://crates.io/crates/bip_select)
+
+**About**: Selection is broken up in to three classes of algorithms. First, we have *Piece Revelation* which is focused on determining which pieces we should reveal (even if we don't have the piece...) and to whom. Second, we have *Piece Selection* which is focused on which pieces we should download/upload next. Third, we have *Piece Queueing* which is, given a piece we want to download, which peers should we send such a request to. We can mix and match different algorithms to create a swarm that may have different characteristics than other swarms.
+
+References:
+* http://ieeexplore.ieee.org/document/6409840/
+
 ## Mainline DHT (bip_dht) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](https://docs.rs/bip_dht) [![Crate](http://meritbadge.herokuapp.com/bip_dht)](https://crates.io/crates/bip_dht)
 
 **About**: The Mainline DHT is used by bittorrent to distribute contact information for peers interested in specified files. More generally, any application can use the Mainline DHT to discover peers in a distributed and decentralized fashion. You can take advantage of the DHT as long as your application has a way of exposing interest in other peers via a SHA-1 hash (20 byte value).
