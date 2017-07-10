@@ -23,9 +23,6 @@ A collection of crates for building applications using bittorrent technologies.
 
 **About**: Selection is broken up in to three classes of algorithms. First, we have *Piece Revelation* which is focused on determining which pieces we should reveal (even if we don't have the piece...) and to whom. Second, we have *Piece Selection* which is focused on which pieces we should download/upload next. Third, we have *Piece Queueing* which is, given a piece we want to download, which peers should we send such a request to. We can mix and match different algorithms to create a swarm that may have different characteristics than other swarms.
 
-References:
-* http://ieeexplore.ieee.org/document/6409840/
-
 ## Mainline DHT (bip_dht) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](https://docs.rs/bip_dht) [![Crate](http://meritbadge.herokuapp.com/bip_dht)](https://crates.io/crates/bip_dht)
 
 **About**: The Mainline DHT is used by bittorrent to distribute contact information for peers interested in specified files. More generally, any application can use the Mainline DHT to discover peers in a distributed and decentralized fashion. You can take advantage of the DHT as long as your application has a way of exposing interest in other peers via a SHA-1 hash (20 byte value).
@@ -39,6 +36,12 @@ References:
 ## Tracker (bip_utracker) - [![Docs](https://img.shields.io/badge/docs-up--to--date-blue.svg)](https://docs.rs/bip_utracker) [![Crate](http://meritbadge.herokuapp.com/bip_utracker)](https://crates.io/crates/bip_utracker)
 
 **About**: Trackers provide a centralized solution to peer discovery within the bittorrent eco-system. Clients send messages to a specific set of trackers, updating them with any state changes that have occured pertaining to the download of files. However, using the start and stop events we can use trackers generically to either add or remove ourselves from a tracker for the purposes of peer discovery for any application.
+
+## References
+
+* Official Specifications: http://www.bittorrent.org/beps/bep_0000.html
+* Readable Specification: https://wiki.theory.org/index.php/BitTorrentSpecification
+* Piece Related Algorithms: http://ieeexplore.ieee.org/document/6409840/
 
 ## License
 
