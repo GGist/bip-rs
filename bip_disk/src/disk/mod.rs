@@ -1,5 +1,5 @@
 use error::{TorrentError, BlockError};
-use memory::block::{Block};
+use memory::block::{Block, BlockMut};
 
 use bip_metainfo::MetainfoFile;
 use bip_util::bt::{InfoHash};
@@ -34,7 +34,7 @@ pub enum IDiskMessage {
     /// sufficient.
     SyncTorrent(InfoHash),
     /// Message to load the given block in to memory.
-    LoadBlock(Block),
+    LoadBlock(BlockMut),
     /// Message to process the given block and persist it.
     ProcessBlock(Block)
 }
@@ -58,11 +58,13 @@ pub enum ODiskMessage {
     /// the given torrent (hash), as well as the piece index.
     FoundBadPiece(InfoHash, u64),
     /// Message indicating that the given block has been loaded.
-    BlockLoaded(Block),
+    BlockLoaded(BlockMut),
     /// Message indicating that the given block has been processed.
     BlockProcessed(Block),
     /// Error occurring from a `AddTorrent` or `RemoveTorrent` message.
     TorrentError(InfoHash, TorrentError),
-    /// Error occurring from a `LoadBlock` or `ProcessBlock` message.
-    BlockError(Block, BlockError)
+    /// Error occurring from a `LoadBlock` message.
+    LoadBlockError(BlockMut, BlockError),
+    /// Error occurring from a `ProcessBlock` message.
+    ProcessBlockError(Block, BlockError)
 }

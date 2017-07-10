@@ -1,6 +1,7 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
-use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockMetadata, Block};
+use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockMetadata, Block, BlockMut};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
+use bytes::BytesMut;
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
 use futures::stream::Stream;
@@ -25,8 +26,14 @@ fn positive_load_block() {
     let disk_manager = DiskManagerBuilder::new()
         .build(filesystem.clone());
 
-    let process_block = Block::new(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50), data_b.0[1..(50 + 1)].to_vec());
-    let load_block    = Block::new(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50), vec![0u8; 50]);
+    let mut process_block = BytesMut::new();
+    process_block.extend_from_slice(&data_b.0[1..(50 + 1)]);
+
+    let mut load_block = BytesMut::with_capacity(50);
+    load_block.extend_from_slice(&[0u8; 50]);
+
+    let process_block = Block::new(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50), process_block.freeze());
+    let load_block    = BlockMut::new(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50), load_block);
 
     let (send, recv) = disk_manager.split();
     let mut blocking_send = send.wait();

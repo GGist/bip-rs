@@ -270,7 +270,7 @@ fn merge_piece_messages(message_a: &BlockMetadata, message_b: &BlockMetadata) ->
     if message_a.info_hash() != message_b.info_hash() || message_a.piece_index() != message_b.piece_index() {
         return None
     }
-    let info_hash = *message_a.info_hash();
+    let info_hash = message_a.info_hash();
     let piece_index = message_a.piece_index();
 
     // Check if the pieces overlap

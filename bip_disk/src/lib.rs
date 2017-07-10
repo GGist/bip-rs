@@ -1,5 +1,6 @@
 extern crate bip_metainfo;
 extern crate bip_util;
+extern crate bytes;
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
@@ -20,7 +21,7 @@ pub use disk::fs::FileSystem;
 pub use disk::builder::DiskManagerBuilder;
 pub use disk::manager::{DiskManager};
 
-pub use memory::block::{Block, BlockMetadata};
+pub use memory::block::{Block, BlockMut, BlockMetadata};
 
 /// Built in objects implementing `FileSystem`.
 pub mod fs {
