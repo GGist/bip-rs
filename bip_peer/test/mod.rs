@@ -11,7 +11,7 @@ use futures::sink::{Sink};
 use futures::stream::{Stream};
 use futures::sync::mpsc::{self, Sender, Receiver};
 
-mod peer_manager_backpressure;
+mod peer_manager_send_backpressure;
 
 pub struct ConnectedChannel<I, O> {
     send: Sender<I>,

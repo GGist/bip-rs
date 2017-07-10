@@ -1,8 +1,9 @@
 use std::borrow::ToOwned;
 use std::io::{self, Write};
 
+use bytes::{Bytes, BytesMut};
 use byteorder::{WriteBytesExt, BigEndian};
-use nom::{IResult, be_u32};
+use nom::{IResult, be_u32, Needed};
 
 use message;
 
@@ -19,8 +20,8 @@ impl HaveMessage {
         HaveMessage { piece_index: piece_index }
     }
 
-    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
-        parse_have(bytes)
+    pub fn parse_bytes(_input: (), bytes: Bytes) -> IResult<(), io::Result<HaveMessage>> {
+        throwaway_input!(parse_have(bytes.as_ref()))
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -36,8 +37,8 @@ impl HaveMessage {
     }
 }
 
-fn parse_have(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
-    map!(bytes, be_u32, |index| HaveMessage::new(index))
+fn parse_have(bytes: &[u8]) -> IResult<&[u8], io::Result<HaveMessage>> {
+    map!(bytes, be_u32, |index| Ok(HaveMessage::new(index)))
 }
 
 // ----------------------------------------------------------------------------//
@@ -47,23 +48,22 @@ fn parse_have(bytes: &[u8]) -> IResult<&[u8], HaveMessage> {
 /// This should be sent immediately after the handshake.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct BitFieldMessage {
-    bytes: Vec<u8>,
+    bytes: Bytes
 }
 
 impl BitFieldMessage {
-    pub fn new(total_pieces: u32) -> BitFieldMessage {
-        // total_pieces is the number of bits we expect
-        let bytes_needed = if total_pieces % BITS_PER_BYTE == 0 {
-            total_pieces / BITS_PER_BYTE
-        } else {
-            (total_pieces / BITS_PER_BYTE) + 1
-        };
-
-        BitFieldMessage { bytes: vec![0u8; message::u32_to_usize(bytes_needed)] }
+    pub fn new(bytes: Bytes) -> BitFieldMessage {
+        BitFieldMessage { bytes: bytes }
     }
 
-    pub fn parse_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], BitFieldMessage> {
-        parse_bitfield(bytes, message::u32_to_usize(len))
+    pub fn parse_bytes(_input: (), mut bytes: Bytes, len: u32) -> IResult<(), io::Result<BitFieldMessage>> {
+        let cast_len = message::u32_to_usize(len);
+
+        if bytes.len() >= cast_len {
+            IResult::Done((), Ok(BitFieldMessage{ bytes: bytes.split_to(cast_len) }))
+        } else {
+            IResult::Incomplete(Needed::Size(cast_len - bytes.len()))
+        }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -78,10 +78,6 @@ impl BitFieldMessage {
     pub fn bitfield(&self) -> &[u8] {
         &self.bytes[..]
     }
-}
-
-fn parse_bitfield(bytes: &[u8], len: usize) -> IResult<&[u8], BitFieldMessage> {
-    map!(bytes, take!(len), |b| BitFieldMessage { bytes: (b as &[u8]).to_vec() })
 }
 
 // ----------------------------------------------------------------------------//
@@ -103,8 +99,8 @@ impl RequestMessage {
         }
     }
 
-    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
-        parse_request(bytes)
+    pub fn parse_bytes(_input: (), bytes: Bytes) -> IResult<(), io::Result<RequestMessage>> {
+        throwaway_input!(parse_request(bytes.as_ref()))
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -130,10 +126,11 @@ impl RequestMessage {
     }
 }
 
-fn parse_request(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
+fn parse_request(bytes: &[u8]) -> IResult<&[u8], io::Result<RequestMessage>> {
     map!(bytes,
          tuple!(be_u32, be_u32, be_u32),
-         |(index, offset, length)| RequestMessage::new(index, offset, message::u32_to_usize(length)))
+         |(index, offset, length)| Ok(RequestMessage::new(index, offset, message::u32_to_usize(length)))
+    )
 }
 
 // ----------------------------------------------------------------------------//
@@ -146,28 +143,27 @@ fn parse_request(bytes: &[u8]) -> IResult<&[u8], RequestMessage> {
 pub struct PieceMessage {
     piece_index:  u32,
     block_offset: u32,
-    block_length: usize,
-    block:        Vec<u8>
+    block:        Bytes
 }
 
 impl PieceMessage {
-    pub fn new(piece_index: u32, block_offset: u32, block_length: usize, block: Vec<u8>) -> PieceMessage {
+    pub fn new(piece_index: u32, block_offset: u32, block: Bytes) -> PieceMessage {
+        // TODO: Check that users Bytes wont overflow a u32 
         PieceMessage {
             piece_index: piece_index,
             block_offset: block_offset,
-            block_length: block_length,
             block: block
         }
     }
 
-    pub fn parse_bytes(bytes: &[u8], len: u32) -> IResult<&[u8], PieceMessage> {
-        parse_piece(bytes, message::u32_to_usize(len))
+    pub fn parse_bytes(_input: (), bytes: Bytes, len: u32) -> IResult<(), io::Result<PieceMessage>> {
+        throwaway_input!(parse_piece(&bytes, len))
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write
     {
-        let actual_length = (9 + self.block_length) as u32;
+        let actual_length = (9 + self.block_length()) as u32;
         try!(message::write_length_id_pair(&mut writer, actual_length, Some(message::PIECE_MESSAGE_ID)));
 
         try!(writer.write_u32::<BigEndian>(self.piece_index));
@@ -185,21 +181,21 @@ impl PieceMessage {
     }
 
     pub fn block_length(&self) -> usize {
-        self.block_length
+        self.block.len()
     }
 
-    pub fn block(&self) -> Vec<u8> {
+    pub fn block(&self) -> Bytes {
         self.block.clone()
     }
 }
 
-fn parse_piece(bytes: &[u8], len: usize) -> IResult<&[u8], PieceMessage> {
-    do_parse!(bytes,
-        piece_index:  be_u32      >>
-        block_offset: be_u32      >>
-        block_length: value!(len) >>
-        block:        map!(take!(block_length), |bytes: &[u8]| bytes.to_vec()) >>
-        (PieceMessage::new(piece_index, block_offset, block_length, block))
+fn parse_piece(bytes: &Bytes, len: u32) -> IResult<&[u8], io::Result<PieceMessage>> {
+    do_parse!(bytes.as_ref(),
+        piece_index:  be_u32                                                    >>
+        block_offset: be_u32                                                    >>
+        block_len:    value!(message::u32_to_usize(len))                        >>
+        block:        map!(take!(block_len), |_| bytes.slice(8, 8 + block_len)) >>
+        (Ok(PieceMessage::new(piece_index, block_offset, block)))
     )
 }
 
@@ -222,8 +218,8 @@ impl CancelMessage {
         }
     }
 
-    pub fn parse_bytes(bytes: &[u8]) -> IResult<&[u8], CancelMessage> {
-        parse_cancel(bytes)
+    pub fn parse_bytes(_input: (), bytes: Bytes) -> IResult<(), io::Result<CancelMessage>> {
+        throwaway_input!(parse_cancel(bytes.as_ref()))
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -249,8 +245,9 @@ impl CancelMessage {
     }
 }
 
-fn parse_cancel(bytes: &[u8]) -> IResult<&[u8], CancelMessage> {
+fn parse_cancel(bytes: &[u8]) -> IResult<&[u8], io::Result<CancelMessage>> {
     map!(bytes,
          tuple!(be_u32, be_u32, be_u32),
-         |(index, offset, length)| CancelMessage::new(index, offset, message::u32_to_usize(length)))
+         |(index, offset, length)| Ok(CancelMessage::new(index, offset, message::u32_to_usize(length)))
+    )
 }

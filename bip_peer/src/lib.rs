@@ -10,6 +10,9 @@ extern crate tokio_timer;
 #[macro_use]
 extern crate nom;
 
+#[macro_use]
+mod macros;
+
 pub mod message;
 
 mod codec;
@@ -29,6 +32,7 @@ pub mod error {
 
 /// Implementations of `PeerProtocol`.
 pub mod protocols {
+    pub use protocol::unit::UnitProtocol;
     pub use protocol::null::NullProtocol;
     pub use protocol::wire::PeerWireProtocol;
 }

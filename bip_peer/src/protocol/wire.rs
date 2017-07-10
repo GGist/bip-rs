@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use message::PeerWireProtocolMessage;
 use protocol::PeerProtocol;
 
-use nom::IResult;
+use bytes::Bytes;
 
 /// Protocol message for peer wire messages.
 pub struct PeerWireProtocol<P> {
@@ -12,6 +12,10 @@ pub struct PeerWireProtocol<P> {
 
 impl<P> PeerWireProtocol<P> {
     /// Create a new `PeerWireProtocol` with the given extension protocol.
+    ///
+    /// Important to note that nested protocol should follow the same message length format
+    /// as the peer wire protocol. This means it should expect a 4 byte (`u32`) message
+    /// length prefix. Nested protocols will NOT have their `bytes_needed` method called.
     pub fn new(ext_protocol: P) -> PeerWireProtocol<P> {
         PeerWireProtocol{ ext_protocol: ext_protocol }
     }
@@ -20,7 +24,11 @@ impl<P> PeerWireProtocol<P> {
 impl<P> PeerProtocol for PeerWireProtocol<P> where P: PeerProtocol {
     type ProtocolMessage = PeerWireProtocolMessage<P>;
 
-    fn parse_bytes<'a>(&mut self, bytes: &'a [u8]) -> IResult<&'a [u8], Self::ProtocolMessage> {
+    fn bytes_needed(&mut self, bytes: &[u8]) -> io::Result<Option<usize>> {
+        PeerWireProtocolMessage::bytes_needed(bytes, &mut self.ext_protocol)
+    }
+
+    fn parse_bytes(&mut self, bytes: Bytes) -> io::Result<Self::ProtocolMessage> {
         PeerWireProtocolMessage::parse_bytes(bytes, &mut self.ext_protocol)
     }
 
