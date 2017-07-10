@@ -2,6 +2,8 @@ use std::ops::{Deref, DerefMut};
 
 use bip_util::bt::{self, InfoHash};
 
+use bytes::{Bytes, BytesMut};
+
 //----------------------------------------------------------------------------//
 
 /// `BlockMetadata` which tracks metadata associated with a `Block` of memory.
@@ -23,8 +25,8 @@ impl BlockMetadata {
         BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), piece_index, block_offset, block_length)
     }
 
-    pub fn info_hash(&self) -> &InfoHash {
-        &self.info_hash
+    pub fn info_hash(&self) -> InfoHash {
+        self.info_hash
     }
 
     pub fn piece_index(&self) -> u64 {
@@ -48,22 +50,28 @@ impl Default for BlockMetadata {
 
 //----------------------------------------------------------------------------//
 
-/// `Block` of memory which is tracked by the underlying `MemoryManager`.
+/// `Block` of immutable memory.
 #[derive(Debug)]
 pub struct Block {
     metadata:   BlockMetadata,
-    block_data: Vec<u8>
+    block_data: Bytes
 }
 
 impl Block {
     /// Create a new `Block`.
-    pub fn new(metadata: BlockMetadata, block_data: Vec<u8>) -> Block {
+    pub fn new(metadata: BlockMetadata, block_data: Bytes) -> Block {
         Block{ metadata: metadata, block_data: block_data }
     }
 
     /// Access the metadata for the block.
-    pub fn metadata(&self) -> &BlockMetadata {
-        &self.metadata
+    pub fn metadata(&self) -> BlockMetadata {
+        self.metadata
+    }
+}
+
+impl From<BlockMut> for Block {
+    fn from(block: BlockMut) -> Block {
+        Block::new(block.metadata(), block.block_data.freeze())
     }
 }
 
@@ -75,7 +83,36 @@ impl Deref for Block {
     }
 }
 
-impl DerefMut for Block {
+//----------------------------------------------------------------------------//
+
+/// `BlockMut` of mutable memory.
+#[derive(Debug)]
+pub struct BlockMut {
+    metadata:   BlockMetadata,
+    block_data: BytesMut
+}
+
+impl BlockMut {
+    /// Create a new `BlockMut`.
+    pub fn new(metadata: BlockMetadata, block_data: BytesMut) -> BlockMut {
+        BlockMut{ metadata: metadata, block_data: block_data }
+    }
+
+    /// Access the metadata for the block.
+    pub fn metadata(&self) -> BlockMetadata {
+        self.metadata
+    }
+}
+
+impl Deref for BlockMut {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        &self.block_data
+    }
+}
+
+impl DerefMut for BlockMut {
     fn deref_mut(&mut self) -> &mut [u8] {
         &mut self.block_data
     }

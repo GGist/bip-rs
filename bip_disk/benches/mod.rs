@@ -2,6 +2,7 @@
 
 extern crate bip_disk;
 extern crate bip_metainfo;
+extern crate bytes;
 extern crate futures;
 extern crate test;
 extern crate rand;
@@ -14,6 +15,7 @@ mod benches {
     use bip_disk::fs_cache::FileHandleCache;
     use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, InfoHash, Block, BlockMetadata, FileSystem};
     use bip_metainfo::{DirectAccessor, MetainfoBuilder, MetainfoFile, PieceLength};
+    use bytes::BytesMut;
     use futures::stream::{self, Stream};
     use futures::sink::{self, Sink};
     use rand::{self, Rng};
@@ -73,7 +75,10 @@ mod benches {
         for (piece_index, piece) in bytes.chunks(piece_length).enumerate() {
             for (block_index, block) in piece.chunks(block_length).enumerate() {
                 let block_offset = block_index * block_length;
-                let block = Block::new(BlockMetadata::new(hash, piece_index as u64, block_offset as u64, block.len()), block.to_vec());
+                let mut bytes = BytesMut::new();
+                bytes.extend_from_slice(block);
+
+                let block = Block::new(BlockMetadata::new(hash, piece_index as u64, block_offset as u64, block.len()), bytes.freeze());
 
                 block_send.send(IDiskMessage::ProcessBlock(block)).unwrap();
                 blocks_sent += 1;

@@ -1,6 +1,7 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockMetadata, Block};
 use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
+use bytes::BytesMut;
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
 use futures::stream::Stream;
@@ -49,15 +50,18 @@ fn positive_remove_torrent() {
 
     assert_eq!(0, good_pieces);
 
-    let process_block = Block::new(BlockMetadata::new(info_hash, 0, 0, 50), data_a.0[0..50].to_vec());
+    let mut process_bytes = BytesMut::new();
+    process_bytes.extend_from_slice(&data_a.0[0..50]);
+
+    let process_block = Block::new(BlockMetadata::new(info_hash, 0, 0, 50), process_bytes.freeze());
 
     blocking_send.send(IDiskMessage::ProcessBlock(process_block)).unwrap();
 
     ::core_loop_with_timeout(&mut core, 100, ((), recv),
         |_, _, msg| {
             match msg {
-                ODiskMessage::BlockError(_, _) => Loop::Break(()),
-                unexpected @ _                 => panic!("Unexpected Message: {:?}", unexpected)
+                ODiskMessage::ProcessBlockError(_, _) => Loop::Break(()),
+                unexpected                            => panic!("Unexpected Message: {:?}", unexpected)
             }
     });
 }

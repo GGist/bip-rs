@@ -3,7 +3,7 @@ use disk::{IDiskMessage, ODiskMessage};
 use disk::tasks::helpers::piece_checker::{PieceChecker, PieceCheckerState, PieceState};
 use disk::tasks::helpers::piece_accessor::PieceAccessor;
 use disk::tasks::context::DiskManagerContext;
-use memory::block::Block;
+use memory::block::{Block, BlockMut};
 use error::{TorrentResult, BlockResult, BlockError, BlockErrorKind, TorrentError, TorrentErrorKind};
 
 use bip_metainfo::MetainfoFile;
@@ -44,13 +44,13 @@ pub fn execute_on_pool<F>(msg: IDiskMessage, pool: &CpuPool, context: DiskManage
             IDiskMessage::LoadBlock(mut block) => {
                 match execute_load_block(&mut block, &context) {
                     Ok(_)    => ODiskMessage::BlockLoaded(block),
-                    Err(err) => ODiskMessage::BlockError(block, err)
+                    Err(err) => ODiskMessage::LoadBlockError(block, err)
                 }
             },
             IDiskMessage::ProcessBlock(mut block) => {
                 match execute_process_block(&mut block, &context, &mut blocking_sender) {
                     Ok(_)    => ODiskMessage::BlockProcessed(block),
-                    Err(err) => ODiskMessage::BlockError(block, err)
+                    Err(err) => ODiskMessage::ProcessBlockError(block, err)
                 }
             }
         };
@@ -110,10 +110,10 @@ fn execute_sync_torrent<F>(hash: InfoHash, context: &DiskManagerContext<F>) -> T
     }
 }
 
-fn execute_load_block<F>(block: &mut Block, context: &DiskManagerContext<F>) -> BlockResult<()>
+fn execute_load_block<F>(block: &mut BlockMut, context: &DiskManagerContext<F>) -> BlockResult<()>
     where F: FileSystem {
-    let metadata = *block.metadata();
-    let info_hash = *metadata.info_hash();
+    let metadata = block.metadata();
+    let info_hash = metadata.info_hash();
 
     let mut access_result = Ok(());
     let found_hash = context.update_torrent(info_hash, |metainfo_file, _| {
@@ -132,8 +132,8 @@ fn execute_load_block<F>(block: &mut Block, context: &DiskManagerContext<F>) -> 
 
 fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, blocking_sender: &mut Wait<Sender<ODiskMessage>>) -> BlockResult<()>
     where F: FileSystem {
-    let metadata = *block.metadata();
-    let info_hash = *metadata.info_hash();
+    let metadata = block.metadata();
+    let info_hash = metadata.info_hash();
 
     let mut block_result = Ok(());
     let found_hash = context.update_torrent(info_hash, |metainfo_file, mut checker_state| {
