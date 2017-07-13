@@ -1,6 +1,7 @@
 extern crate bip_metainfo;
 extern crate bip_util;
 extern crate bytes;
+extern crate crossbeam;
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
@@ -19,7 +20,7 @@ pub mod error;
 pub use disk::{IDiskMessage, ODiskMessage};
 pub use disk::fs::FileSystem;
 pub use disk::builder::DiskManagerBuilder;
-pub use disk::manager::{DiskManager};
+pub use disk::manager::{DiskManager, DiskManagerSink, DiskManagerStream};
 
 pub use memory::block::{Block, BlockMut, BlockMetadata};
 
