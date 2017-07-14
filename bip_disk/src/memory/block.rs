@@ -67,6 +67,10 @@ impl Block {
     pub fn metadata(&self) -> BlockMetadata {
         self.metadata
     }
+
+    pub fn into_parts(self) -> (BlockMetadata, Bytes) {
+        (self.metadata, self.block_data)
+    }
 }
 
 impl From<BlockMut> for Block {
@@ -101,6 +105,10 @@ impl BlockMut {
     /// Access the metadata for the block.
     pub fn metadata(&self) -> BlockMetadata {
         self.metadata
+    }
+
+    pub fn into_parts(self) -> (BlockMetadata, BytesMut) {
+        (self.metadata, self.block_data)
     }
 }
 
