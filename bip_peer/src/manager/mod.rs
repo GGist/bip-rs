@@ -136,18 +136,32 @@ impl<P> PeerManagerSink<P> where P: Sink + Stream {
         let (result, took_lock) = if let Ok(mut guard) = self.peers.try_lock() {
             let result = call(item, &mut self.handle, &mut self.timer, &mut self.build, &mut self.send, &mut *guard);
 
+            // Closure could return not ready, need to stash in that case
+            if result.as_ref().map(|async| async.is_not_ready()).unwrap_or(false) {
+                self.task_queue.push(futures_task::current());
+            }
+
             (result, true)
         } else {
-            (Ok(AsyncSink::NotReady(not(item))), false)
+            self.task_queue.push(futures_task::current());
+
+            if let Ok(mut guard) = self.peers.try_lock() {
+                let result = call(item, &mut self.handle, &mut self.timer, &mut self.build, &mut self.send, &mut *guard);
+
+                // Closure could return not ready, need to stash in that case
+                if result.as_ref().map(|async| async.is_not_ready()).unwrap_or(false) {
+                    self.task_queue.push(futures_task::current());
+                }
+
+                (result, true)
+            } else {
+                (Ok(AsyncSink::NotReady(not(item))), false)
+            }
         };
 
         if took_lock {
             // Just notify a single person waiting on the lock to reduce contention
             self.task_queue.try_pop().map(|task| task.notify());
-        }
-
-        if result.as_ref().map(|async| async.is_not_ready()).unwrap_or(false) {
-            self.task_queue.push(futures_task::current());
         }
 
         result
@@ -162,16 +176,22 @@ impl<P> PeerManagerSink<P> where P: Sink + Stream {
 
             (result, true)
         } else {
-            (Ok(Async::NotReady), false)
+            // Stash a task
+            self.task_queue.push(futures_task::current());
+
+            // Try to get lock again in case of race condition
+            if let Ok(mut guard) = self.peers.try_lock() {
+                let result = call(&mut self.handle, &mut self.timer, &mut self.build, &mut self.send, &mut *guard);
+
+                (result, true)
+            } else {
+                (Ok(Async::NotReady), false)
+            }
         };
 
         if took_lock {
             // Just notify a single person waiting on the lock to reduce contention
             self.task_queue.try_pop().map(|task| task.notify());
-        }
-
-        if result.as_ref().map(|async| async.is_not_ready()).unwrap_or(false) {
-            self.task_queue.push(futures_task::current());
         }
 
         result
@@ -268,21 +288,31 @@ impl<P> PeerManagerStream<P> where P: Sink + Stream {
         let (result, took_lock) = if let Ok(mut guard) = self.peers.try_lock() {
             let result = call(item, &mut *guard);
 
+            // Nothing calling us will return NotReady, so we dont have to push to queue here
+
             (result, true)
         } else {
-            // If we couldnt get the lock, stash the item
-            self.opt_pending = Some(not(item));
+            // Couldnt get the lock, stash a task away
+            self.task_queue.push(futures_task::current());
 
-            (Ok(Async::NotReady), false)
+            // Try to get the lock once more, in case of a race condition with stashing the task
+            if let Ok(mut guard) = self.peers.try_lock() {
+                let result = call(item, &mut *guard);
+
+                // Nothing calling us will return NotReady, so we dont have to push to queue here
+
+                (result, true)
+            } else {
+                // If we couldnt get the lock, stash the item
+                self.opt_pending = Some(not(item));
+
+                (Ok(Async::NotReady), false)
+            }
         };
 
         if took_lock {
             // Just notify a single person waiting on the lock to reduce contention
             self.task_queue.try_pop().map(|task| task.notify());
-        }
-
-        if result.as_ref().map(|async| async.is_not_ready()).unwrap_or(false) {
-            self.task_queue.push(futures_task::current());
         }
 
         result
