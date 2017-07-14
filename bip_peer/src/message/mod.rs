@@ -100,7 +100,8 @@ impl<P> PeerWireProtocolMessage<P>
     where P: PeerProtocol {
     pub fn bytes_needed(bytes: &[u8], _ext_protocol: &mut P) -> io::Result<Option<usize>> {
         match be_u32(bytes) {
-            IResult::Done(left, length) => Ok(Some(u32_to_usize(length))),
+            // We need 4 bytes for the length, plus whatever the length is...
+            IResult::Done(left, length) => Ok(Some(MESSAGE_LENGTH_LEN_BYTES + u32_to_usize(length))),
             _                           => Ok(None)
         }
     }
