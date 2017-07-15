@@ -110,7 +110,6 @@ impl<P> Stream for PeerManager<P>
 //----------------------------------------------------------------------------//
 
 /// Sink half of a `PeerManager`.
-#[derive(Clone)]
 pub struct PeerManagerSink<P> where P: Sink + Stream {
     handle:     Handle,
     timer:      Timer,
@@ -118,6 +117,13 @@ pub struct PeerManagerSink<P> where P: Sink + Stream {
     send:       Sender<OPeerManagerMessage<P::Item>>,
     peers:      Arc<Mutex<HashMap<PeerInfo, Sender<IPeerManagerMessage<P>>>>>,
     task_queue: Arc<MsQueue<Task>>
+}
+
+impl<P> Clone for PeerManagerSink<P> where P: Sink + Stream {
+    fn clone(&self) -> PeerManagerSink<P> {
+        PeerManagerSink{ handle: self.handle.clone(), timer: self.timer.clone(), build: self.build,
+                         send: self.send.clone(), peers: self.peers.clone(), task_queue: self.task_queue.clone() }
+    }
 }
 
 impl<P> PeerManagerSink<P> where P: Sink + Stream {
