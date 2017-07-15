@@ -1,6 +1,6 @@
 [package]
 name             = "bip_disk"
-version          = "0.5.2"
+version          = "0.5.3"
 description      = "Bittorrent Infrastructure Project Disk Module"
 
 authors          = ["Andrew <amiller4421@gmail.com>"]

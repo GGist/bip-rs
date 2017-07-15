@@ -71,13 +71,19 @@ impl<F> Stream for DiskManager<F> {
 //----------------------------------------------------------------------------//
 
 /// `DiskManagerSink` which is the sink portion of a `DiskManager`.
-#[derive(Clone)]
 pub struct DiskManagerSink<F> {
     pool:         CpuPool,
     context:      DiskManagerContext<F>,
     max_capacity: usize,
     cur_capacity: Arc<AtomicUsize>,
     task_queue:   Arc<MsQueue<Task>>
+}
+
+impl<F> Clone for DiskManagerSink<F> {
+    fn clone(&self) -> DiskManagerSink<F> {
+        DiskManagerSink{ pool: self.pool.clone(), context: self.context.clone(), max_capacity: self.max_capacity,
+                         cur_capacity: self.cur_capacity.clone(), task_queue: self.task_queue.clone() }
+    }
 }
 
 impl<F> DiskManagerSink<F> {
