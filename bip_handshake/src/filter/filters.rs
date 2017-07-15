@@ -1,16 +1,16 @@
-use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::RwLock;
 
 use filter::{HandshakeFilter};
 
 #[derive(Clone)]
 pub struct Filters {
-    filters: Rc<RwLock<Vec<Box<HandshakeFilter>>>>
+    filters: Arc<RwLock<Vec<Box<HandshakeFilter>>>>
 }
 
 impl Filters {
     pub fn new() -> Filters {
-        Filters{ filters: Rc::new(RwLock::new(Vec::new())) }
+        Filters{ filters: Arc::new(RwLock::new(Vec::new())) }
     }
 
     pub fn add_filter<F>(&self, filter: F)
