@@ -231,7 +231,7 @@ fn parse_piece(bytes: &Bytes, len: u32) -> IResult<&[u8], io::Result<PieceMessag
     do_parse!(bytes.as_ref(),
         piece_index:  be_u32                                                    >>
         block_offset: be_u32                                                    >>
-        block_len:    value!(message::u32_to_usize(len))                        >>
+        block_len:    value!(message::u32_to_usize(len - 8))                    >>
         block:        map!(take!(block_len), |_| bytes.slice(8, 8 + block_len)) >>
         (Ok(PieceMessage::new(piece_index, block_offset, block)))
     )

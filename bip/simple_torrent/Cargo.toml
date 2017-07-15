@@ -1,0 +1,23 @@
+[package]
+name          = "simple_torrent"
+version       = "0.1.0"
+description   = "Examples For bip-rs"
+
+authors       = ["Andrew <amiller4421@gmail.com>"]
+
+license       = "MIT/Apache-2.0"
+
+[dependencies]
+bip_dht       = "0.6"
+bip_disk      = "0.5"
+bip_handshake = "0.5"
+bip_metainfo  = "0.10"
+bip_peer      = "0.2"
+clap          = "2.25"
+futures       = "0.1"
+tokio-core    = "0.1"
+tokio-io      = "0.1"
+tokio-timer   = "0.1"
+
+[features]
+unstable      = []

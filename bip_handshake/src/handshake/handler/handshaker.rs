@@ -47,7 +47,7 @@ fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pi
             .and_then(move |(msg, framed)| {
                 let (remote_prot, remote_ext, remote_hash, remote_pid) = msg.into_parts();
                 let socket = framed.into_inner();
-
+                
                 // Check that it responds with the same hash and protocol, also check our filters
                 if remote_hash != hash ||
                     remote_prot != prot ||
