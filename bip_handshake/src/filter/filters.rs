@@ -5,7 +5,7 @@ use filter::{HandshakeFilter};
 
 #[derive(Clone)]
 pub struct Filters {
-    filters: Arc<RwLock<Vec<Box<HandshakeFilter>>>>
+    filters: Arc<RwLock<Vec<Box<HandshakeFilter + Send + Sync>>>>
 }
 
 impl Filters {
@@ -14,7 +14,7 @@ impl Filters {
     }
 
     pub fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         self.write_filters(|mut_filters| {
             let opt_found = check_index(&mut_filters[..], &filter);
 
@@ -38,7 +38,7 @@ impl Filters {
     }
 
     pub fn access_filters<B>(&self, block: B)
-        where B: FnOnce(&[Box<HandshakeFilter>]) {
+        where B: FnOnce(&[Box<HandshakeFilter + Send + Sync>]) {
         self.read_filters(|ref_filters| {
             block(ref_filters)
         })
@@ -51,7 +51,7 @@ impl Filters {
     }
 
     fn read_filters<B, R>(&self, block: B) -> R
-        where B: FnOnce(&[Box<HandshakeFilter>]) -> R {
+        where B: FnOnce(&[Box<HandshakeFilter + Send + Sync>]) -> R {
         let ref_filters = self.filters.as_ref().read()
             .expect("bip_handshake: Poisoned Read Lock In Filters");
         
@@ -59,7 +59,7 @@ impl Filters {
     }
 
     fn write_filters<B, R>(&self, block: B) -> R
-        where B: FnOnce(&mut Vec<Box<HandshakeFilter>>) -> R {
+        where B: FnOnce(&mut Vec<Box<HandshakeFilter + Send + Sync>>) -> R {
         let mut mut_filters = self.filters.as_ref().write()
             .expect("bip_handshake: Poisoned Write Lock In Filters");
 
@@ -67,7 +67,7 @@ impl Filters {
     }
 }
 
-fn check_index<F>(ref_filters: &[Box<HandshakeFilter>], filter: &F) -> Option<usize>
+fn check_index<F>(ref_filters: &[Box<HandshakeFilter + Send + Sync>], filter: &F) -> Option<usize>
     where F: HandshakeFilter + PartialEq + Eq + 'static {
     for (index, ref_filter) in ref_filters.into_iter().enumerate() {
         let opt_match = ref_filter.as_any().downcast_ref::<F>()

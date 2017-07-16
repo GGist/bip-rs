@@ -199,12 +199,12 @@ impl<S> Stream for Handshaker<S> {
 
 impl<S> HandshakeFilters for Handshaker<S> {
     fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         self.sink.add_filter(filter);
     }
 
     fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         self.sink.remove_filter(filter);
     }
 
@@ -255,12 +255,12 @@ impl Sink for HandshakerSink {
 
 impl HandshakeFilters for HandshakerSink {
     fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         self.filters.add_filter(filter);
     }
 
     fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         self.filters.remove_filter(filter);
     }
 

@@ -13,11 +13,11 @@ pub mod filters;
 pub trait HandshakeFilters {
     /// Add the filter to the current set of filters.
     fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static;
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static;
 
     /// Remove the filter from the current set of filters.
     fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static;
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static;
 
     /// Clear all filters currently set.
     fn clear_filters(&self);
@@ -25,12 +25,12 @@ pub trait HandshakeFilters {
 
 impl<'a, T> HandshakeFilters for &'a T where T: HandshakeFilters {
     fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         (*self).add_filter(filter)
     }
 
     fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
         (*self).remove_filter(filter)
     }
 
