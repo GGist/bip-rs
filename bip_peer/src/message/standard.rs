@@ -76,7 +76,45 @@ impl BitFieldMessage {
     }
 
     pub fn bitfield(&self) -> &[u8] {
-        &self.bytes[..]
+        &self.bytes
+    }
+
+    pub fn iter(&self) -> BitFieldIter {
+        BitFieldIter::new(self.bytes.clone())
+    }
+}
+
+/// Iterator for a `BitFieldMessage` to `HaveMessage`s.
+pub struct BitFieldIter {
+    bytes:   Bytes,
+    // TODO: Probably not the best type for indexing bits?
+    cur_bit: usize
+}
+
+impl BitFieldIter {
+    fn new(bytes: Bytes) -> BitFieldIter {
+        BitFieldIter{ bytes: bytes, cur_bit: 0 }
+    }
+}
+
+impl Iterator for BitFieldIter {
+    type Item = HaveMessage;
+
+    fn next(&mut self) -> Option<HaveMessage> {
+        let byte_in_bytes = self.cur_bit / 8;
+        let bit_in_byte = self.cur_bit % 8;
+
+        let opt_byte = self.bytes.get(byte_in_bytes).map(|byte| *byte);
+        opt_byte.and_then(|byte| {
+            let have_message = HaveMessage::new(self.cur_bit as u32);
+            self.cur_bit += 1;
+
+            if (byte << bit_in_byte) >> 7 == 1 {
+                Some(have_message)
+            } else {
+                self.next()
+            }
+        })
     }
 }
 
@@ -250,4 +288,76 @@ fn parse_cancel(bytes: &[u8]) -> IResult<&[u8], io::Result<CancelMessage>> {
          tuple!(be_u32, be_u32, be_u32),
          |(index, offset, length)| Ok(CancelMessage::new(index, offset, message::u32_to_usize(length)))
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BitFieldMessage, HaveMessage};
+
+    use bytes::Bytes;
+
+    #[test]
+    fn positive_bitfield_iter_empty() {
+        let bitfield = BitFieldMessage::new(Bytes::new());
+
+        assert_eq!(0, bitfield.iter().count());
+    }
+
+    #[test]
+    fn positive_bitfield_iter_no_messages() {
+        let mut bytes = Bytes::new();
+        bytes.extend_from_slice(&[0x00, 0x00, 0x00]);
+
+        let bitfield = BitFieldMessage::new(bytes);
+
+        assert_eq!(0, bitfield.iter().count());
+    }
+
+    #[test]
+    fn positive_bitfield_iter_single_message_beginning() {
+        let mut bytes = Bytes::new();
+        bytes.extend_from_slice(&[0x80, 0x00, 0x00]);
+
+        let bitfield = BitFieldMessage::new(bytes);
+
+        assert_eq!(1, bitfield.iter().count());
+        assert_eq!(HaveMessage::new(0), bitfield.iter().next().unwrap());
+    }
+
+    #[test]
+    fn positive_bitfield_iter_single_message_middle() {
+        let mut bytes = Bytes::new();
+        bytes.extend_from_slice(&[0x00, 0x01, 0x00]);
+
+        let bitfield = BitFieldMessage::new(bytes);
+
+        assert_eq!(1, bitfield.iter().count());
+        assert_eq!(HaveMessage::new(15), bitfield.iter().next().unwrap());
+    }
+
+    #[test]
+    fn positive_bitfield_iter_single_message_ending() {
+        let mut bytes = Bytes::new();
+        bytes.extend_from_slice(&[0x00, 0x00, 0x01]);
+
+        let bitfield = BitFieldMessage::new(bytes);
+
+        assert_eq!(1, bitfield.iter().count());
+        assert_eq!(HaveMessage::new(23), bitfield.iter().next().unwrap());
+    }
+
+    #[test]
+    fn positive_bitfield_iter_multiple_messages() {
+        let mut bytes = Bytes::new();
+        bytes.extend_from_slice(&[0xAF, 0x00, 0xC1]);
+
+        let bitfield = BitFieldMessage::new(bytes);
+        let messages: Vec<HaveMessage> = bitfield.iter().collect();
+
+        assert_eq!(9, messages.len());
+        assert_eq!(vec![HaveMessage::new(0), HaveMessage::new(2), HaveMessage::new(4),
+                        HaveMessage::new(5), HaveMessage::new(6), HaveMessage::new(7),
+                        HaveMessage::new(16), HaveMessage::new(17), HaveMessage::new(23)],
+                   messages);
+    }
 }

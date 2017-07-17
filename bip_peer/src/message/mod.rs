@@ -44,7 +44,7 @@ mod standard;
 mod null;
 
 pub use message::bits_extension::{BitsExtensionMessage, PortMessage};
-pub use message::standard::{HaveMessage, BitFieldMessage, RequestMessage, PieceMessage, CancelMessage};
+pub use message::standard::{HaveMessage, BitFieldMessage, BitFieldIter, RequestMessage, PieceMessage, CancelMessage};
 pub use message::null::NullProtocolMessage;
 
 /// Enumeration of messages for `PeerWireProtocol`.
