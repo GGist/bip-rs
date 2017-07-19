@@ -1,6 +1,7 @@
 use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4};
 use std::io;
 use std::time::Duration;
+use std::cmp;
 
 use discovery::DiscoveryInfo;
 use message::initiate::InitiateMessage;
@@ -151,12 +152,12 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
         let (sock_send, sock_recv) = mpsc::channel(config.done_buffer_size());
         
         let filters = Filters::new();
-        let timer = configured_handshake_timer(config.handshake_timeout());
+        let (handshake_timer, initiate_timer) = configured_handshake_timers(config.handshake_timeout(), config.connect_timeout());
 
         // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
-        handler::loop_handler(addr_recv, initiator::initiator_handler::<T>, hand_send.clone(), (filters.clone(), handle.clone()), &handle);
+        handler::loop_handler(addr_recv, initiator::initiator_handler::<T>, hand_send.clone(), (filters.clone(), handle.clone(), initiate_timer), &handle);
         handler::loop_handler(listener, ListenerHandler::new, hand_send, filters.clone(), &handle);
-        handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), timer), &handle);
+        handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), handshake_timer), &handle);
 
         let sink = HandshakerSink::new(addr_send, open_port, builder.pid, filters);
         let stream = HandshakerStream::new(sock_recv);
@@ -166,13 +167,13 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
 }
 
 /// Configure a timer wheel and create a `HandshakeTimer`.
-fn configured_handshake_timer(duration: Duration) -> HandshakeTimer {
+fn configured_handshake_timers(duration_one: Duration, duration_two: Duration) -> (HandshakeTimer, HandshakeTimer) {
     let timer = tokio_timer::wheel()
         .num_slots(64)
-        .max_timeout(duration)
+        .max_timeout(cmp::max(duration_one, duration_two))
         .build();
 
-    HandshakeTimer::new(timer, duration)
+    (HandshakeTimer::new(timer.clone(), duration_one), HandshakeTimer::new(timer, duration_two))
 }
 
 impl<S> Sink for Handshaker<S> {
