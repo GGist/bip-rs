@@ -1,4 +1,3 @@
-extern crate bip_dht;
 extern crate bip_disk;
 extern crate bip_handshake;
 extern crate bip_metainfo;
