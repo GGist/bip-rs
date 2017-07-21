@@ -1,4 +1,9 @@
+os: Visual Studio 2015
+
 environment:
+  RUSTUP_USE_HYPER: 1
+  CARGO_HTTP_CHECK_REVOKE: false
+
   matrix:
   - CRATE_DIR: bip_bencode
     TARGET: i686-pc-windows-msvc

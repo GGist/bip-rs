@@ -8,7 +8,7 @@ sudo: false
 
 env:
   matrix:
-    - CRATE_DIR=bip
+    - CRATE_DIR=examples/simple_torrent
     - CRATE_DIR=bip_bencode
     - CRATE_DIR=bip_dht
     - CRATE_DIR=bip_disk
