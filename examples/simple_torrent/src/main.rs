@@ -123,6 +123,10 @@ fn main() {
     // Create a disk manager to handle storing/loading blocks (we add in a file handle cache
     // to avoid anti virus causing slow file opens/closes, will cache up to 100 file handles)
     let (disk_manager_send, disk_manager_recv) = DiskManagerBuilder::new()
+        // Reducing our sink and stream capacities allow us to constrain memory usage
+        // (though for spiky downloads, this could effectively throttle us, which is ok too.)
+        .with_sink_buffer_capacity(1)
+        .with_stream_buffer_capacity(0)
         .build(FileHandleCache::new(NativeFileSystem::with_directory(dir), 100))
         .into_parts();
 
@@ -143,6 +147,10 @@ fn main() {
         .into_parts();
     // Create a peer manager that will hold our peers and heartbeat/send messages to them
     let (peer_manager_send, peer_manager_recv) = PeerManagerBuilder::new()
+        // Similar to the disk manager sink and stream capacities, we can constrain those
+        // for the peer manager as well.
+        .with_sink_buffer_capacity(0)
+        .with_stream_buffer_capacity(0)
         .build(core.handle())
         .into_parts();
 
