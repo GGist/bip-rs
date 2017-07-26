@@ -45,8 +45,8 @@ fn create_torrent<S>(src_path: S) -> ParseResult<Vec<u8>>
     pb.format("╢▌▌░╟");
     
     let builder = MetainfoBuilder::new()
-        .set_created_by("bip_metainfo")
-        .set_comment("Just Some Comment");
+        .set_created_by(Some("bip_metainfo"))
+        .set_comment(Some("Just Some Comment"));
     
     let mut prev_progress = 0;
     builder.build(2, src_path, move |progress| {

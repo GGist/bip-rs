@@ -2,7 +2,6 @@ use std::iter::ExactSizeIterator;
 
 use bip_bencode::{BencodeMut, BMutAccess};
 use bip_util::sha::{self, ShaHash};
-use chrono::UTC;
 
 use accessor::{Accessor, IntoAccessor};
 use error::ParseResult;
@@ -59,50 +58,63 @@ pub struct MetainfoBuilder<'a> {
 impl<'a> MetainfoBuilder<'a> {
     /// Create a new MetainfoBuilder with some default values set.
     pub fn new() -> MetainfoBuilder<'a> {
-        generate_default_builder()
+        MetainfoBuilder {
+            root: BencodeMut::new_dict(),
+            info: InfoBuilder::new()
+        }
     }
 
-    /// Set the main tracker that this torrent file points to.
-    pub fn set_main_tracker(mut self, tracker_url: &'a str) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url));
+    /// Set or unset the main tracker that this torrent file points to.
+    pub fn set_main_tracker(mut self, opt_tracker_url: Option<&'a str>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_tracker_url
+                .and_then(|tracker_url| dict_access.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url)))
+                .or_else(|| dict_access.remove(parse::ANNOUNCE_URL_KEY));
+        }
 
         self
     }
 
-    /// Set the creation date for the torrent.
-    ///
-    /// Defaults to the current time when the builder was created.
-    pub fn set_creation_date(mut self, secs_epoch: i64) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch));
+    /// Set or unset the creation date for the torrent.
+    pub fn set_creation_date(mut self, opt_secs_epoch: Option<i64>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_secs_epoch
+                .and_then(|secs_epoch| dict_access.insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch)))
+                .or_else(|| dict_access.remove(parse::CREATION_DATE_KEY));
+        }
 
         self
     }
 
-    /// Set a comment for the torrent file.
-    pub fn set_comment(mut self, comment: &'a str) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::COMMENT_KEY, ben_bytes!(comment));
+    /// Set or unset a comment for the torrent file.
+    pub fn set_comment(mut self, opt_comment: Option<&'a str>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_comment
+                .and_then(|comment| dict_access.insert(parse::COMMENT_KEY, ben_bytes!(comment)))
+                .or_else(|| dict_access.remove(parse::COMMENT_KEY));
+        }
 
         self
     }
 
-    /// Set the created by for the torrent file.
-    pub fn set_created_by(mut self, created_by: &'a str) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::CREATED_BY_KEY, ben_bytes!(created_by));
+    /// Set or unset the created by for the torrent file.
+    pub fn set_created_by(mut self, opt_created_by: Option<&'a str>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_created_by
+                .and_then(|created_by| dict_access.insert(parse::CREATED_BY_KEY, ben_bytes!(created_by)))
+                .or_else(|| dict_access.remove(parse::CREATED_BY_KEY));
+        }
 
         self
     }
 
-    /// Sets the private flag for the torrent file.
-    pub fn set_private_flag(mut self, is_private: bool) -> MetainfoBuilder<'a> {
-        self.info = self.info.set_private_flag(is_private);
+    /// Set or unset the private flag for the torrent file.
+    pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> MetainfoBuilder<'a> {
+        self.info = self.info.set_private_flag(opt_is_private);
 
         self
     }
@@ -142,16 +154,16 @@ impl<'a> InfoBuilder<'a> {
         InfoBuilder{ info: BencodeMut::new_dict(), piece_length: PieceLength::OptBalanced }
     }
 
-    /// Sets the private flag for the torrent file.
-    pub fn set_private_flag(mut self, is_private: bool) -> InfoBuilder<'a> {
-        let numeric_is_private = if is_private {
-            1
-        } else {
-            0
-        };
-        self.info.dict_mut()
-            .unwrap()
-            .insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private));
+    /// Set or unset the private flag for the torrent file.
+    pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> InfoBuilder<'a> {
+        let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private{ 1 } else { 0 });
+        
+        {
+            let dict_access = self.info.dict_mut().unwrap();
+            opt_numeric_is_private
+                .and_then(|numeric_is_private| dict_access.insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private)))
+                .or_else(|| dict_access.remove(parse::PRIVATE_KEY));
+        }
 
         self
     }
@@ -303,17 +315,6 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
         } else {
             Ok(info.encode())
         }
-}
-
-/// Generates a default MetainfoBuilder.
-fn generate_default_builder<'a>() -> MetainfoBuilder<'a> {
-    let builder = MetainfoBuilder {
-        root: BencodeMut::new_dict(),
-        info: InfoBuilder::new()
-    };
-    let default_creation_date = UTC::now().timestamp();
-
-    builder.set_creation_date(default_creation_date)
 }
 
 /// Calculate the final piece length given the total file size and piece length strategy.

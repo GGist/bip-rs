@@ -1,16 +1,19 @@
 //! Accessing the fields of a Metainfo file.
 use std::path::{Path, PathBuf};
+use std::io;
 
 use bip_bencode::{BencodeRef, BDictAccess, BDecodeOpt};
 use bip_util::bt::InfoHash;
-use bip_util::sha;
+use bip_util::sha::{self, ShaHash};
 
+use accessor::{Accessor, PieceAccess, IntoAccessor};
+use builder::{MetainfoBuilder, InfoBuilder, PieceLength};
 use parse;
 use error::{ParseError, ParseErrorKind, ParseResult};
 use iter::{Files, Pieces};
 
 /// Contains optional metadata for a torrent file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Metainfo {
     comment: Option<String>,
     announce: Option<String>,
@@ -59,6 +62,21 @@ impl Metainfo {
     pub fn info(&self) -> &Info {
         &self.info
     }
+
+    /// Retrieve the bencoded bytes for the `Metainfo` file.
+    pub fn encode(&self) -> Vec<u8> {
+        // Since there are no file system accesses here, should be fine to unwrap
+        MetainfoBuilder::new()
+            .set_main_tracker(self.main_tracker())
+            .set_creation_date(self.creation_date())
+            .set_comment(self.comment())
+            .set_created_by(self.created_by())
+            .set_private_flag(self.info().is_private())
+            // TODO: Revisit this cast...
+            .set_piece_length(PieceLength::Custom(self.info().piece_length() as usize))
+            .build(1, &self.info, |_| ())
+            .unwrap()
+    }
 }
 
 impl From<Info> for Metainfo {
@@ -95,13 +113,13 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
 // ----------------------------------------------------------------------------//
 
 /// Contains directory and checksum data for a torrent file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Info {
     info_hash:      InfoHash,
     files:          Vec<File>,
     pieces:         Vec<[u8; sha::SHA_HASH_LEN]>,
     piece_len:      u64,
-    is_private:     bool,
+    is_private:     Option<bool>,
     // Present only for multi file torrents.
     file_directory: Option<PathBuf>,
 }
@@ -136,7 +154,7 @@ impl Info {
     }
 
     /// Whether or not the torrent is private.
-    pub fn is_private(&self) -> bool {
+    pub fn is_private(&self) -> Option<bool> {
         self.is_private
     }
 
@@ -156,6 +174,57 @@ impl Info {
     /// pieces received from peers.
     pub fn files<'a>(&'a self) -> Files<'a> {
         Files::new(&self.files)
+    }
+
+    /// Retrieve the bencoded bytes for the `Info` dictionary.
+    pub fn encode(&self) -> Vec<u8> {
+        // Since there are no file system accesses here, should be fine to unwrap
+        InfoBuilder::new()
+            .set_private_flag(self.is_private())
+            // TODO: Revisit this cast...
+            .set_piece_length(PieceLength::Custom(self.piece_length() as usize))
+            .build(1, self, |_| ())
+            .unwrap()
+    }
+}
+
+impl IntoAccessor for Info {
+    type Accessor = Info;
+
+    fn into_accessor(self) -> io::Result<Info> {
+        Ok(self)
+    }
+}
+
+impl<'a> IntoAccessor for &'a Info {
+    type Accessor = &'a Info;
+
+    fn into_accessor(self) -> io::Result<&'a Info> {
+        Ok(self)
+    }
+}
+
+impl Accessor for Info {
+    fn access_directory(&self) -> Option<&Path> {
+        self.directory()
+    }
+
+    fn access_metadata<C>(&self, mut callback: C) -> io::Result<()>
+        where C: FnMut(u64, &Path) {
+        for file in self.files() {
+            callback(file.length(), file.path());
+        }
+
+        Ok(())
+    }
+
+    fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
+        where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()> {
+        for piece in self.pieces() {
+            try!(callback(PieceAccess::PreComputed(ShaHash::from_hash(piece).unwrap())));
+        }
+        
+        Ok(())
     }
 }
 
@@ -243,7 +312,7 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 // ----------------------------------------------------------------------------//
 
 /// Contains information for a single file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct File {
     len:    u64,
     path:   PathBuf,
@@ -421,7 +490,7 @@ mod tests {
 
         assert_eq!(metainfo_file.info().directory(), directory.map(|d| d.as_ref()));
         assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap() as u64);
-        assert_eq!(metainfo_file.info().is_private(), private.unwrap_or(0) == 1);
+        assert_eq!(metainfo_file.info().is_private(), private.map(|private| private == 1));
 
         let pieces = pieces.unwrap();
         assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(),

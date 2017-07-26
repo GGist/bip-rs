@@ -89,8 +89,8 @@ pub fn parse_pieces<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>) -> ParseRes
 }
 
 /// Parses the private flag from the info dictionary.
-pub fn parse_private<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>) -> bool {
-    CONVERT.lookup_and_convert_int(info_dict, PRIVATE_KEY).ok().map_or(false, |p| p == 1)
+pub fn parse_private<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>) -> Option<bool> {
+    CONVERT.lookup_and_convert_int(info_dict, PRIVATE_KEY).ok().map(|p| p == 1)
 }
 
 /// Parses the name from the info dictionary.
