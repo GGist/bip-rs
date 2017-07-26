@@ -6,7 +6,7 @@ use std::fs::{File};
 use std::path::{Path};
 use std::io::{self, Write, BufRead};
 
-use bip_metainfo::{MetainfoBuilder, MetainfoFile};
+use bip_metainfo::{MetainfoBuilder, Metainfo};
 use bip_metainfo::error::{ParseResult};
 use chrono::{TimeZone, UTC};
 use pbr::{ProgressBar};
@@ -49,7 +49,7 @@ fn create_torrent<S>(src_path: S) -> ParseResult<Vec<u8>>
         .set_comment("Just Some Comment");
     
     let mut prev_progress = 0;
-    builder.build_as_bytes(2, src_path, move |progress| {
+    builder.build(2, src_path, move |progress| {
         let whole_progress = (progress * (count as f64)) as u64;
         let delta_progress = whole_progress - prev_progress;
         
@@ -62,9 +62,9 @@ fn create_torrent<S>(src_path: S) -> ParseResult<Vec<u8>>
 
 /// Print general information about the torrent.
 fn print_metainfo_overview(bytes: &[u8]) {
-    let metainfo = MetainfoFile::from_bytes(bytes).unwrap();
+    let metainfo = Metainfo::from_bytes(bytes).unwrap();
     let info = metainfo.info();
-    let info_hash_hex = metainfo.info_hash().as_ref()
+    let info_hash_hex = metainfo.info().info_hash().as_ref()
         .iter()
         .map(|b| format!("{:02X}", b))
         .fold(String::new(), |mut acc, nex| {

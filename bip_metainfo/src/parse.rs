@@ -1,5 +1,4 @@
 use bip_bencode::{BencodeRef, BDictAccess, BConvert, BencodeConvertError, BListAccess};
-use bip_util::bt::InfoHash;
 
 use error::{ParseError, ParseResult};
 
@@ -72,16 +71,9 @@ pub fn parse_encoding<'a>(root_dict: &BDictAccess<'a, BencodeRef<'a>>) -> Option
 }
 
 /// Parses the info dictionary from the root dictionary.
-pub fn parse_info_dict<'a, 'b>(root_dict: &'b BDictAccess<'a, BencodeRef<'a>>)
-                               -> ParseResult<&'b BDictAccess<'a, BencodeRef<'a>>> {
-    CONVERT.lookup_and_convert_dict(root_dict, INFO_KEY)
-}
-
-/// Parses the info hash from the root dictionary.
-pub fn parse_info_hash<'a>(root_dict: &BDictAccess<'a, BencodeRef<'a>>) -> ParseResult<InfoHash> {
-    let info_dict_bencode = try!(CONVERT.lookup(root_dict, INFO_KEY));
-
-    Ok(InfoHash::from_bytes(info_dict_bencode.buffer()))
+pub fn parse_info_bencode<'a, 'b>(root_dict: &'b BDictAccess<'a, BencodeRef<'a>>)
+                               -> ParseResult<&'b BencodeRef<'a>> {
+    CONVERT.lookup(root_dict, INFO_KEY)
 }
 
 // ----------------------------------------------------------------------------//
