@@ -64,7 +64,7 @@ impl Metainfo {
     }
 
     /// Retrieve the bencoded bytes for the `Metainfo` file.
-    pub fn encode(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         // Since there are no file system accesses here, should be fine to unwrap
         MetainfoBuilder::new()
             .set_main_tracker(self.main_tracker())
@@ -177,7 +177,7 @@ impl Info {
     }
 
     /// Retrieve the bencoded bytes for the `Info` dictionary.
-    pub fn encode(&self) -> Vec<u8> {
+    pub fn as_bytes(&self) -> Vec<u8> {
         // Since there are no file system accesses here, should be fine to unwrap
         InfoBuilder::new()
             .set_private_flag(self.is_private())
