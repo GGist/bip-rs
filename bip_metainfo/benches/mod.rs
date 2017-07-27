@@ -5,7 +5,7 @@ extern crate test;
 
 #[cfg(test)]
 mod benches {
-    use bip_metainfo::{MetainfoFile, MetainfoBuilder, DirectAccessor};
+    use bip_metainfo::{Metainfo, MetainfoBuilder, DirectAccessor};
     use test::Bencher;
 
     #[bench]
@@ -15,7 +15,7 @@ mod benches {
         b.iter(|| {
             let direct_accessor = DirectAccessor::new("100MBFile", &file_content);
 
-            MetainfoBuilder::new().build_as_bytes(2, direct_accessor, |_| ()).unwrap();
+            MetainfoBuilder::new().build(2, direct_accessor, |_| ()).unwrap();
         });
     }
 
@@ -23,6 +23,6 @@ mod benches {
     fn bench_parse_multi_kb_metainfo(b: &mut Bencher) {
         let metainfo = include_bytes!("multi_kb.metainfo");
 
-        b.iter(|| MetainfoFile::from_bytes(&metainfo[..]).unwrap());
+        b.iter(|| Metainfo::from_bytes(&metainfo[..]).unwrap());
     }
 }
