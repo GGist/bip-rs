@@ -1,39 +1,36 @@
-//! Accessing the fields of a MetainfoFile.
+//! Accessing the fields of a Metainfo file.
 use std::path::{Path, PathBuf};
+use std::io;
 
 use bip_bencode::{BencodeRef, BDictAccess, BDecodeOpt};
 use bip_util::bt::InfoHash;
-use bip_util::sha;
+use bip_util::sha::{self, ShaHash};
 
+use accessor::{Accessor, PieceAccess, IntoAccessor};
+use builder::{MetainfoBuilder, InfoBuilder, PieceLength};
 use parse;
 use error::{ParseError, ParseErrorKind, ParseResult};
 use iter::{Files, Pieces};
 
-/// Contains optional and required information for the torrent.
-#[derive(Debug, Clone)]
-pub struct MetainfoFile {
+/// Contains optional metadata for a torrent file.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Metainfo {
     comment: Option<String>,
     announce: Option<String>,
     encoding: Option<String>,
-    info_hash: InfoHash,
     created_by: Option<String>,
     creation_date: Option<i64>,
-    info_dictionary: InfoDictionary,
+    info: Info,
 }
 
-impl MetainfoFile {
-    /// Read a MetainfoFile from the given bytes.
-    pub fn from_bytes<B>(bytes: B) -> ParseResult<MetainfoFile>
+impl Metainfo {
+    /// Read a `Metainfo` from metainfo file bytes.
+    pub fn from_bytes<B>(bytes: B) -> ParseResult<Metainfo>
         where B: AsRef<[u8]>
     {
         let bytes_slice = bytes.as_ref();
 
-        parse_from_bytes(bytes_slice)
-    }
-
-    /// InfoHash of the InfoDictionary used to identify swarms of peers exchaning these files.
-    pub fn info_hash(&self) -> InfoHash {
-        self.info_hash
+        parse_meta_bytes(bytes_slice)
     }
 
     /// Announce url for the main tracker of the metainfo file.
@@ -61,14 +58,36 @@ impl MetainfoFile {
         self.creation_date
     }
 
-    /// InfoDictionary for the metainfo file.
-    pub fn info(&self) -> &InfoDictionary {
-        &self.info_dictionary
+    /// Info dictionary for the metainfo file.
+    pub fn info(&self) -> &Info {
+        &self.info
+    }
+
+    /// Retrieve the bencoded bytes for the `Metainfo` file.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        // Since there are no file system accesses here, should be fine to unwrap
+        MetainfoBuilder::new()
+            .set_main_tracker(self.main_tracker())
+            .set_creation_date(self.creation_date())
+            .set_comment(self.comment())
+            .set_created_by(self.created_by())
+            .set_private_flag(self.info().is_private())
+            // TODO: Revisit this cast...
+            .set_piece_length(PieceLength::Custom(self.info().piece_length() as usize))
+            .build(1, &self.info, |_| ())
+            .unwrap()
     }
 }
 
-/// Parses the given bytes and builds a MetainfoFile from them.
-fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
+impl From<Info> for Metainfo {
+    fn from(info: Info) -> Metainfo {
+        Metainfo{ comment: None, announce: None, encoding: None,
+                  created_by: None, creation_date: None, info: info }
+    }
+}
+
+/// Parses the given metainfo bytes and builds a Metainfo from them.
+fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
     let root_bencode = try!(BencodeRef::decode(bytes, BDecodeOpt::default()));
     let root_dict = try!(parse::parse_root_dict(&root_bencode));
 
@@ -78,38 +97,46 @@ fn parse_from_bytes(bytes: &[u8]) -> ParseResult<MetainfoFile> {
     let opt_created_by = parse::parse_created_by(root_dict).map(|e| e.to_owned());
     let opt_creation_date = parse::parse_creation_date(root_dict);
 
-    let info_hash = try!(parse::parse_info_hash(root_dict));
-    let info_dict = try!(parse::parse_info_dict(root_dict));
-    let info_dictionary = try!(InfoDictionary::new(info_dict));
+    let info_bencode = try!(parse::parse_info_bencode(root_dict));
+    let info = try!(parse_info_dictionary(info_bencode));
 
-    Ok(MetainfoFile {
+    Ok(Metainfo {
         comment: opt_comment,
         announce: announce,
         encoding: opt_encoding,
-        info_hash: info_hash,
         created_by: opt_created_by,
         creation_date: opt_creation_date,
-        info_dictionary: info_dictionary,
+        info: info
     })
 }
 
 // ----------------------------------------------------------------------------//
 
-/// Contains files and checksums for the torrent.
-#[derive(Debug, Clone)]
-pub struct InfoDictionary {
+/// Contains directory and checksum data for a torrent file.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Info {
+    info_hash:      InfoHash,
     files:          Vec<File>,
     pieces:         Vec<[u8; sha::SHA_HASH_LEN]>,
     piece_len:      u64,
-    is_private:     bool,
+    is_private:     Option<bool>,
     // Present only for multi file torrents.
     file_directory: Option<PathBuf>,
 }
 
-impl InfoDictionary {
-    /// Builds the InfoDictionary from the root bencode of the metainfo file.
-    fn new<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>) -> ParseResult<InfoDictionary> {
-        parse_from_info_dictionary(info_dict)
+impl Info {
+    /// Read an `Info` from info dictionary bytes.
+    pub fn from_bytes<B>(bytes: B) -> ParseResult<Info>
+        where B: AsRef<[u8]>
+    {
+        let bytes_slice = bytes.as_ref();
+
+        parse_info_bytes(bytes_slice)
+    }
+
+    /// Hash to uniquely identify this torrent.
+    pub fn info_hash(&self) -> InfoHash {
+        self.info_hash
     }
 
     /// Some file directory if this is a multi-file torrent, otherwise None.
@@ -127,7 +154,7 @@ impl InfoDictionary {
     }
 
     /// Whether or not the torrent is private.
-    pub fn is_private(&self) -> bool {
+    pub fn is_private(&self) -> Option<bool> {
         self.is_private
     }
 
@@ -148,11 +175,71 @@ impl InfoDictionary {
     pub fn files<'a>(&'a self) -> Files<'a> {
         Files::new(&self.files)
     }
+
+    /// Retrieve the bencoded bytes for the `Info` dictionary.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        // Since there are no file system accesses here, should be fine to unwrap
+        InfoBuilder::new()
+            .set_private_flag(self.is_private())
+            // TODO: Revisit this cast...
+            .set_piece_length(PieceLength::Custom(self.piece_length() as usize))
+            .build(1, self, |_| ())
+            .unwrap()
+    }
 }
 
-/// Parses the given info dictionary and builds an InfoDictionary from it.
-fn parse_from_info_dictionary<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>)
-                                  -> ParseResult<InfoDictionary> {
+impl IntoAccessor for Info {
+    type Accessor = Info;
+
+    fn into_accessor(self) -> io::Result<Info> {
+        Ok(self)
+    }
+}
+
+impl<'a> IntoAccessor for &'a Info {
+    type Accessor = &'a Info;
+
+    fn into_accessor(self) -> io::Result<&'a Info> {
+        Ok(self)
+    }
+}
+
+impl Accessor for Info {
+    fn access_directory(&self) -> Option<&Path> {
+        self.directory()
+    }
+
+    fn access_metadata<C>(&self, mut callback: C) -> io::Result<()>
+        where C: FnMut(u64, &Path) {
+        for file in self.files() {
+            callback(file.length(), file.path());
+        }
+
+        Ok(())
+    }
+
+    fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
+        where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()> {
+        for piece in self.pieces() {
+            try!(callback(PieceAccess::PreComputed(ShaHash::from_hash(piece).unwrap())));
+        }
+        
+        Ok(())
+    }
+}
+
+/// Parses the given info dictionary bytes and builds a Metainfo from them.
+fn parse_info_bytes(bytes: &[u8]) -> ParseResult<Info> {
+    let info_bencode = try!(BencodeRef::decode(bytes, BDecodeOpt::default()));
+
+    parse_info_dictionary(&info_bencode)
+}
+
+/// Parses the given info dictionary and builds an Info from it.
+fn parse_info_dictionary<'a>(info_bencode: &BencodeRef<'a>) -> ParseResult<Info> {
+    let info_hash = InfoHash::from_bytes(info_bencode.buffer());
+
+    let info_dict = try!(parse::parse_root_dict(info_bencode));
     let piece_len = try!(parse::parse_piece_length(info_dict));
     let is_private = parse::parse_private(info_dict);
 
@@ -174,7 +261,8 @@ fn parse_from_info_dictionary<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>)
             files_list.push(file);
         }
 
-        Ok(InfoDictionary {
+        Ok(Info {
+            info_hash: info_hash,
             files: files_list,
             pieces: piece_buffers,
             piece_len: piece_len,
@@ -184,7 +272,8 @@ fn parse_from_info_dictionary<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>)
     } else {
         let file = try!(File::as_single_file(info_dict));
 
-        Ok(InfoDictionary {
+        Ok(Info {
+            info_hash: info_hash,
             files: vec![file],
             pieces: piece_buffers,
             piece_len: piece_len,
@@ -223,7 +312,7 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 // ----------------------------------------------------------------------------//
 
 /// Contains information for a single file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct File {
     len:    u64,
     path:   PathBuf,
@@ -291,7 +380,7 @@ mod tests {
     use bip_util::sha;
     use bip_util::bt::InfoHash;
 
-    use metainfo::MetainfoFile;
+    use metainfo::Metainfo;
     use parse;
 
     /// Helper function for manually constructing a metainfo file based on the parameters given.
@@ -391,9 +480,9 @@ mod tests {
             info_hash
         };
 
-        let metainfo_file = MetainfoFile::from_bytes(root_dict.encode()).unwrap();
+        let metainfo_file = Metainfo::from_bytes(root_dict.encode()).unwrap();
 
-        assert_eq!(metainfo_file.info_hash(), info_hash);
+        assert_eq!(metainfo_file.info().info_hash(), info_hash);
         assert_eq!(metainfo_file.comment(), comment);
         assert_eq!(metainfo_file.created_by(), create_by);
         assert_eq!(metainfo_file.encoding(), encoding);
@@ -401,7 +490,7 @@ mod tests {
 
         assert_eq!(metainfo_file.info().directory(), directory.map(|d| d.as_ref()));
         assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap() as u64);
-        assert_eq!(metainfo_file.info().is_private(), private.unwrap_or(0) == 1);
+        assert_eq!(metainfo_file.info().is_private(), private.map(|private| private == 1));
 
         let pieces = pieces.unwrap();
         assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(),
@@ -708,7 +797,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_parse_from_empty_bytes() {
-        MetainfoFile::from_bytes(b"").unwrap();
+        Metainfo::from_bytes(b"").unwrap();
     }
 
     #[test]

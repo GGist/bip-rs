@@ -5,7 +5,7 @@ use std::thread;
 use bip_util::sha::ShaHash;
 use crossbeam::sync::MsQueue;
 
-use accessor::Accessor;
+use accessor::{Accessor, PieceAccess};
 use builder::buffer::{PieceBuffers, PieceBuffer};
 use error::ParseResult;
 
@@ -88,31 +88,40 @@ fn start_hash_master<A>(accessor: A,
 
     // Our closure may be called multiple times, save partial pieces buffers between calls
     let mut opt_piece_buffer = None;
-    try!(accessor.access_pieces(|piece_region| {
-        let mut curr_piece_buffer = if let Some(piece_buffer) = opt_piece_buffer.take() {
-            piece_buffer
-        } else {
-            buffers.checkout()
-        };
+    try!(accessor.access_pieces(|piece_access| {
+        match piece_access {
+            PieceAccess::Compute(piece_region) => {
+                let mut curr_piece_buffer = if let Some(piece_buffer) = opt_piece_buffer.take() {
+                    piece_buffer
+                } else {
+                    buffers.checkout()
+                };
 
-        let mut end_of_region = false;
-        while !end_of_region {
-            end_of_region =
-                try!(curr_piece_buffer.write_bytes(|buffer| piece_region.read(buffer))) == 0;
+                let mut end_of_region = false;
+                while !end_of_region {
+                    end_of_region =
+                        try!(curr_piece_buffer.write_bytes(|buffer| piece_region.read(buffer))) == 0;
 
-            if curr_piece_buffer.is_whole() {
-                work.push(WorkerMessage::HashPiece(piece_index, curr_piece_buffer));
+                    if curr_piece_buffer.is_whole() {
+                        work.push(WorkerMessage::HashPiece(piece_index, curr_piece_buffer));
+
+                        piece_index += 1;
+                        curr_piece_buffer = buffers.checkout();
+
+                        if progress_sender.send(piece_index).is_err() {
+                            // TODO: Add logging here
+                        }
+                    }
+                }
+
+                opt_piece_buffer = Some(curr_piece_buffer);
+            },
+            PieceAccess::PreComputed(hash) => {
+                pieces.push((piece_index, hash));
 
                 piece_index += 1;
-                curr_piece_buffer = buffers.checkout();
-
-                if progress_sender.send(piece_index).is_err() {
-                    // TODO: Add logging here
-                }
             }
         }
-
-        opt_piece_buffer = Some(curr_piece_buffer);
 
         Ok(())
     }));
@@ -194,14 +203,14 @@ fn start_hash_worker(send: Sender<MasterMessage>,
 #[cfg(test)]
 mod tests {
     use std::ops::{Range, Index};
-    use std::io::{self, Cursor, Read};
+    use std::io::{self, Cursor};
     use std::path::Path;
     use std::sync::mpsc;
 
     use bip_util::sha::ShaHash;
     use rand::{self, Rng};
 
-    use accessor::Accessor;
+    use accessor::{Accessor, PieceAccess};
     use builder::worker;
 
     // Keep these numbers fairly small to avoid lengthy tests
@@ -256,12 +265,12 @@ mod tests {
 
         /// Access the sequential pieces that make up all of the files.
         fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
-            where C: FnMut(&mut Read) -> io::Result<()>
+            where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()>
         {
             for range in self.buffer_ranges.iter() {
                 let mut next_region = Cursor::new(self.contiguous_buffer.index(range.clone()));
 
-                try!(callback(&mut next_region));
+                try!(callback(PieceAccess::Compute(&mut next_region)));
             }
 
             Ok(())

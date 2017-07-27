@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 
+use bip_util::sha::ShaHash;
 use walkdir::{self, WalkDir, DirEntry};
 
 /// Trait for types convertible as a Result into some Accessor.
@@ -23,7 +24,7 @@ pub trait Accessor {
 
     /// Access the sequential pieces that make up all of the files.
     fn access_pieces<C>(&self, callback: C) -> io::Result<()>
-        where C: FnMut(&mut Read) -> io::Result<()>;
+        where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()>;
 }
 
 impl<'a, T> Accessor for &'a T
@@ -40,10 +41,27 @@ impl<'a, T> Accessor for &'a T
     }
 
     fn access_pieces<C>(&self, callback: C) -> io::Result<()>
-        where C: FnMut(&mut Read) -> io::Result<()>
+        where C: for<'b> FnMut(PieceAccess<'b>) -> io::Result<()>
     {
         Accessor::access_pieces(*self, callback)
     }
+}
+
+// ----------------------------------------------------------------------------//
+
+/// Type of access given for computing (or not) the checksums for torrent files.
+///
+/// Implementations should typically choose to invoke the `access_pieces` callback
+/// with all `Compute` variants, or all `PreComputed` variants. It is allowable to
+/// mix and match variants between calls, but any `PreComputed` hashes will be
+/// considered as the next checksum to be put in the torrent file, so implementations
+/// will typically want to align calls with `Compute` to a piece length boundary
+/// (though not required).
+pub enum PieceAccess<'a> {
+    /// Hash should be computed from the bytes read.
+    Compute(&'a mut Read),
+    /// Hash given should be used directly as the next checksum.
+    PreComputed(ShaHash)
 }
 
 // ----------------------------------------------------------------------------//
@@ -126,13 +144,13 @@ impl Accessor for FileAccessor {
     }
 
     fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
-        where C: FnMut(&mut Read) -> io::Result<()>
+        where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()>
     {
         for res_entry in WalkDir::new(&self.absolute_path).into_iter().filter(entry_file_filter) {
             let entry = try!(res_entry);
             let mut file = try!(File::open(entry.path()));
 
-            try!(callback(&mut file));
+            try!(callback(PieceAccess::Compute(&mut file)));
         }
 
         Ok(())
@@ -187,10 +205,10 @@ impl<'a> Accessor for DirectAccessor<'a> {
     }
 
     fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
-        where C: FnMut(&mut Read) -> io::Result<()>
+        where C: for<'b> FnMut(PieceAccess<'b>) -> io::Result<()>
     {
         let mut cursor = Cursor::new(self.file_contents);
 
-        callback(&mut cursor)
+        callback(PieceAccess::Compute(&mut cursor))
     }
 }

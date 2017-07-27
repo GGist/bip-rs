@@ -2,7 +2,6 @@ use std::iter::ExactSizeIterator;
 
 use bip_bencode::{BencodeMut, BMutAccess};
 use bip_util::sha::{self, ShaHash};
-use chrono::UTC;
 
 use accessor::{Accessor, IntoAccessor};
 use error::ParseResult;
@@ -53,72 +52,124 @@ pub enum PieceLength {
 /// Builder for generating a torrent file from some accessor.
 pub struct MetainfoBuilder<'a> {
     root: BencodeMut<'a>,
-    info: BencodeMut<'a>,
-    // Stored outside of root as some of the variants need the total
-    // file sizes in order for the final piece length to be calculated.
-    piece_length: PieceLength,
+    info: InfoBuilder<'a>
 }
 
 impl<'a> MetainfoBuilder<'a> {
     /// Create a new MetainfoBuilder with some default values set.
     pub fn new() -> MetainfoBuilder<'a> {
-        generate_default_builder()
+        MetainfoBuilder {
+            root: BencodeMut::new_dict(),
+            info: InfoBuilder::new()
+        }
     }
 
-    /// Set the main tracker that this torrent file points to.
-    pub fn set_main_tracker(mut self, tracker_url: &'a str) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url));
+    /// Set or unset the main tracker that this torrent file points to.
+    pub fn set_main_tracker(mut self, opt_tracker_url: Option<&'a str>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_tracker_url
+                .and_then(|tracker_url| dict_access.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url)))
+                .or_else(|| dict_access.remove(parse::ANNOUNCE_URL_KEY));
+        }
 
         self
     }
 
-    /// Set the creation date for the torrent.
-    ///
-    /// Defaults to the current time when the builder was created.
-    pub fn set_creation_date(mut self, secs_epoch: i64) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch));
+    /// Set or unset the creation date for the torrent.
+    pub fn set_creation_date(mut self, opt_secs_epoch: Option<i64>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_secs_epoch
+                .and_then(|secs_epoch| dict_access.insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch)))
+                .or_else(|| dict_access.remove(parse::CREATION_DATE_KEY));
+        }
 
         self
     }
 
-    /// Set a comment for the torrent file.
-    pub fn set_comment(mut self, comment: &'a str) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::COMMENT_KEY, ben_bytes!(comment));
+    /// Set or unset a comment for the torrent file.
+    pub fn set_comment(mut self, opt_comment: Option<&'a str>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_comment
+                .and_then(|comment| dict_access.insert(parse::COMMENT_KEY, ben_bytes!(comment)))
+                .or_else(|| dict_access.remove(parse::COMMENT_KEY));
+        }
 
         self
     }
 
-    /// Set the created by for the torrent file.
-    pub fn set_created_by(mut self, created_by: &'a str) -> MetainfoBuilder<'a> {
-        self.root.dict_mut()
-            .unwrap()
-            .insert(parse::CREATED_BY_KEY, ben_bytes!(created_by));
+    /// Set or unset the created by for the torrent file.
+    pub fn set_created_by(mut self, opt_created_by: Option<&'a str>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+            opt_created_by
+                .and_then(|created_by| dict_access.insert(parse::CREATED_BY_KEY, ben_bytes!(created_by)))
+                .or_else(|| dict_access.remove(parse::CREATED_BY_KEY));
+        }
 
         self
     }
 
-    /// Sets the private flag for the torrent file.
-    pub fn set_private_flag(mut self, is_private: bool) -> MetainfoBuilder<'a> {
-        let numeric_is_private = if is_private {
-            1
-        } else {
-            0
-        };
-        self.info.dict_mut()
-            .unwrap()
-            .insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private));
+    /// Set or unset the private flag for the torrent file.
+    pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> MetainfoBuilder<'a> {
+        self.info = self.info.set_private_flag(opt_is_private);
 
         self
     }
 
     /// Sets the piece length for the torrent file.
     pub fn set_piece_length(mut self, piece_length: PieceLength) -> MetainfoBuilder<'a> {
+        self.info = self.info.set_piece_length(piece_length);
+
+        self
+    }
+
+    /// Build the metainfo file from the given accessor and the number of worker threads.
+    ///
+    /// Panics if threads is equal to zero.
+    pub fn build<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
+        where A: IntoAccessor,
+              C: FnMut(f64) + Send + 'static
+    {
+        let accessor = try!(accessor.into_accessor());
+
+        build_with_accessor(threads, accessor, progress, Some(self.root), self.info.info, self.info.piece_length)
+    }
+}
+
+// ----------------------------------------------------------------------------//
+
+/// Builder for generating an info dictionary file from some accessor.
+pub struct InfoBuilder<'a> {
+    info:         BencodeMut<'a>,
+    // Stored outside of root as some of the variants need the total
+    // file sizes in order for the final piece length to be calculated.
+    piece_length: PieceLength
+}
+
+impl<'a> InfoBuilder<'a> {
+    pub fn new() -> InfoBuilder<'a> {
+        InfoBuilder{ info: BencodeMut::new_dict(), piece_length: PieceLength::OptBalanced }
+    }
+
+    /// Set or unset the private flag for the torrent file.
+    pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> InfoBuilder<'a> {
+        let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private{ 1 } else { 0 });
+        
+        {
+            let dict_access = self.info.dict_mut().unwrap();
+            opt_numeric_is_private
+                .and_then(|numeric_is_private| dict_access.insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private)))
+                .or_else(|| dict_access.remove(parse::PRIVATE_KEY));
+        }
+
+        self
+    }
+
+    /// Sets the piece length for the torrent file.
+    pub fn set_piece_length(mut self, piece_length: PieceLength) -> InfoBuilder<'a> {
         self.piece_length = piece_length;
 
         self
@@ -126,28 +177,34 @@ impl<'a> MetainfoBuilder<'a> {
 
     /// Build the metainfo file from the given accessor and the number of worker threads.
     ///
-    /// Worker threads are responsible for CPU bound tasks so if IO access is slow, increasing
-    /// the number of workers may not be beneficial. This method WILL block until it completes.
-    ///
-    /// Returns a list of bytes that make up the complete metainfo file.
-    ///
     /// Panics if threads is equal to zero.
-    pub fn build_as_bytes<A, C>(self,
-                                threads: usize,
-                                accessor: A,
-                                progress: C)
-                                -> ParseResult<Vec<u8>>
+    pub fn build<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
         where A: IntoAccessor,
               C: FnMut(f64) + Send + 'static
     {
+        let accessor = try!(accessor.into_accessor());
+
+        build_with_accessor(threads, accessor, progress, None, self.info, self.piece_length)
+    }
+}
+
+// ----------------------------------------------------------------------------//
+
+fn build_with_accessor<'a, A, C>(threads:       usize,
+                                accessor:       A,
+                                progress:       C,
+                                opt_root:       Option<BencodeMut<'a>>,
+                                info:           BencodeMut<'a>,
+                                piece_length:   PieceLength) -> ParseResult<Vec<u8>>
+    where A: Accessor,
+          C: FnMut(f64) + Send + 'static {
         if threads == 0 {
             panic!("bip_metainfo: Cannot Build Metainfo File With threads == 0");
         }
-        let access_owner = try!(accessor.into_accessor());
-
+        
         // Collect all of the file information into a list
         let mut files_info = Vec::new();
-        try!(access_owner.access_metadata(|len, path| {
+        try!(accessor.access_metadata(|len, path| {
             let path_list: Vec<String> = path.iter()
                 .map(|os_str| os_str.to_string_lossy().into_owned())
                 .collect();
@@ -157,9 +214,9 @@ impl<'a> MetainfoBuilder<'a> {
 
         // Build the pieces for the data our accessor is pointing at
         let total_files_len = files_info.iter().fold(0, |acc, nex| acc + nex.0);
-        let piece_length = determine_piece_length(total_files_len, self.piece_length);
+        let piece_length = determine_piece_length(total_files_len, piece_length);
         let total_num_pieces = ((total_files_len as f64) / (piece_length as f64)).ceil() as u64;
-        let pieces_list = try!(worker::start_hasher_workers(&access_owner,
+        let pieces_list = try!(worker::start_hasher_workers(&accessor,
                                                             piece_length,
                                                             total_num_pieces,
                                                             threads,
@@ -167,110 +224,97 @@ impl<'a> MetainfoBuilder<'a> {
         let pieces = map_pieces_list(pieces_list.into_iter().map(|(_, piece)| piece));
 
         let mut single_file_name = String::new();
-        let access_owner = access_owner.access_directory().map(|path| path.to_string_lossy());
-        // Move these here so they are destroyed before the info they borrow
-        let mut root = self.root;
-        let mut info = self.info;
+        let access_directory = accessor.access_directory().map(|path| path.to_string_lossy());
 
+        // Move these below access directory for borrow checker
+        let opt_root = opt_root;
+        let mut info = info;
+
+        // Update the info bencode with values
         {
-            let root_access = root.dict_mut().unwrap();
-            {
-                let info_access = info.dict_mut().unwrap();
+            let info_access = info.dict_mut().unwrap();
 
-                info_access.insert(parse::PIECE_LENGTH_KEY, ben_int!(piece_length as i64));
-                info_access.insert(parse::PIECES_KEY, ben_bytes!(&pieces));
+            info_access.insert(parse::PIECE_LENGTH_KEY, ben_int!(piece_length as i64));
+            info_access.insert(parse::PIECES_KEY, ben_bytes!(&pieces));
 
-                // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
-                // If the directory is not present but there are multiple files, the direcotry field will be set to empty
-                match (&access_owner, files_info.len() > 1) {
-                    (&Some(ref directory), _) => {
-                        let mut bencode_files = BencodeMut::new_list();
+            // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
+            // If the directory is not present but there are multiple files, the direcotry field will be set to empty
+            match (&access_directory, files_info.len() > 1) {
+                (&Some(ref directory), _) => {
+                    let mut bencode_files = BencodeMut::new_list();
 
-                        {
-                            let bencode_files_access = bencode_files.list_mut().unwrap();
+                    {
+                        let bencode_files_access = bencode_files.list_mut().unwrap();
 
-                            // Multi File
-                            for &(len, ref path) in files_info.iter() {
-                                let mut bencode_path = BencodeMut::new_list();
+                        // Multi File
+                        for &(len, ref path) in files_info.iter() {
+                            let mut bencode_path = BencodeMut::new_list();
 
-                                {
-                                    let bencode_path_access = bencode_path.list_mut().unwrap();
+                            {
+                                let bencode_path_access = bencode_path.list_mut().unwrap();
 
-                                    for path_element in path.iter() {
-                                        bencode_path_access.push(ben_bytes!(path_element));
-                                    }
+                                for path_element in path.iter() {
+                                    bencode_path_access.push(ben_bytes!(path_element));
                                 }
-
-                                bencode_files_access.push(ben_map!{
-                                    parse::LENGTH_KEY => ben_int!(len as i64),
-                                    parse::PATH_KEY   => bencode_path
-                                });
                             }
+
+                            bencode_files_access.push(ben_map!{
+                                parse::LENGTH_KEY => ben_int!(len as i64),
+                                parse::PATH_KEY   => bencode_path
+                            });
                         }
-
-                        info_access.insert(parse::NAME_KEY, ben_bytes!(directory.as_ref()));
-                        info_access.insert(parse::FILES_KEY, bencode_files);
                     }
-                    (&None, true) => {
-                        let mut bencode_files = BencodeMut::new_list();
 
-                        {
-                            let bencode_files_access = bencode_files.list_mut().unwrap();
+                    info_access.insert(parse::NAME_KEY, ben_bytes!(directory.as_ref()));
+                    info_access.insert(parse::FILES_KEY, bencode_files);
+                }
+                (&None, true) => {
+                    let mut bencode_files = BencodeMut::new_list();
 
-                            // Multi File
-                            for &(len, ref path) in files_info.iter() {
-                                let mut bencode_path = BencodeMut::new_list();
+                    {
+                        let bencode_files_access = bencode_files.list_mut().unwrap();
 
-                                {
-                                    let bencode_path_access = bencode_path.list_mut().unwrap();
+                        // Multi File
+                        for &(len, ref path) in files_info.iter() {
+                            let mut bencode_path = BencodeMut::new_list();
 
-                                    for path_element in path.iter() {
-                                        bencode_path_access.push(ben_bytes!(path_element));
-                                    }
+                            {
+                                let bencode_path_access = bencode_path.list_mut().unwrap();
+
+                                for path_element in path.iter() {
+                                    bencode_path_access.push(ben_bytes!(path_element));
                                 }
-
-                                bencode_files_access.push(ben_map!{
-                                    parse::LENGTH_KEY => ben_int!(len as i64),
-                                    parse::PATH_KEY   => bencode_path
-                                });
                             }
-                        }
 
-                        info_access.insert(parse::NAME_KEY, ben_bytes!(""));
-                        info_access.insert(parse::FILES_KEY, bencode_files);
-                    }
-                    (&None, false) => {
-                        // Single File
-                        for name_component in files_info[0].1.iter() {
-                            single_file_name.push_str(name_component);
+                            bencode_files_access.push(ben_map!{
+                                parse::LENGTH_KEY => ben_int!(len as i64),
+                                parse::PATH_KEY   => bencode_path
+                            });
                         }
-
-                        info_access.insert(parse::LENGTH_KEY, ben_int!(files_info[0].0 as i64));
-                        info_access.insert(parse::NAME_KEY, ben_bytes!(&single_file_name));
                     }
+
+                    info_access.insert(parse::NAME_KEY, ben_bytes!(""));
+                    info_access.insert(parse::FILES_KEY, bencode_files);
+                }
+                (&None, false) => {
+                    // Single File
+                    for name_component in files_info[0].1.iter() {
+                        single_file_name.push_str(name_component);
+                    }
+
+                    info_access.insert(parse::LENGTH_KEY, ben_int!(files_info[0].0 as i64));
+                    info_access.insert(parse::NAME_KEY, ben_bytes!(&single_file_name));
                 }
             }
-            // Move the info dictionary into the root dictionary
-            root_access.insert(parse::INFO_KEY, info);
         }
 
-        // Return the bencoded root dictionary
-        Ok(root.encode())
-    }
-}
+        if let Some(mut root) = opt_root {
+            root.dict_mut().unwrap().insert(parse::INFO_KEY, info);
 
-// ----------------------------------------------------------------------------//
-
-/// Generates a default MetainfoBuilder.
-fn generate_default_builder<'a>() -> MetainfoBuilder<'a> {
-    let builder = MetainfoBuilder {
-        root: BencodeMut::new_dict(),
-        info: BencodeMut::new_dict(),
-        piece_length: PieceLength::OptBalanced,
-    };
-    let default_creation_date = UTC::now().timestamp();
-
-    builder.set_creation_date(default_creation_date)
+            Ok(root.encode())
+        } else {
+            Ok(info.encode())
+        }
 }
 
 /// Calculate the final piece length given the total file size and piece length strategy.
