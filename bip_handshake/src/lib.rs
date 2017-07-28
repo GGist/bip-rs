@@ -20,7 +20,7 @@ mod transport;
 pub use message::complete::CompleteMessage;
 pub use message::initiate::InitiateMessage;
 pub use message::protocol::Protocol;
-pub use message::extensions::Extensions;
+pub use message::extensions::{Extensions, Extension};
 
 pub use handshake::config::HandshakerConfig;
 pub use handshake::handshaker::{HandshakerBuilder, Handshaker, HandshakerStream, HandshakerSink};
