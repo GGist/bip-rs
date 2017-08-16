@@ -1,7 +1,8 @@
+#![allow(unused)]
+
 //! Serializable and deserializable protocol messages.
 
 // Nom has lots of unused warnings atm, keep this here for now.
-#![allow(unused)]
 
 use std::io::{self, Write};
 
@@ -39,11 +40,12 @@ const MESSAGE_LENGTH_LEN_BYTES: usize = 4;
 const MESSAGE_ID_LEN_BYTES:     usize = 1;
 const HEADER_LEN:               usize = MESSAGE_LENGTH_LEN_BYTES + MESSAGE_ID_LEN_BYTES;
 
+mod bencode;
 mod bits_extension;
 mod standard;
 mod null;
 
-pub use message::bits_extension::{BitsExtensionMessage, PortMessage};
+pub use message::bits_extension::{BitsExtensionMessage, PortMessage, ExtendedMessage, ExtendedType};
 pub use message::standard::{HaveMessage, BitFieldMessage, BitFieldIter, RequestMessage, PieceMessage, CancelMessage};
 pub use message::null::NullProtocolMessage;
 
@@ -101,8 +103,8 @@ impl<P> PeerWireProtocolMessage<P>
     pub fn bytes_needed(bytes: &[u8], _ext_protocol: &mut P) -> io::Result<Option<usize>> {
         match be_u32(bytes) {
             // We need 4 bytes for the length, plus whatever the length is...
-            IResult::Done(left, length) => Ok(Some(MESSAGE_LENGTH_LEN_BYTES + u32_to_usize(length))),
-            _                           => Ok(None)
+            IResult::Done(_, length) => Ok(Some(MESSAGE_LENGTH_LEN_BYTES + u32_to_usize(length))),
+            _                        => Ok(None)
         }
     }
 
@@ -113,7 +115,7 @@ impl<P> PeerWireProtocolMessage<P>
         }
     }
 
-    pub fn write_bytes<W>(&self, mut writer: W, ext_protocol: &mut P) -> io::Result<()>
+    pub fn write_bytes<W>(&self, writer: W, ext_protocol: &mut P) -> io::Result<()>
         where W: Write
     {
         match self {
@@ -139,11 +141,11 @@ impl<P> PeerWireProtocolMessage<P>
             &PeerWireProtocolMessage::UnChoke                => UNCHOKE_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::Interested             => INTERESTED_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::UnInterested           => UNINTERESTED_MESSAGE_LEN as usize,
-            &PeerWireProtocolMessage::Have(ref msg)          => HAVE_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Have(_)                => HAVE_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::BitField(ref msg)      => BASE_BITFIELD_MESSAGE_LEN as usize + msg.bitfield().len(),
-            &PeerWireProtocolMessage::Request(ref msg)       => REQUEST_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Request(_)             => REQUEST_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::Piece(ref msg)         => BASE_PIECE_MESSAGE_LEN as usize + msg.block().len(),
-            &PeerWireProtocolMessage::Cancel(ref msg)        => CANCEL_MESSAGE_LEN as usize,
+            &PeerWireProtocolMessage::Cancel(_)              => CANCEL_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::BitsExtension(ref ext) => ext.message_size(),
             &PeerWireProtocolMessage::ProtExtension(ref ext) => ext_protocol.message_size(ext)
         };

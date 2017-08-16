@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use protocol::PeerProtocol;
+use protocol::{PeerProtocol, NestedPeerProtocol};
 
 use bytes::Bytes;
 
@@ -33,4 +33,10 @@ impl PeerProtocol for UnitProtocol {
     fn message_size(&mut self, _message: &Self::ProtocolMessage) -> usize {
         0
     }
+}
+
+impl<M> NestedPeerProtocol<M> for UnitProtocol {
+    fn received_message(&mut self, _message: &M) { }
+
+    fn sent_message(&mut self, _message: &M) { }
 }

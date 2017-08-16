@@ -1,13 +1,10 @@
-use std::borrow::ToOwned;
 use std::io::{self, Write};
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Bytes};
 use byteorder::{WriteBytesExt, BigEndian};
 use nom::{IResult, be_u32, Needed};
 
 use message;
-
-const BITS_PER_BYTE: u32 = 8;
 
 /// Message for notifying a peer of a piece that you have.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
