@@ -32,3 +32,24 @@ pub trait PeerProtocol {
     /// Retrieve how many bytes the message will occupy on the wire.
     fn message_size(&mut self, message: &Self::ProtocolMessage) -> usize;
 }
+
+/// Trait for nested peer protocols to see higher level peer protocol messages.
+///
+/// This is useful when tracking certain states of a connection that happen at a higher
+/// level peer protocol, but which nested peer protocols need to know about atomically
+/// (before other messages dependent on that message start coming in, and the nested
+/// protocol is expected to handle those).
+///
+/// Example: We handle `ExtensionMessage`s at the `PeerWireProtocol` layer, but the
+/// `ExtensionMessage` contains mappings of id to message type that nested extensions
+/// need to know about so they can determine what type of message a given id maps to.
+/// We need to pass the `ExtensionMessage` down to them before we start receiving
+/// messages with those ids (otherwise we will receive unrecognized messages and
+/// kill the connection).
+pub trait NestedPeerProtocol<M> {
+    /// Notify a nested protocol that we have received the given message.
+    fn received_message(&mut self, message: &M);
+
+    /// Notify a nested protocol that we have sent the given message.
+    fn sent_message(&mut self, message: &M);
+}

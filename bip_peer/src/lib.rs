@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate bip_bencode;
 extern crate bip_util;
 extern crate bytes;
 extern crate byteorder;
@@ -21,7 +23,7 @@ mod manager;
 mod protocol;
 
 pub use codec::PeerProtocolCodec;
-pub use protocol::PeerProtocol;
+pub use protocol::{PeerProtocol, NestedPeerProtocol};
 pub use manager::{ManagedMessage, PeerManager, PeerManagerSink, PeerManagerStream, IPeerManagerMessage, OPeerManagerMessage, MessageId};
 pub use manager::builder::PeerManagerBuilder;
 pub use manager::peer_info::PeerInfo;

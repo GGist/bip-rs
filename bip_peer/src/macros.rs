@@ -9,6 +9,11 @@ macro_rules! throwaway_input (
             }
         }
     );
+    ($i:expr, $func:path) => (
+        {
+            throwaway_input!($func($i))
+        }
+    );
     ($i:expr, $submac:ident!( $($args:tt)* )) => (
         {
             throwaway_input!($submac!($i, $($args)*))
