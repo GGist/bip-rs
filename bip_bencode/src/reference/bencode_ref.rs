@@ -39,7 +39,7 @@ impl<'a> BencodeRef<'a> {
         // Apply try so any errors return before the eof check
         let (bencode, end_pos) = try!(decode::decode(bytes, 0, opts, 0));
 
-        if end_pos != bytes.len() {
+        if end_pos != bytes.len() && opts.enforce_full_decode() {
             return Err(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty{ pos: end_pos }));
         }
 
