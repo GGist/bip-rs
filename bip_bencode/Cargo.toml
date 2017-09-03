@@ -1,6 +1,6 @@
 [package]
 name             = "bip_bencode"
-version          = "0.3.0"
+version          = "0.3.1"
 description      = "Efficient decoding and encoding for bencode"
 
 authors          = ["Andrew <amiller4421@gmail.com>"]
