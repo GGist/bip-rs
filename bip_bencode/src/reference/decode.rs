@@ -168,6 +168,7 @@ mod tests {
     const INT: &'static [u8] = b"i500e";
     const INT_NEGATIVE: &'static [u8] = b"i-500e";
     const INT_ZERO: &'static [u8] = b"i0e";
+    const PARTIAL: &'static [u8] = b"i0e_asd";
 
     // Negative Cases
     const BYTES_NEG_LEN: &'static [u8] = b"-4:test";
@@ -201,7 +202,7 @@ mod tests {
 
     #[test]
     fn positive_decode_recursion() {
-        let _ = BencodeRef::decode(RECURSION, BDecodeOpt::new(50, true)).unwrap_err();
+        let _ = BencodeRef::decode(RECURSION, BDecodeOpt::new(50, true, true)).unwrap_err();
 
         // As long as we didnt overflow our call stack, we are good!
     }
@@ -281,6 +282,14 @@ mod tests {
     fn positive_decode_int_zero() {
         let int_value = super::decode_int(INT_ZERO, 1, ::BEN_END).unwrap().0;
         assert_eq!(int_value, 0i64);
+    }
+
+    #[test]
+    fn positive_decode_partial() {
+        let bencode = BencodeRef::decode(PARTIAL, BDecodeOpt::new(2, true, false)).unwrap();
+
+        assert_ne!(PARTIAL.len(), bencode.buffer().len());
+        assert_eq!(3, bencode.buffer().len());
     }
 
     #[test]
