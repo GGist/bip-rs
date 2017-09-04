@@ -35,7 +35,7 @@ fn positive_remove_torrent() {
     // Verify that zero pieces are marked as good
     let mut core = Core::new().unwrap();
 
-    let (mut blocking_send, good_pieces, recv) = ::core_loop_with_timeout(&mut core, 100, ((blocking_send, 0), recv),
+    let (mut blocking_send, good_pieces, recv) = ::core_loop_with_timeout(&mut core, 500, ((blocking_send, 0), recv),
         |(mut blocking_send, good_pieces), recv, msg| {
             match msg {
                 ODiskMessage::TorrentAdded(_)      => {
@@ -57,7 +57,7 @@ fn positive_remove_torrent() {
 
     blocking_send.send(IDiskMessage::ProcessBlock(process_block)).unwrap();
 
-    ::core_loop_with_timeout(&mut core, 100, ((), recv),
+    ::core_loop_with_timeout(&mut core, 500, ((), recv),
         |_, _, msg| {
             match msg {
                 ODiskMessage::ProcessBlockError(_, _) => Loop::Break(()),

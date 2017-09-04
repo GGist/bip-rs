@@ -194,7 +194,7 @@ impl PieceCheckerState {
         where F: FnMut(&BlockMetadata) -> io::Result<bool> {
         self.merge_pieces();
 
-        let mut new_states = &mut self.new_states;
+        let new_states = &mut self.new_states;
         let old_states = &self.old_states;
 
         let total_blocks = self.total_blocks;

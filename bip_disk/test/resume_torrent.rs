@@ -34,7 +34,7 @@ fn positive_complete_torrent() {
     let mut core = Core::new().unwrap();
 
     // Run a core loop until we get the TorrentAdded message
-    let (good_pieces, recv) = ::core_loop_with_timeout(&mut core, 100, (0, recv), |good_pieces, recv, msg| {
+    let (good_pieces, recv) = ::core_loop_with_timeout(&mut core, 500, (0, recv), |good_pieces, recv, msg| {
         match msg {
             ODiskMessage::TorrentAdded(_)      => Loop::Break((good_pieces, recv)),
             ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((good_pieces + 1, recv)),
@@ -56,7 +56,7 @@ fn positive_complete_torrent() {
     ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |_| ());
 
     // Verify that piece 0 is good
-    let (recv, piece_zero_good) = ::core_loop_with_timeout(&mut core, 100, ((false, 0), recv),
+    let (recv, piece_zero_good) = ::core_loop_with_timeout(&mut core, 500, ((false, 0), recv),
         |(piece_zero_good, messages_recvd), recv, msg| {
             let messages_recvd = messages_recvd + 1;
 
@@ -89,7 +89,7 @@ fn positive_complete_torrent() {
     blocking_send.send(IDiskMessage::RemoveTorrent(info_hash)).unwrap();
 
     // Verify that our torrent was removed
-    let recv = ::core_loop_with_timeout(&mut core, 100, ((), recv), |_, recv, msg| {
+    let recv = ::core_loop_with_timeout(&mut core, 500, ((), recv), |_, recv, msg| {
         match msg {
             ODiskMessage::TorrentRemoved(_) => Loop::Break(recv),
             unexpected @ _                  => panic!("Unexpected Message: {:?}", unexpected)
@@ -99,7 +99,7 @@ fn positive_complete_torrent() {
     // Re-add our torrent and verify that we see our good first block
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file.clone())).unwrap();
 
-    let (recv, piece_zero_good) = ::core_loop_with_timeout(&mut core, 100, (false, recv), |piece_zero_good, recv, msg| {
+    let (recv, piece_zero_good) = ::core_loop_with_timeout(&mut core, 500, (false, recv), |piece_zero_good, recv, msg| {
          match msg {
             ODiskMessage::TorrentAdded(_)                        => Loop::Break((recv, piece_zero_good)),
             ODiskMessage::FoundGoodPiece(_, piece) if piece == 0 => Loop::Continue((true, recv)),
@@ -119,7 +119,7 @@ fn positive_complete_torrent() {
     ::send_block(&mut blocking_send, &files_bytes[(2048 + 500)..(2048 + 975)], metainfo_file.info_hash(), 2, 500, 475, |_| ());
 
     // Verify last two blocks are good
-    let (piece_one_good, piece_two_good) = ::core_loop_with_timeout(&mut core, 100, ((false, false, 0), recv),
+    let (piece_one_good, piece_two_good) = ::core_loop_with_timeout(&mut core, 500, ((false, false, 0), recv),
         |(piece_one_good, piece_two_good, messages_recvd), recv, msg| {
             let messages_recvd = messages_recvd + 1;
 

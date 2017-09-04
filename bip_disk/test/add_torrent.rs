@@ -33,7 +33,7 @@ fn positive_add_torrent() {
     let mut core = Core::new().unwrap();
 
     // Run a core loop until we get the TorrentAdded message
-    let good_pieces = ::core_loop_with_timeout(&mut core, 100, (0, recv), |good_pieces, recv, msg| {
+    let good_pieces = ::core_loop_with_timeout(&mut core, 500, (0, recv), |good_pieces, recv, msg| {
         match msg {
             ODiskMessage::TorrentAdded(_)      => Loop::Break(good_pieces),
             ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue((good_pieces + 1, recv)),

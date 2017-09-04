@@ -63,7 +63,7 @@ impl<F> DiskManagerContext<F> {
             Some(state) => {
                 let mut lock_state = state.lock()
                     .expect("bip_disk: DiskManagerContext::update_torrent Failed To Lock State");
-                let mut deref_state = &mut *lock_state;
+                let deref_state = &mut *lock_state;
 
                 call(&deref_state.file, &mut deref_state.state);
 

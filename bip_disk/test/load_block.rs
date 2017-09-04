@@ -40,7 +40,7 @@ fn positive_load_block() {
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file)).unwrap();
 
     let mut core = Core::new().unwrap();
-    let (pblock, lblock) = ::core_loop_with_timeout(&mut core, 100, ((blocking_send, Some(process_block), Some(load_block)), recv),
+    let (pblock, lblock) = ::core_loop_with_timeout(&mut core, 500, ((blocking_send, Some(process_block), Some(load_block)), recv),
         |(mut blocking_send, opt_pblock, opt_lblock), recv, msg| {
             match msg {
                 ODiskMessage::TorrentAdded(_) => {
