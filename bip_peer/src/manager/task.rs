@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use std::io;
 
 use manager::builder::PeerManagerBuilder;

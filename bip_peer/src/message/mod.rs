@@ -42,12 +42,14 @@ const HEADER_LEN:               usize = MESSAGE_LENGTH_LEN_BYTES + MESSAGE_ID_LE
 
 mod bencode;
 mod bits_extension;
+mod prot_extension;
 mod standard;
 mod null;
 
 pub use message::bits_extension::{BitsExtensionMessage, PortMessage, ExtendedMessage, ExtendedType};
 pub use message::standard::{HaveMessage, BitFieldMessage, BitFieldIter, RequestMessage, PieceMessage, CancelMessage};
 pub use message::null::NullProtocolMessage;
+pub use message::prot_extension::{PeerExtensionProtocolMessage, LtMetadataMessage, LtMetadataRequestMessage, LtMetadataDataMessage, LtMetadataRejectMessage};
 
 /// Enumeration of messages for `PeerWireProtocol`.
 pub enum PeerWireProtocolMessage<P> where P: PeerProtocol {
@@ -100,7 +102,7 @@ impl<P> ManagedMessage for PeerWireProtocolMessage<P>
 
 impl<P> PeerWireProtocolMessage<P>
     where P: PeerProtocol {
-    pub fn bytes_needed(bytes: &[u8], _ext_protocol: &mut P) -> io::Result<Option<usize>> {
+    pub fn bytes_needed(bytes: &[u8]) -> io::Result<Option<usize>> {
         match be_u32(bytes) {
             // We need 4 bytes for the length, plus whatever the length is...
             IResult::Done(_, length) => Ok(Some(MESSAGE_LENGTH_LEN_BYTES + u32_to_usize(length))),

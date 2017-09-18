@@ -14,8 +14,8 @@ use message::bencode;
 const PORT_MESSAGE_LEN:          u32 = 3;
 const BASE_EXTENDED_MESSAGE_LEN: u32 = 6;
 
-const PORT_MESSAGE_ID:     u8 = 9;
-const EXTENDED_MESSAGE_ID: u8 = 20;
+const PORT_MESSAGE_ID:         u8 = 9;
+pub const EXTENDED_MESSAGE_ID: u8 = 20;
 
 const EXTENDED_MESSAGE_HANDSHAKE_ID: u8 = 0;
 
@@ -152,7 +152,7 @@ impl ExtendedType {
 /// See `http://www.bittorrent.org/beps/bep_0010.html`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtendedMessage {
-    id_map:              HashMap<ExtendedType, i64>,
+    id_map:              HashMap<ExtendedType, u8>,
     client_id:           Option<String>,
     client_tcp_port:     Option<u16>,
     our_ip:              Option<IpAddr>,
@@ -164,7 +164,7 @@ pub struct ExtendedMessage {
 }
 
 impl ExtendedMessage {
-    fn with_raw(id_map: HashMap<ExtendedType, i64>, client_id: Option<String>, client_tcp_port: Option<u16>,
+    fn with_raw(id_map: HashMap<ExtendedType, u8>, client_id: Option<String>, client_tcp_port: Option<u16>,
                 our_ip: Option<IpAddr>, client_ipv6_addr: Option<Ipv6Addr>, client_ipv4_addr: Option<Ipv4Addr>,
                 client_max_requests: Option<i64>, metadata_size: Option<i64>, raw_bencode: Bytes) -> ExtendedMessage {
         ExtendedMessage{ id_map: id_map, client_id: client_id, client_tcp_port: client_tcp_port,
@@ -172,7 +172,7 @@ impl ExtendedMessage {
             client_max_requests: client_max_requests, metadata_size: metadata_size, raw_bencode: raw_bencode }      
     }
 
-    pub fn new(id_map: HashMap<ExtendedType, i64>, client_id: Option<String>, client_tcp_port: Option<u16>,
+    pub fn new(id_map: HashMap<ExtendedType, u8>, client_id: Option<String>, client_tcp_port: Option<u16>,
                our_ip: Option<IpAddr>, client_ipv6_addr: Option<Ipv6Addr>, client_ipv4_addr: Option<Ipv4Addr>,
                client_max_requests: Option<i64>, metadata_size: Option<i64>) -> ExtendedMessage {
         let mut message = ExtendedMessage{ id_map: id_map, client_id: client_id, client_tcp_port: client_tcp_port,
@@ -236,7 +236,7 @@ impl ExtendedMessage {
         self.raw_bencode.len()
     }
 
-    pub fn query_id(&self, ext_type: &ExtendedType) -> Option<i64> {
+    pub fn query_id(&self, ext_type: &ExtendedType) -> Option<u8> {
         self.id_map.get(ext_type).map(|id| *id)
     }
 
@@ -291,7 +291,7 @@ fn bencode_from_extended_params(extended: &ExtendedMessage) -> Vec<u8> {
         {
             let ben_id_map_access = ben_id_map.dict_mut().unwrap();
             for (ext_id, &value) in extended.id_map.iter() {
-                ben_id_map_access.insert(ext_id.id().as_bytes(), ben_int!(value));
+                ben_id_map_access.insert(ext_id.id().as_bytes(), ben_int!(value as i64));
             }
         }
 
