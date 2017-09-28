@@ -118,13 +118,13 @@ fn parse_port(bytes: &[u8]) -> IResult<&[u8], PortMessage> {
 
 const ROOT_ERROR_KEY: &'static str = "ExtendedMessage";
 
-const LT_METADATA_ID: &'static str = "LT_metadata";
+const UT_METADATA_ID: &'static str = "ut_metadata";
 const UT_PEX_ID:      &'static str = "ut_pex";
 
 /// Enumeration of extended types activated via `ExtendedMessage`.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum ExtendedType {
-    LtMetadata,
+    UtMetadata,
     UtPex,
     Custom(String)
 }
@@ -132,7 +132,7 @@ pub enum ExtendedType {
 impl ExtendedType {
     pub fn from_id(id: &str) -> ExtendedType {
         match id {
-            LT_METADATA_ID => ExtendedType::LtMetadata,
+            UT_METADATA_ID => ExtendedType::UtMetadata,
             UT_PEX_ID      => ExtendedType::UtPex,
             custom         => ExtendedType::Custom(custom.to_string())
         }
@@ -140,7 +140,7 @@ impl ExtendedType {
 
     pub fn id(&self) -> &str {
         match self {
-            &ExtendedType::LtMetadata     => LT_METADATA_ID,
+            &ExtendedType::UtMetadata     => UT_METADATA_ID,
             &ExtendedType::UtPex          => UT_PEX_ID,
             &ExtendedType::Custom(ref id) => &**id
         }

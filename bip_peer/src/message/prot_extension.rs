@@ -18,8 +18,9 @@ const REJECT_MESSAGE_TYPE_ID:  u8 = 2;
 
 const ROOT_ERROR_KEY: &'static str = "PeerExtensionProtocolMessage";
 
+/// Enumeration of `BEP 10` extension protocol compatible messages.
 pub enum PeerExtensionProtocolMessage<P> where P: PeerProtocol {
-    LtMetadata(LtMetadataMessage),
+    UtMetadata(UtMetadataMessage),
     //UtPex(UtPexMessage),
     Custom(P::ProtocolMessage)
 }
@@ -41,10 +42,10 @@ impl<P> PeerExtensionProtocolMessage<P> where P: PeerProtocol {
         where W: Write
     {
         match self {
-            &PeerExtensionProtocolMessage::LtMetadata(ref msg) => {
-                let ext_id = if let Some(ext_id) = extended.query_id(&ExtendedType::LtMetadata) {
+            &PeerExtensionProtocolMessage::UtMetadata(ref msg) => {
+                let ext_id = if let Some(ext_id) = extended.query_id(&ExtendedType::UtMetadata) {
                     ext_id
-                } else { return Err(io::Error::new(io::ErrorKind::Other, "Can't Send LtMetadataMessage As We Have No Id Mapping")) };
+                } else { return Err(io::Error::new(io::ErrorKind::Other, "Can't Send UtMetadataMessage As We Have No Id Mapping")) };
 
                 let total_len = (2 + msg.message_size()) as u32;
 
@@ -59,7 +60,7 @@ impl<P> PeerExtensionProtocolMessage<P> where P: PeerProtocol {
 
     pub fn message_size(&self, custom_prot: &mut P) -> usize {
         match self {
-            &PeerExtensionProtocolMessage::LtMetadata(ref msg) => msg.message_size(),
+            &PeerExtensionProtocolMessage::UtMetadata(ref msg) => msg.message_size(),
             &PeerExtensionProtocolMessage::Custom(ref msg)     => custom_prot.message_size(&msg)
         }
     }
@@ -83,12 +84,12 @@ fn parse_extensions<P>(mut bytes: Bytes, extended: &ExtendedMessage, custom_prot
 
 fn parse_extensions_with_id<P>(_input: (), bytes: Bytes, extended: &ExtendedMessage, id: u8) -> IResult<(), io::Result<PeerExtensionProtocolMessage<P>>>
     where P: PeerProtocol {
-    let lt_metadata_id = extended.query_id(&ExtendedType::LtMetadata);
+    let lt_metadata_id = extended.query_id(&ExtendedType::UtMetadata);
     //let ut_pex_id = extended.query_id(&ExtendedType::UtPex);
 
     let result = if lt_metadata_id == Some(id) {
-        LtMetadataMessage::parse_bytes(bytes)
-                .map(|lt_metadata_msg| PeerExtensionProtocolMessage::LtMetadata(lt_metadata_msg))
+        UtMetadataMessage::parse_bytes(bytes)
+                .map(|lt_metadata_msg| PeerExtensionProtocolMessage::UtMetadata(lt_metadata_msg))
     } else {
         Err(io::Error::new(io::ErrorKind::Other, format!("Unknown Id For PeerExtensionProtocolMessage: {}", id)))
     };
@@ -98,17 +99,19 @@ fn parse_extensions_with_id<P>(_input: (), bytes: Bytes, extended: &ExtendedMess
 
 // ----------------------------------------------------------------------------//
 
-pub enum LtMetadataMessage {
-    Request(LtMetadataRequestMessage),
-    Data(LtMetadataDataMessage),
-    Reject(LtMetadataRejectMessage)
+/// Enumeration of messages for `PeerExtensionProtocolMessage::UtMetadata`.
+#[derive(Debug)]
+pub enum UtMetadataMessage {
+    Request(UtMetadataRequestMessage),
+    Data(UtMetadataDataMessage),
+    Reject(UtMetadataRejectMessage)
 }
 
-impl LtMetadataMessage {
-    pub fn parse_bytes(mut bytes: Bytes) -> io::Result<LtMetadataMessage> {
+impl UtMetadataMessage {
+    pub fn parse_bytes(mut bytes: Bytes) -> io::Result<UtMetadataMessage> {
         // Our bencode is pretty flat, and we dont want to enforce a full decode, as data
         // messages have the raw data appended outside of the bencode structure...
-        let decode_opts = BDecodeOpt::new(1, false, false);
+        let decode_opts = BDecodeOpt::new(2, false, false);
 
         match BencodeRef::decode(bytes.clone().as_ref(), decode_opts) {
             Ok(bencode) => {
@@ -120,17 +123,17 @@ impl LtMetadataMessage {
                 let extra_bytes = bytes;
 
                 match msg_type {
-                    REQUEST_MESSAGE_TYPE_ID => Ok(LtMetadataMessage::Request(LtMetadataRequestMessage::with_bytes(piece, bencode_bytes))),
-                    REJECT_MESSAGE_TYPE_ID  => Ok(LtMetadataMessage::Reject(LtMetadataRejectMessage::with_bytes(piece, bencode_bytes))),
+                    REQUEST_MESSAGE_TYPE_ID => Ok(UtMetadataMessage::Request(UtMetadataRequestMessage::with_bytes(piece, bencode_bytes))),
+                    REJECT_MESSAGE_TYPE_ID  => Ok(UtMetadataMessage::Reject(UtMetadataRejectMessage::with_bytes(piece, bencode_bytes))),
                     DATA_MESSAGE_TYPE_ID    => {
                         let total_size = try!(bencode::parse_total_size(bencode_dict));
 
-                        Ok(LtMetadataMessage::Data(LtMetadataDataMessage::with_bytes(piece, total_size, extra_bytes, bencode_bytes)))
+                        Ok(UtMetadataMessage::Data(UtMetadataDataMessage::with_bytes(piece, total_size, extra_bytes, bencode_bytes)))
                     },
-                    other => { return Err(io::Error::new(io::ErrorKind::Other, format!("Failed To Recognize Message Type For LtMetadataMessage: {}", msg_type))) }
+                    other => { return Err(io::Error::new(io::ErrorKind::Other, format!("Failed To Recognize Message Type For UtMetadataMessage: {}", msg_type))) }
                 }
             },
-            Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Failed To Parse LtMetadataMessage As Bencode"))
+            Err(err) => Err(io::Error::new(io::ErrorKind::Other, format!("Failed To Parse UtMetadataMessage As Bencode: {}", err)))
         }
     }
 
@@ -138,30 +141,32 @@ impl LtMetadataMessage {
         where W: Write
     {
         match self {
-            &LtMetadataMessage::Request(ref request) => request.write_bytes(writer),
-            &LtMetadataMessage::Data(ref data)       => data.write_bytes(writer),
-            &LtMetadataMessage::Reject(ref reject)   => reject.write_bytes(writer),
+            &UtMetadataMessage::Request(ref request) => request.write_bytes(writer),
+            &UtMetadataMessage::Data(ref data)       => data.write_bytes(writer),
+            &UtMetadataMessage::Reject(ref reject)   => reject.write_bytes(writer),
         }
     }
 
     pub fn message_size(&self) -> usize {
         match self {
-            &LtMetadataMessage::Request(ref request) => request.message_size(),
-            &LtMetadataMessage::Data(ref data)       => data.message_size(),
-            &LtMetadataMessage::Reject(ref reject)   => reject.message_size(),
+            &UtMetadataMessage::Request(ref request) => request.message_size(),
+            &UtMetadataMessage::Data(ref data)       => data.message_size(),
+            &UtMetadataMessage::Reject(ref reject)   => reject.message_size(),
         }
     }
 }
 
 // ----------------------------------------------------------------------------//
 
-pub struct LtMetadataRequestMessage {
+/// Message for requesting a piece of metadata from a peer.
+#[derive(Debug)]
+pub struct UtMetadataRequestMessage {
     piece: i64,
     bytes: Bytes
 }
 
-impl LtMetadataRequestMessage {
-    pub fn new(piece: i64) -> LtMetadataRequestMessage {
+impl UtMetadataRequestMessage {
+    pub fn new(piece: i64) -> UtMetadataRequestMessage {
         let encoded_bytes = (ben_map!{
             bencode::MESSAGE_TYPE_KEY => ben_int!(REQUEST_MESSAGE_TYPE_ID as i64),
             bencode::PIECE_INDEX_KEY  => ben_int!(piece)
@@ -170,11 +175,11 @@ impl LtMetadataRequestMessage {
         let mut bytes = Bytes::with_capacity(encoded_bytes.len());
         bytes.extend_from_slice(&encoded_bytes[..]);
 
-        LtMetadataRequestMessage::with_bytes(piece, bytes)
+        UtMetadataRequestMessage::with_bytes(piece, bytes)
     }
 
-    pub fn with_bytes(piece: i64, bytes: Bytes) -> LtMetadataRequestMessage {
-        LtMetadataRequestMessage{ piece: piece, bytes: bytes }
+    pub fn with_bytes(piece: i64, bytes: Bytes) -> UtMetadataRequestMessage {
+        UtMetadataRequestMessage{ piece: piece, bytes: bytes }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -186,17 +191,23 @@ impl LtMetadataRequestMessage {
     pub fn message_size(&self) -> usize {
         self.bytes.len()
     }
+
+    pub fn piece(&self) -> i64 {
+        self.piece
+    }
 }
 
-pub struct LtMetadataDataMessage {
+/// Message for sending a piece of metadata from a peer.
+#[derive(Debug)]
+pub struct UtMetadataDataMessage {
     piece:      i64,
     total_size: i64,
     data:       Bytes,
     bytes:      Bytes
 }
 
-impl LtMetadataDataMessage {
-    pub fn new(piece: i64, total_size: i64, data: Bytes) -> LtMetadataDataMessage {
+impl UtMetadataDataMessage {
+    pub fn new(piece: i64, total_size: i64, data: Bytes) -> UtMetadataDataMessage {
         let encoded_bytes = (ben_map!{
             bencode::MESSAGE_TYPE_KEY => ben_int!(DATA_MESSAGE_TYPE_ID as i64),
             bencode::PIECE_INDEX_KEY  => ben_int!(piece),
@@ -206,11 +217,11 @@ impl LtMetadataDataMessage {
         let mut bytes = Bytes::with_capacity(encoded_bytes.len());
         bytes.extend_from_slice(&encoded_bytes[..]);
 
-        LtMetadataDataMessage::with_bytes(piece, total_size, data, bytes)
+        UtMetadataDataMessage::with_bytes(piece, total_size, data, bytes)
     }
 
-    pub fn with_bytes(piece: i64, total_size: i64, data: Bytes, bytes: Bytes) -> LtMetadataDataMessage {
-        LtMetadataDataMessage{ piece: piece, total_size: total_size, data: data, bytes: bytes }
+    pub fn with_bytes(piece: i64, total_size: i64, data: Bytes, bytes: Bytes) -> UtMetadataDataMessage {
+        UtMetadataDataMessage{ piece: piece, total_size: total_size, data: data, bytes: bytes }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -224,15 +235,29 @@ impl LtMetadataDataMessage {
     pub fn message_size(&self) -> usize {
         self.bytes.len() + self.data.len()
     }
+
+    pub fn piece(&self) -> i64 {
+        self.piece
+    }
+
+    pub fn total_size(&self) -> i64 {
+        self.total_size
+    }
+
+    pub fn data(&self) -> &Bytes {
+        &self.data
+    }
 }
 
-pub struct LtMetadataRejectMessage {
+/// Message for rejecting a request for metadata from a peer.
+#[derive(Debug)]
+pub struct UtMetadataRejectMessage {
     piece: i64,
     bytes: Bytes
 }
 
-impl LtMetadataRejectMessage {
-    pub fn new(piece: i64) -> LtMetadataRejectMessage {
+impl UtMetadataRejectMessage {
+    pub fn new(piece: i64) -> UtMetadataRejectMessage {
         let encoded_bytes = (ben_map!{
             bencode::MESSAGE_TYPE_KEY => ben_int!(REJECT_MESSAGE_TYPE_ID as i64),
             bencode::PIECE_INDEX_KEY  => ben_int!(piece)
@@ -241,11 +266,11 @@ impl LtMetadataRejectMessage {
         let mut bytes = Bytes::with_capacity(encoded_bytes.len());
         bytes.extend_from_slice(&encoded_bytes[..]);
 
-        LtMetadataRejectMessage::with_bytes(piece, bytes)
+        UtMetadataRejectMessage::with_bytes(piece, bytes)
     }
 
-    pub fn with_bytes(piece: i64, bytes: Bytes) -> LtMetadataRejectMessage {
-        LtMetadataRejectMessage{ piece: piece, bytes: bytes }
+    pub fn with_bytes(piece: i64, bytes: Bytes) -> UtMetadataRejectMessage {
+        UtMetadataRejectMessage{ piece: piece, bytes: bytes }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
@@ -256,5 +281,9 @@ impl LtMetadataRejectMessage {
 
     pub fn message_size(&self) -> usize {
         self.bytes.len()
+    }
+
+    pub fn piece(&self) -> i64 {
+        self.piece
     }
 }

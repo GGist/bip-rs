@@ -5,7 +5,7 @@ use protocol::{PeerProtocol, NestedPeerProtocol};
 
 use bytes::Bytes;
 
-/// Protocol message for peer wire messages.
+/// Protocol for peer wire messages.
 pub struct PeerWireProtocol<P> {
     ext_protocol: P
 }

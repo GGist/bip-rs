@@ -49,7 +49,7 @@ mod null;
 pub use message::bits_extension::{BitsExtensionMessage, PortMessage, ExtendedMessage, ExtendedType};
 pub use message::standard::{HaveMessage, BitFieldMessage, BitFieldIter, RequestMessage, PieceMessage, CancelMessage};
 pub use message::null::NullProtocolMessage;
-pub use message::prot_extension::{PeerExtensionProtocolMessage, LtMetadataMessage, LtMetadataRequestMessage, LtMetadataDataMessage, LtMetadataRejectMessage};
+pub use message::prot_extension::{PeerExtensionProtocolMessage, UtMetadataMessage, UtMetadataRequestMessage, UtMetadataDataMessage, UtMetadataRejectMessage};
 
 /// Enumeration of messages for `PeerWireProtocol`.
 pub enum PeerWireProtocolMessage<P> where P: PeerProtocol {

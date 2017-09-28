@@ -5,7 +5,7 @@ use bytes::Bytes;
 use message::{ExtendedMessage, PeerExtensionProtocolMessage};
 use protocol::{PeerProtocol, NestedPeerProtocol};
 
-/// Protocol message for peer wire messages.
+/// Protocol for `BEP 10` peer extensions.
 pub struct PeerExtensionProtocol<P> {
     our_extended_msg:   Option<ExtendedMessage>,
     their_extended_msg: Option<ExtendedMessage>,
@@ -15,7 +15,7 @@ pub struct PeerExtensionProtocol<P> {
 impl<P> PeerExtensionProtocol<P> {
     /// Create a new `PeerExtensionProtocol` with the given (nested) custom extension protocol.
     ///
-    /// Notes for `PeerWireProtocol` apply to this custom extension protocol, so refer to that.
+    /// Notes for `PeerWireProtocol` apply to this custom extension protocol.
     pub fn new(custom_protocol: P) -> PeerExtensionProtocol<P> {
         PeerExtensionProtocol{ our_extended_msg: None, their_extended_msg: None, custom_protocol: custom_protocol }
     }
@@ -29,7 +29,7 @@ impl<P> PeerProtocol for PeerExtensionProtocol<P> where P: PeerProtocol {
     }
 
     fn parse_bytes(&mut self, bytes: Bytes) -> io::Result<Self::ProtocolMessage> {
-        match self.their_extended_msg {
+        match self.our_extended_msg {
             Some(ref extended_msg) => PeerExtensionProtocolMessage::parse_bytes(bytes, extended_msg, &mut self.custom_protocol),
             None                   => Err(io::Error::new(io::ErrorKind::Other, "Extension Message Received From Peer Before Extended Message..."))
         }
@@ -37,7 +37,7 @@ impl<P> PeerProtocol for PeerExtensionProtocol<P> where P: PeerProtocol {
 
     fn write_bytes<W>(&mut self, message: &Self::ProtocolMessage, writer: W) -> io::Result<()>
         where W: Write {
-        match self.our_extended_msg {
+        match self.their_extended_msg {
             Some(ref extended_msg) => PeerExtensionProtocolMessage::write_bytes(message, writer, extended_msg, &mut self.custom_protocol),
             None                   => Err(io::Error::new(io::ErrorKind::Other, "Extension Message Sent From Us Before Extended Message..."))
         }
