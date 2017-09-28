@@ -1,0 +1,21 @@
+[package]
+name          = "get_metadata"
+version       = "0.1.0"
+description   = "Examples For bip-rs"
+
+authors       = ["Andrew <amiller4421@gmail.com>"]
+
+license       = "MIT/Apache-2.0"
+
+[dependencies]
+bip_handshake = "0.6"
+bip_metainfo  = "0.11"
+bip_peer      = "0.3"
+clap          = "2.25"
+futures       = "0.1"
+tokio-core    = "0.1"
+tokio-io      = "0.1"
+hex           = "0.2"
+
+[features]
+unstable      = []
