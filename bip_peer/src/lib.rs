@@ -38,4 +38,5 @@ pub mod protocols {
     pub use protocol::unit::UnitProtocol;
     pub use protocol::null::NullProtocol;
     pub use protocol::wire::PeerWireProtocol;
+    pub use protocol::extension::PeerExtensionProtocol;
 }

@@ -31,14 +31,14 @@ pub const CLIENT_IPV4_ADDR_KEY:    &'static [u8] = b"ipv4";
 pub const CLIENT_MAX_REQUESTS_KEY: &'static [u8] = b"reqq";
 pub const METADATA_SIZE_KEY:       &'static [u8] = b"metadata_size";
 
-pub fn parse_id_map<'a, B>(root: &BDictAccess<'a, B>) -> HashMap<ExtendedType, i64>
+pub fn parse_id_map<'a, B>(root: &BDictAccess<'a, B>) -> HashMap<ExtendedType, u8>
     where B: BRefAccess<'a> {
     let mut id_map = HashMap::new();
     
     if let Ok(ben_id_map) = CONVERT.lookup_and_convert_dict(root, ID_MAP_KEY) {
         for (id, ben_value) in ben_id_map.to_list() {
             match (str::from_utf8(id), CONVERT.convert_int(ben_value, id)) {
-                (Ok(str_id), Ok(value)) => { id_map.insert(ExtendedType::from_id(str_id), value); },
+                (Ok(str_id), Ok(value)) => { id_map.insert(ExtendedType::from_id(str_id), value as u8); },
                 _                       => ()
             }
         }
@@ -129,4 +129,25 @@ fn parse_ipv6_addr(ipv6_bytes: &[u8]) -> Ipv6Addr {
                                ipv6_bytes[4], ipv6_bytes[5], ipv6_bytes[6], ipv6_bytes[7],
                                ipv6_bytes[8], ipv6_bytes[9], ipv6_bytes[10], ipv6_bytes[11],
                                ipv6_bytes[12], ipv6_bytes[13], ipv6_bytes[14], ipv6_bytes[15]])
+}
+
+// ----------------------------------------------------------------------------//
+
+pub const MESSAGE_TYPE_KEY: &'static [u8] = b"msg_type";
+pub const PIECE_INDEX_KEY:  &'static [u8] = b"piece";
+pub const TOTAL_SIZE_KEY:   &'static [u8] = b"total_size";
+
+pub fn parse_message_type<'a, B>(root: &BDictAccess<'a, B>) -> io::Result<u8>
+    where B: BRefAccess<'a> {
+    CONVERT.lookup_and_convert_int(root, MESSAGE_TYPE_KEY).map(|msg_type| msg_type as u8).into()
+}
+
+pub fn parse_piece_index<'a, B>(root: &BDictAccess<'a, B>) -> io::Result<i64>
+    where B: BRefAccess<'a> {
+    CONVERT.lookup_and_convert_int(root, PIECE_INDEX_KEY).into()
+}
+
+pub fn parse_total_size<'a, B>(root: &BDictAccess<'a, B>) -> io::Result<i64>
+    where B: BRefAccess<'a> {
+    CONVERT.lookup_and_convert_int(root, TOTAL_SIZE_KEY).into()
 }

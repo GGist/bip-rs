@@ -5,7 +5,7 @@ use protocol::{PeerProtocol, NestedPeerProtocol};
 
 use bytes::Bytes;
 
-/// Protocol message for peer wire messages.
+/// Protocol for peer wire messages.
 pub struct PeerWireProtocol<P> {
     ext_protocol: P
 }
@@ -25,7 +25,7 @@ impl<P> PeerProtocol for PeerWireProtocol<P> where P: PeerProtocol + NestedPeerP
     type ProtocolMessage = PeerWireProtocolMessage<P>;
 
     fn bytes_needed(&mut self, bytes: &[u8]) -> io::Result<Option<usize>> {
-        PeerWireProtocolMessage::bytes_needed(bytes, &mut self.ext_protocol)
+        PeerWireProtocolMessage::<P>::bytes_needed(bytes)
     }
 
     fn parse_bytes(&mut self, bytes: Bytes) -> io::Result<Self::ProtocolMessage> {

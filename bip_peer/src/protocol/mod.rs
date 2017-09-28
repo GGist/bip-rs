@@ -4,6 +4,7 @@ use std::io::{self, Write};
 
 use bytes::Bytes;
 
+pub mod extension;
 pub mod unit;
 pub mod null;
 pub mod wire;
