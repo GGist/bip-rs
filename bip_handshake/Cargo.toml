@@ -1,6 +1,6 @@
 [package]
 name          = "bip_handshake"
-version       = "0.6.1"
+version       = "0.7.0"
 description   = "Common handshaking interface as well as a default handshake implementation"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
