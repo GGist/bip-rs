@@ -102,9 +102,9 @@ impl HandshakerBuilder {
     }
 
     /// Build a `Handshaker` over the given `Transport` with a `Remote` instance.
-    pub fn build<T>(&self, handle: Handle) -> io::Result<Handshaker<T::Socket>>
+    pub fn build<T>(&self, transport: T, handle: Handle) -> io::Result<Handshaker<T::Socket>>
         where T: Transport + 'static {
-        Handshaker::<T::Socket>::with_builder::<T>(self, handle)
+        Handshaker::with_builder(self, transport, handle)
     }
 }
 
@@ -137,9 +137,9 @@ impl<S> DiscoveryInfo for Handshaker<S> {
 }
 
 impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
-    fn with_builder<T>(builder: &HandshakerBuilder, handle: Handle) -> io::Result<Handshaker<T::Socket>>
+    fn with_builder<T>(builder: &HandshakerBuilder, transport: T, handle: Handle) -> io::Result<Handshaker<T::Socket>>
         where T: Transport<Socket=S> + 'static {
-        let listener = try!(T::listen(&builder.bind, &handle));
+        let listener = try!(transport.listen(&builder.bind, &handle));
 
         // Resolve our "real" public port
         let open_port = if builder.port == 0 {
@@ -155,7 +155,7 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
         let (handshake_timer, initiate_timer) = configured_handshake_timers(config.handshake_timeout(), config.connect_timeout());
 
         // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
-        handler::loop_handler(addr_recv, initiator::initiator_handler::<T>, hand_send.clone(), (filters.clone(), handle.clone(), initiate_timer), &handle);
+        handler::loop_handler(addr_recv, initiator::initiator_handler, hand_send.clone(), (transport, filters.clone(), handle.clone(), initiate_timer), &handle);
         handler::loop_handler(listener, ListenerHandler::new, hand_send, filters.clone(), &handle);
         handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), handshake_timer), &handle);
 

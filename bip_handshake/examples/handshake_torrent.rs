@@ -35,7 +35,7 @@ fn main() {
     let peer_id = (*b"-UT2060-000000000000").into();
     let handshaker = HandshakerBuilder::new()
         .with_peer_id(peer_id)
-        .build::<TcpTransport>(core.handle())
+        .build(TcpTransport, core.handle())
         .unwrap()
         .send(InitiateMessage::new(Protocol::BitTorrent, hash, addr))
         .wait()

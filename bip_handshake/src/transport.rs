@@ -22,10 +22,10 @@ pub trait Transport {
     type Listener: Stream<Item=(Self::Socket, SocketAddr), Error=io::Error> + LocalAddr + 'static;
 
     /// Connect to the given address over this transport, using the supplied `Handle`.
-    fn connect(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket>;
+    fn connect(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket>;
 
     /// Listen to the given address for this transport, using the supplied `Handle`.
-    fn listen(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener>;
+    fn listen(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener>;
 }
 
 //----------------------------------------------------------------------------------//
@@ -38,11 +38,11 @@ impl Transport for TcpTransport {
     type FutureSocket = TcpStreamNew;
     type Listener = TcpListenerStream<Incoming>;
 
-    fn connect(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket> {
+    fn connect(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket> {
         Ok(TcpStream::connect(addr, handle))
     }
 
-    fn listen(addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener> {
+    fn listen(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener> {
         let listener = try!(TcpListener::bind(addr, handle));
         let listen_addr = try!(listener.local_addr());
 
@@ -99,11 +99,11 @@ pub mod test_transports {
         type FutureSocket = FutureResult<Self::Socket, io::Error>;
         type Listener     = MockListener;
 
-        fn connect(_addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::FutureSocket> {
+        fn connect(&self, _addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::FutureSocket> {
             Ok(future::ok(Cursor::new(Vec::new())))
         }
 
-        fn listen(addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::Listener> {
+        fn listen(&self, addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::Listener> {
             Ok(MockListener::new(*addr))
         }
     }
