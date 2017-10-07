@@ -9,14 +9,14 @@ use futures::future::{self, Future};
 use tokio_core::reactor::Handle;
 
 /// Handle the initiation of connections, which are returned as a HandshakeType.
-pub fn initiator_handler<T>(item: InitiateMessage, context: &(Filters, Handle, HandshakeTimer)) -> Box<Future<Item=Option<HandshakeType<T::Socket>>,Error=()>>
+pub fn initiator_handler<T>(item: InitiateMessage, context: &(T, Filters, Handle, HandshakeTimer)) -> Box<Future<Item=Option<HandshakeType<T::Socket>>,Error=()>>
     where T: Transport {
-    let &(ref filters, ref handle, ref timer) = context;
+    let &(ref transport, ref filters, ref handle, ref timer) = context;
 
     if handler::should_filter(Some(item.address()), Some(item.protocol()), None, Some(item.hash()), None, filters) {
         Box::new(future::ok(None))
     } else {
-        let res_connect = T::connect(item.address(), handle)
+        let res_connect = transport.connect(item.address(), handle)
             .map(|connect| timer.timeout(connect));
 
         Box::new(future::lazy(|| res_connect)
@@ -59,7 +59,7 @@ mod tests {
         let exp_message = InitiateMessage::new(Protocol::BitTorrent, any_info_hash(), "1.2.3.4:5".parse().unwrap());
         let timer = HandshakeTimer::new(tokio_timer::wheel().build(), Duration::from_millis(1000));
 
-        let recv_enum_item = super::initiator_handler::<MockTransport>(exp_message.clone(), &(Filters::new(), core.handle(), timer)).wait().unwrap();
+        let recv_enum_item = super::initiator_handler(exp_message.clone(), &(MockTransport, Filters::new(), core.handle(), timer)).wait().unwrap();
         let recv_item = match recv_enum_item {
             Some(HandshakeType::Initiate(_, msg)) => msg,
             Some(HandshakeType::Complete(_, _))   |
@@ -79,7 +79,7 @@ mod tests {
 
         let exp_message = InitiateMessage::new(Protocol::BitTorrent, any_info_hash(), "1.2.3.4:5".parse().unwrap());
 
-        let recv_enum_item = super::initiator_handler::<MockTransport>(exp_message.clone(), &(filters, core.handle(), timer)).wait().unwrap();
+        let recv_enum_item = super::initiator_handler(exp_message.clone(), &(MockTransport, filters, core.handle(), timer)).wait().unwrap();
         let recv_item = match recv_enum_item {
             Some(HandshakeType::Initiate(_, msg)) => msg,
             Some(HandshakeType::Complete(_, _))   |
@@ -99,7 +99,7 @@ mod tests {
 
         let exp_message = InitiateMessage::new(Protocol::BitTorrent, any_info_hash(), "1.2.3.4:5".parse().unwrap());
 
-        let recv_enum_item = super::initiator_handler::<MockTransport>(exp_message.clone(), &(filters, core.handle(), timer)).wait().unwrap();
+        let recv_enum_item = super::initiator_handler(exp_message.clone(), &(MockTransport, filters, core.handle(), timer)).wait().unwrap();
         let recv_item = match recv_enum_item {
             Some(HandshakeType::Initiate(_, msg)) => msg,
             Some(HandshakeType::Complete(_, _))   |
@@ -119,7 +119,7 @@ mod tests {
 
         let exp_message = InitiateMessage::new(Protocol::Custom(vec![1, 2, 3, 4]), any_info_hash(), "1.2.3.4:5".parse().unwrap());
 
-        let recv_enum_item = super::initiator_handler::<MockTransport>(exp_message.clone(), &(filters, core.handle(), timer)).wait().unwrap();
+        let recv_enum_item = super::initiator_handler(exp_message.clone(), &(MockTransport, filters, core.handle(), timer)).wait().unwrap();
         match recv_enum_item {
             None                                => (),
             Some(HandshakeType::Initiate(_, _)) |

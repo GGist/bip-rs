@@ -21,7 +21,7 @@ fn positive_recover_bytes() {
     let handshaker_one = HandshakerBuilder::new()
         .with_bind_addr(handshaker_one_addr)
         .with_peer_id(handshaker_one_pid)
-        .build::<TcpTransport>(core.handle()).unwrap();
+        .build(TcpTransport, core.handle()).unwrap();
 
     handshaker_one_addr.set_port(handshaker_one.port());
 
