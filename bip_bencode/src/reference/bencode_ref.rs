@@ -1,3 +1,4 @@
+use access::bencode::BRefAccessExt;
 use std::collections::BTreeMap;
 use std::str;
 
@@ -57,10 +58,11 @@ impl<'a> BencodeRef<'a> {
     }
 }
 
-impl<'a> BRefAccess<'a> for BencodeRef<'a> {
+impl<'a> BRefAccess for BencodeRef<'a> {
+    type BKey  = &'a [u8];
     type BType = BencodeRef<'a>;
 
-    fn kind<'b>(&'b self) -> BencodeRefKind<'b, 'a, BencodeRef<'a>> {
+    fn kind<'b>(&'b self) -> BencodeRefKind<'b, &'a [u8], BencodeRef<'a>> {
         match self.inner {
             InnerBencodeRef::Int(n, _)       => BencodeRefKind::Int(n),
             InnerBencodeRef::Bytes(ref n, _) => BencodeRefKind::Bytes(n),
@@ -69,8 +71,39 @@ impl<'a> BRefAccess<'a> for BencodeRef<'a> {
         }
     }
 
-    fn str(&self) -> Option<&'a str> {
-        let bytes = match self.bytes() {
+    fn str(&self) -> Option<&str> {
+        self.str_ext()
+    }
+
+    fn int(&self) -> Option<i64> {
+        match self.inner {
+            InnerBencodeRef::Int(n, _) => Some(n),
+            _ => None,
+        }
+    }
+
+    fn bytes(&self) -> Option<&[u8]> {
+        self.bytes_ext()
+    }
+
+    fn list(&self) -> Option<&BListAccess<BencodeRef<'a>>> {
+        match self.inner {
+            InnerBencodeRef::List(ref n, _) => Some(n),
+            _ => None,
+        }
+    }
+
+    fn dict(&self) -> Option<&BDictAccess<&'a [u8], BencodeRef<'a>>> {
+        match self.inner {
+            InnerBencodeRef::Dict(ref n, _) => Some(n),
+            _ => None,
+        }
+    }
+}
+
+impl<'a> BRefAccessExt<'a> for BencodeRef<'a> {
+    fn str_ext(&self) -> Option<&'a str> {
+        let bytes = match self.bytes_ext() {
             Some(n) => n,
             None => return None,
         };
@@ -81,30 +114,9 @@ impl<'a> BRefAccess<'a> for BencodeRef<'a> {
         }
     }
 
-    fn int(&self) -> Option<i64> {
-        match self.inner {
-            InnerBencodeRef::Int(n, _) => Some(n),
-            _ => None,
-        }
-    }
-
-    fn bytes(&self) -> Option<&'a [u8]> {
+    fn bytes_ext(&self) -> Option<&'a [u8]> {
         match self.inner {
             InnerBencodeRef::Bytes(ref n, _) => Some(&n[0..]),
-            _ => None,
-        }
-    }
-
-    fn list(&self) -> Option<&BListAccess<BencodeRef<'a>>> {
-        match self.inner {
-            InnerBencodeRef::List(ref n, _) => Some(n),
-            _ => None,
-        }
-    }
-
-    fn dict(&self) -> Option<&BDictAccess<'a, BencodeRef<'a>>> {
-        match self.inner {
-            InnerBencodeRef::Dict(ref n, _) => Some(n),
             _ => None,
         }
     }
