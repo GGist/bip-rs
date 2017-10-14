@@ -12,7 +12,7 @@ mod benches {
     fn bench_nested_lists(b: &mut Bencher) {
         let bencode = b"lllllllllllllllllllllllllllllllllllllllllllllllllleeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 
-        b.iter(|| BencodeRef::decode(&bencode[..], BDecodeOpt::new(50, true)).unwrap());
+        b.iter(|| BencodeRef::decode(&bencode[..], BDecodeOpt::new(50, true, true)).unwrap());
     }
 
     #[bench]
