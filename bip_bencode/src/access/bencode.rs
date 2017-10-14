@@ -2,48 +2,64 @@ use access::dict::BDictAccess;
 use access::list::BListAccess;
 
 /// Abstract representation of a `BencodeRef` object.
-pub enum BencodeRefKind<'b, 'a: 'b, T: 'b> {
+pub enum BencodeRefKind<'a, K: 'a, V: 'a> {
     /// Bencode Integer.
     Int(i64),
     /// Bencode Bytes.
     Bytes(&'a [u8]),
     /// Bencode List.
-    List(&'b BListAccess<T>),
+    List(&'a BListAccess<V>),
     /// Bencode Dictionary.
-    Dict(&'b BDictAccess<'a, T>),
+    Dict(&'a BDictAccess<K, V>),
 }
 
 /// Trait for read access to some bencode type.
-pub trait BRefAccess<'a>: Sized {
-    type BType: BRefAccess<'a>;
+pub trait BRefAccess: Sized {
+    type BKey;
+    type BType: BRefAccess<BKey=Self::BKey>;
 
     /// Access the bencode as a `BencodeRefKind`.
-    fn kind<'b>(&'b self) -> BencodeRefKind<'b, 'a, Self::BType>;
+    fn kind<'a>(&'a self) -> BencodeRefKind<'a, Self::BKey, Self::BType>;
 
     /// Attempt to access the bencode as a `str`.
-    fn str(&self) -> Option<&'a str>;
+    fn str(&self) -> Option<&str>;
 
     /// Attempt to access the bencode as an `i64`.
     fn int(&self) -> Option<i64>;
 
     /// Attempt to access the bencode as an `[u8]`.
-    fn bytes(&self) -> Option<&'a [u8]>;
+    fn bytes(&self) -> Option<&[u8]>;
 
     /// Attempt to access the bencode as an `BListAccess`.
     fn list(&self) -> Option<&BListAccess<Self::BType>>;
 
     /// Attempt to access the bencode as an `BDictAccess`.
-    fn dict(&self) -> Option<&BDictAccess<'a, Self::BType>>;
+    fn dict(&self) -> Option<&BDictAccess<Self::BKey, Self::BType>>;
 }
 
-impl<'a: 'b, 'b, T> BRefAccess<'a> for &'b T where T: BRefAccess<'a> {
+/// Trait for extended read access to some bencode type.
+/// 
+/// Use this trait when you want to make sure that the lifetime of
+/// the underlying buffers is tied to the lifetime of the backing
+/// bencode buffer.
+pub trait BRefAccessExt<'a>: BRefAccess {
+    /// Attempt to access the bencode as a `str`.
+    fn str_ext(&self) -> Option<&'a str>;
+
+    /// Attempt to access the bencode as an `[u8]`.
+    fn bytes_ext(&self) -> Option<&'a [u8]>;
+}
+
+impl<'a, T> BRefAccess for &'a T
+    where T: BRefAccess {
+    type BKey  = T::BKey;
     type BType = T::BType;
 
-    fn kind<'c>(&'c self) -> BencodeRefKind<'c, 'a, Self::BType> {
+    fn kind<'b>(&'b self) -> BencodeRefKind<'b, Self::BKey, Self::BType> {
         (*self).kind()
     }
 
-    fn str(&self) -> Option<&'a str> {
+    fn str(&self) -> Option<&str> {
         (*self).str()
     }
 
@@ -51,7 +67,7 @@ impl<'a: 'b, 'b, T> BRefAccess<'a> for &'b T where T: BRefAccess<'a> {
         (*self).int()
     }
 
-    fn bytes(&self) -> Option<&'a [u8]> {
+    fn bytes(&self) -> Option<&[u8]> {
         (*self).bytes()
     }
 
@@ -59,31 +75,42 @@ impl<'a: 'b, 'b, T> BRefAccess<'a> for &'b T where T: BRefAccess<'a> {
         (*self).list()
     }
 
-    fn dict(&self) -> Option<&BDictAccess<'a, Self::BType>> {
+    fn dict(&self) -> Option<&BDictAccess<Self::BKey, Self::BType>> {
         (*self).dict()
     }
 }
 
+impl<'a: 'b, 'b, T> BRefAccessExt<'a> for &'b T
+    where T: BRefAccessExt<'a> {
+    fn str_ext(&self) -> Option<&'a str> {
+        (*self).str_ext()
+    }
+
+    fn bytes_ext(&self) -> Option<&'a [u8]> {
+        (*self).bytes_ext()
+    }
+}
+
 /// Abstract representation of a `BencodeMut` object.
-pub enum BencodeMutKind<'b, 'a: 'b, T: 'b> {
+pub enum BencodeMutKind<'a, K: 'a, V: 'a> {
     /// Bencode Integer.
     Int(i64),
     /// Bencode Bytes.
     Bytes(&'a [u8]),
     /// Bencode List.
-    List(&'b mut BListAccess<T>),
+    List(&'a mut BListAccess<V>),
     /// Bencode Dictionary.
-    Dict(&'b mut BDictAccess<'a, T>),
+    Dict(&'a mut BDictAccess<K, V>),
 }
 
 /// Trait for write access to some bencode type.
-pub trait BMutAccess<'a>: Sized + BRefAccess<'a> {
+pub trait BMutAccess: Sized + BRefAccess {
     /// Access the bencode as a `BencodeMutKind`.
-    fn kind_mut<'b>(&'b mut self) -> BencodeMutKind<'b, 'a, Self::BType>;
+    fn kind_mut<'a>(&'a mut self) -> BencodeMutKind<'a, Self::BKey, Self::BType>;
 
     /// Attempt to access the bencode as a mutable `BListAccess`.
     fn list_mut(&mut self) -> Option<&mut BListAccess<Self::BType>>;
 
     /// Attempt to access the bencode as a mutable `BDictAccess`.
-    fn dict_mut(&mut self) -> Option<&mut BDictAccess<'a, Self::BType>>;
+    fn dict_mut(&mut self) -> Option<&mut BDictAccess<Self::BKey, Self::BType>>;
 }

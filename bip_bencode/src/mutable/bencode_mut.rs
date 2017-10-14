@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::str;
 
@@ -12,17 +13,17 @@ pub enum InnerBencodeMut<'a> {
     /// Bencode Integer.
     Int(i64),
     /// Bencode Bytes.
-    Bytes(&'a [u8]),
+    Bytes(Cow<'a, [u8]>),
     /// Bencode List.
     List(Vec<BencodeMut<'a>>),
     /// Bencode Dictionary.
-    Dict(BTreeMap<&'a [u8], BencodeMut<'a>>),
+    Dict(BTreeMap<Cow<'a, [u8]>, BencodeMut<'a>>),
 }
 
 /// `BencodeMut` object that stores references to some data.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct BencodeMut<'a> {
-    inner: InnerBencodeMut<'a>
+    inner:   InnerBencodeMut<'a>
 }
 
 impl<'a> BencodeMut<'a> {
@@ -36,8 +37,8 @@ impl<'a> BencodeMut<'a> {
     }
 
     /// Create a new `BencodeMut` representing a `[u8]`.
-    pub fn new_bytes(value: &'a [u8]) -> BencodeMut<'a> {
-        BencodeMut::new(InnerBencodeMut::Bytes(value))
+    pub fn new_bytes(value: Cow<'a, [u8]>) -> BencodeMut<'a> {
+        BencodeMut::new(InnerBencodeMut::Bytes(value.into()))
     }
 
     /// Create a new `BencodeMut` representing a `BListAccess`.
@@ -60,10 +61,11 @@ impl<'a> BencodeMut<'a> {
     }
 }
 
-impl<'a> BRefAccess<'a> for BencodeMut<'a> {
+impl<'a> BRefAccess for BencodeMut<'a> {
+    type BKey  = Cow<'a, [u8]>;
     type BType = BencodeMut<'a>;
 
-    fn kind<'b>(&'b self) -> BencodeRefKind<'b, 'a, BencodeMut<'a>> {
+    fn kind<'b>(&'b self) -> BencodeRefKind<'b, Cow<'a, [u8]>, BencodeMut<'a>> {
         match self.inner {
             InnerBencodeMut::Int(n)       => BencodeRefKind::Int(n),
             InnerBencodeMut::Bytes(ref n) => BencodeRefKind::Bytes(n),
@@ -72,7 +74,7 @@ impl<'a> BRefAccess<'a> for BencodeMut<'a> {
         }
     }
 
-    fn str(&self) -> Option<&'a str> {
+    fn str(&self) -> Option<&str> {
         let bytes = match self.bytes() {
             Some(n) => n,
             None => return None,
@@ -91,9 +93,9 @@ impl<'a> BRefAccess<'a> for BencodeMut<'a> {
         }
     }
 
-    fn bytes(&self) -> Option<&'a [u8]> {
+    fn bytes(&self) -> Option<&[u8]> {
         match self.inner {
-            InnerBencodeMut::Bytes(ref n) => Some(&n[0..]),
+            InnerBencodeMut::Bytes(ref n) => Some(n.as_ref()),
             _ => None,
         }
     }
@@ -105,7 +107,7 @@ impl<'a> BRefAccess<'a> for BencodeMut<'a> {
         }
     }
 
-    fn dict(&self) -> Option<&BDictAccess<'a, BencodeMut<'a>>> {
+    fn dict(&self) -> Option<&BDictAccess<Cow<'a, [u8]>, BencodeMut<'a>>> {
         match self.inner {
             InnerBencodeMut::Dict(ref n) => Some(n),
             _ => None,
@@ -113,11 +115,11 @@ impl<'a> BRefAccess<'a> for BencodeMut<'a> {
     }
 }
 
-impl<'a> BMutAccess<'a> for BencodeMut<'a> {
-    fn kind_mut<'b>(&'b mut self) -> BencodeMutKind<'b, 'a, BencodeMut<'a>> {
+impl<'a> BMutAccess for BencodeMut<'a> {
+    fn kind_mut<'b>(&'b mut self) -> BencodeMutKind<'b, Cow<'a, [u8]>, BencodeMut<'a>> {
         match self.inner {
             InnerBencodeMut::Int(n)           => BencodeMutKind::Int(n),
-            InnerBencodeMut::Bytes(ref mut n) => BencodeMutKind::Bytes(n),
+            InnerBencodeMut::Bytes(ref mut n) => BencodeMutKind::Bytes((*n).as_ref()),
             InnerBencodeMut::List(ref mut n)  => BencodeMutKind::List(n),
             InnerBencodeMut::Dict(ref mut n)  => BencodeMutKind::Dict(n),
         }
@@ -130,7 +132,7 @@ impl<'a> BMutAccess<'a> for BencodeMut<'a> {
         }
     }
 
-    fn dict_mut(&mut self) -> Option<&mut BDictAccess<'a, BencodeMut<'a>>> {
+    fn dict_mut(&mut self) -> Option<&mut BDictAccess<Cow<'a, [u8]>, BencodeMut<'a>>> {
         match self.inner {
             InnerBencodeMut::Dict(ref mut n) => Some(n),
             _ => None
@@ -153,7 +155,7 @@ mod test {
 
     #[test]
     fn positive_bytes_encode() {
-        let bencode_bytes = BencodeMut::new_bytes(b"asdasd");
+        let bencode_bytes = BencodeMut::new_bytes((&b"asdasd"[..]).into());
 
         let bytes_bytes = b"6:asdasd";
         assert_eq!(&bytes_bytes[..], &bencode_bytes.encode()[..]);
@@ -194,7 +196,7 @@ mod test {
 
         {
             let dict_mut = bencode_dict.dict_mut().unwrap();
-            dict_mut.insert(b"asd", BencodeMut::new_bytes(b"asdasd"));
+            dict_mut.insert((&b"asd"[..]).into(), BencodeMut::new_bytes((&b"asdasd"[..]).into()));
         }
 
         let dict_bytes = b"d3:asd6:asdasde";
