@@ -2,7 +2,8 @@ use {ConnectedChannel};
 
 use bip_peer::{PeerManagerBuilder, PeerInfo, IPeerManagerMessage, OPeerManagerMessage};
 use bip_peer::protocols::{NullProtocol};
-use bip_peer::message::PeerWireProtocolMessage;
+use bip_peer::messages::PeerWireProtocolMessage;
+use bip_handshake::Extensions;
 use bip_util::bt;
 use futures::{future, Future, AsyncSink};
 use futures::sink::Sink;
@@ -19,8 +20,8 @@ fn positive_peer_manager_send_backpressure() {
     // Create two peers
     let (peer_one, peer_two): (ConnectedChannel<PeerWireProtocolMessage<NullProtocol>, PeerWireProtocolMessage<NullProtocol>>,
                                ConnectedChannel<PeerWireProtocolMessage<NullProtocol>, PeerWireProtocolMessage<NullProtocol>>) = ::connected_channel(5);
-    let peer_one_info = PeerInfo::new("127.0.0.1:0".parse().unwrap(), [0u8; bt::PEER_ID_LEN].into(), [0u8; bt::INFO_HASH_LEN].into());
-    let peer_two_info = PeerInfo::new("127.0.0.1:1".parse().unwrap(), [1u8; bt::PEER_ID_LEN].into(), [1u8; bt::INFO_HASH_LEN].into());
+    let peer_one_info = PeerInfo::new("127.0.0.1:0".parse().unwrap(), [0u8; bt::PEER_ID_LEN].into(), [0u8; bt::INFO_HASH_LEN].into(), Extensions::new());
+    let peer_two_info = PeerInfo::new("127.0.0.1:1".parse().unwrap(), [1u8; bt::PEER_ID_LEN].into(), [1u8; bt::INFO_HASH_LEN].into(), Extensions::new());
 
     // Add peer one to the manager
     let manager = core.run(manager.send(IPeerManagerMessage::AddPeer(peer_one_info, peer_one))).unwrap();

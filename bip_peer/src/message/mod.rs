@@ -41,15 +41,15 @@ const MESSAGE_ID_LEN_BYTES:     usize = 1;
 const HEADER_LEN:               usize = MESSAGE_LENGTH_LEN_BYTES + MESSAGE_ID_LEN_BYTES;
 
 mod bencode;
-mod bits_extension;
-mod prot_extension;
+mod bits_ext;
+mod prot_ext;
 mod standard;
 mod null;
 
-pub use message::bits_extension::{BitsExtensionMessage, PortMessage, ExtendedMessage, ExtendedType};
+pub use message::bits_ext::{BitsExtensionMessage, PortMessage, ExtendedMessage, ExtendedMessageBuilder, ExtendedType};
 pub use message::standard::{HaveMessage, BitFieldMessage, BitFieldIter, RequestMessage, PieceMessage, CancelMessage};
 pub use message::null::NullProtocolMessage;
-pub use message::prot_extension::{PeerExtensionProtocolMessage, UtMetadataMessage, UtMetadataRequestMessage, UtMetadataDataMessage, UtMetadataRejectMessage};
+pub use message::prot_ext::{PeerExtensionProtocolMessage, UtMetadataMessage, UtMetadataRequestMessage, UtMetadataDataMessage, UtMetadataRejectMessage};
 
 /// Enumeration of messages for `PeerWireProtocol`.
 pub enum PeerWireProtocolMessage<P> where P: PeerProtocol {
