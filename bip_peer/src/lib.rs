@@ -1,5 +1,6 @@
 #[macro_use]
 extern crate bip_bencode;
+extern crate bip_handshake;
 extern crate bip_util;
 extern crate bytes;
 extern crate byteorder;

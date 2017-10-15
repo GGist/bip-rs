@@ -15,6 +15,7 @@ license       = "MIT/Apache-2.0"
 
 [dependencies]
 bip_bencode   = "0.4"
+bip_handshake = "0.7"
 bip_util      = "0.5"
 bytes         = "0.4"
 byteorder     = "1.0"

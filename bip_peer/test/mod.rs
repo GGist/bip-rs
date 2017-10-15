@@ -1,4 +1,5 @@
 extern crate bip_peer;
+extern crate bip_handshake;
 extern crate bip_util;
 extern crate futures;
 extern crate tokio_core;

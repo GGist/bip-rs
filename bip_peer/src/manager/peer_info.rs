@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use bip_handshake::Extensions;
 use bip_util::bt::{InfoHash, PeerId};
 
 /// Information that uniquely identifies a peer.
@@ -7,13 +8,14 @@ use bip_util::bt::{InfoHash, PeerId};
 pub struct PeerInfo {
     addr: SocketAddr,
     pid:  PeerId,
-    hash: InfoHash
+    hash: InfoHash,
+    ext:  Extensions
 }
 
 impl PeerInfo {
     /// Create a new `PeerInfo` object.
-    pub fn new(addr: SocketAddr, pid: PeerId, hash: InfoHash) -> PeerInfo {
-        PeerInfo{ addr: addr, pid: pid, hash: hash }
+    pub fn new(addr: SocketAddr, pid: PeerId, hash: InfoHash, extensions: Extensions) -> PeerInfo {
+        PeerInfo{ addr: addr, pid: pid, hash: hash, ext: extensions }
     }
 
     /// Retrieve the peer address.
@@ -29,5 +31,10 @@ impl PeerInfo {
     /// Retrieve the peer info hash.
     pub fn hash(&self) -> &InfoHash {
         &self.hash
+    }
+
+    /// Retrieve the extensions supported by this peer.
+    pub fn extensions(&self) -> &Extensions {
+        &self.ext
     }
 }
