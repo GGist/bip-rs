@@ -13,7 +13,7 @@ pub enum Extension {
 }
 
 /// `Extensions` supported by either end of a handshake.
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
 pub struct Extensions {
     bytes: [u8; NUM_EXTENSION_BYTES]
 }
