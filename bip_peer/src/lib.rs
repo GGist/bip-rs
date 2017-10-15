@@ -16,10 +16,9 @@ extern crate nom;
 #[macro_use]
 mod macros;
 
-pub mod message;
-
 mod codec;
 mod manager;
+mod message;
 mod protocol;
 
 pub use codec::PeerProtocolCodec;
@@ -27,6 +26,18 @@ pub use protocol::{PeerProtocol, NestedPeerProtocol};
 pub use manager::{ManagedMessage, PeerManager, PeerManagerSink, PeerManagerStream, IPeerManagerMessage, OPeerManagerMessage, MessageId};
 pub use manager::builder::PeerManagerBuilder;
 pub use manager::peer_info::PeerInfo;
+
+/// Serializable and deserializable protocol messages.
+pub mod messages {
+    /// Builder types for protocol messages.
+    pub mod builders {
+        pub use message::{ExtendedMessageBuilder};
+    }
+
+    pub use message::{BitFieldIter, BitFieldMessage, CancelMessage, ExtendedMessage, HaveMessage, PieceMessage, PortMessage,
+        RequestMessage, UtMetadataRequestMessage, UtMetadataDataMessage, UtMetadataRejectMessage, BitsExtensionMessage, ExtendedType,
+        NullProtocolMessage, PeerExtensionProtocolMessage, PeerWireProtocolMessage, UtMetadataMessage};
+}
 
 /// `PeerManager` error types.
 pub mod error {

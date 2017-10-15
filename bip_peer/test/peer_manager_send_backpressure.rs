@@ -2,7 +2,7 @@ use {ConnectedChannel};
 
 use bip_peer::{PeerManagerBuilder, PeerInfo, IPeerManagerMessage, OPeerManagerMessage};
 use bip_peer::protocols::{NullProtocol};
-use bip_peer::message::PeerWireProtocolMessage;
+use bip_peer::messages::PeerWireProtocolMessage;
 use bip_util::bt;
 use futures::{future, Future, AsyncSink};
 use futures::sink::Sink;
