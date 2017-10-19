@@ -1,6 +1,6 @@
 [package]
 name          = "bip_peer"
-version       = "0.4.1"
+version       = "0.5.0"
 description   = "Communication with bittorrent peers via peer wire protocol"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
