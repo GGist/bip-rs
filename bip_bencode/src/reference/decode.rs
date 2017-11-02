@@ -118,8 +118,8 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) 
         let (key_bytes, next_pos) = try!(decode_bytes(bytes, curr_pos));
         
         // Spec says that the keys must be in alphabetical order
-        match bencode_dict.keys().last() {
-            Some(last_key) if key_bytes < *last_key => {
+        match (bencode_dict.keys().last(), opts.check_key_sort()) {
+            (Some(last_key), true) if key_bytes < *last_key => {
                 return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyOrdering{ pos: curr_pos, key: key_bytes.to_vec() }))
             },
             _ => ()
@@ -293,6 +293,11 @@ mod tests {
     }
 
     #[test]
+    fn positive_decode_dict_unordered_keys() {
+        BencodeRef::decode(DICT_UNORDERED_KEYS, BDecodeOpt::default()).unwrap();
+    }
+
+    #[test]
     #[should_panic]
     fn negative_decode_bytes_neg_len() {
         BencodeRef::decode(BYTES_NEG_LEN, BDecodeOpt::default()).unwrap();
@@ -345,7 +350,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_decode_dict_unordered_keys() {
-        BencodeRef::decode(DICT_UNORDERED_KEYS, BDecodeOpt::default()).unwrap();
+        BencodeRef::decode(DICT_UNORDERED_KEYS, BDecodeOpt::new(5, true, true)).unwrap();
     }
 
     #[test]
