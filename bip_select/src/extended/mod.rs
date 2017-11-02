@@ -1,48 +1,53 @@
-use futures::Stream;
-use futures::Poll;
-use error::UberError;
 use ControlMessage;
-use futures::task::Task;
-use futures::Async;
-use futures::task;
-use std::collections::{VecDeque, HashMap};
-use bip_peer::messages::ExtendedMessage;
 use bip_peer::PeerInfo;
+use bip_peer::messages::ExtendedMessage;
 use bip_peer::messages::builders::ExtendedMessageBuilder;
+use error::UberError;
+use futures::Async;
+use futures::Poll;
+use futures::Stream;
+use futures::task;
+use futures::task::Task;
+use std::collections::{HashMap, VecDeque};
 
 /// Enumeration of extended messages that can be sent to the extended module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IExtendedMessage {
     Control(ControlMessage),
-    RecievedExtendedMessage(PeerInfo, ExtendedMessage)
+    RecievedExtendedMessage(PeerInfo, ExtendedMessage),
 }
 
 /// Enumeration of extended messages that can be received from the extended module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OExtendedMessage {
-    SendExtendedMessage(PeerInfo, ExtendedMessage)
+    SendExtendedMessage(PeerInfo, ExtendedMessage),
 }
 
 /// Trait for a module to take part in constructing the extended message for a peer.
 pub trait ExtendedListener {
     /// Extend the given extended message builder for the given peer.
-    fn extend(&self, _info: &PeerInfo, _builder: ExtendedMessageBuilder) -> ExtendedMessageBuilder{ _builder }
+    fn extend(&self, _info: &PeerInfo, _builder: ExtendedMessageBuilder) -> ExtendedMessageBuilder {
+        _builder
+    }
 
     /// One or both sides of a peer connection had their extended information updated.
-    /// 
+    ///
     /// This can be called multiple times for any given peer as extension information updates.
-    fn on_update(&mut self, _info: &PeerInfo, _extended: &ExtendedPeerInfo) { }
+    fn on_update(&mut self, _info: &PeerInfo, _extended: &ExtendedPeerInfo) {}
 }
 
 /// Container for both the local and remote `ExtendedMessage`.
 pub struct ExtendedPeerInfo {
-    ours:   Option<ExtendedMessage>,
-    theirs: Option<ExtendedMessage>
+    ours: Option<ExtendedMessage>,
+    theirs: Option<ExtendedMessage>,
 }
 
 impl ExtendedPeerInfo {
     pub fn new(ours: Option<ExtendedMessage>, theirs: Option<ExtendedMessage>) -> ExtendedPeerInfo {
-        ExtendedPeerInfo{ ours: ours, theirs: theirs }
+        ExtendedPeerInfo {
+            ours: ours,
+            theirs: theirs,
+        }
     }
 
     pub fn update_ours(&mut self, message: ExtendedMessage) {
@@ -65,19 +70,26 @@ impl ExtendedPeerInfo {
 //------------------------------------------------------------------------------//
 
 pub struct ExtendedModule {
-    builder:   ExtendedMessageBuilder,
-    peers:     HashMap<PeerInfo, ExtendedPeerInfo>,
+    builder: ExtendedMessageBuilder,
+    peers: HashMap<PeerInfo, ExtendedPeerInfo>,
     out_queue: VecDeque<OExtendedMessage>,
-    opt_task:  Option<Task>
+    opt_task: Option<Task>,
 }
 
 impl ExtendedModule {
     pub fn new(builder: ExtendedMessageBuilder) -> ExtendedModule {
-        ExtendedModule{ builder: builder, peers: HashMap::new(), out_queue: VecDeque::new(), opt_task: None }
+        ExtendedModule {
+            builder: builder,
+            peers: HashMap::new(),
+            out_queue: VecDeque::new(),
+            opt_task: None,
+        }
     }
 
     pub fn process_message<D>(&mut self, message: IExtendedMessage, d_modules: &mut [Box<D>])
-        where D: ExtendedListener + ?Sized {
+    where
+        D: ExtendedListener + ?Sized,
+    {
         match message {
             IExtendedMessage::Control(ControlMessage::PeerConnected(info)) => {
                 let mut builder = self.builder.clone();
@@ -95,7 +107,8 @@ impl ExtendedModule {
                 }
 
                 self.peers.insert(info, ext_peer_info);
-                self.out_queue.push_back(OExtendedMessage::SendExtendedMessage(info, ext_message));
+                self.out_queue
+                    .push_back(OExtendedMessage::SendExtendedMessage(info, ext_message));
             },
             IExtendedMessage::Control(ControlMessage::PeerDisconnected(info)) => {
                 self.peers.remove(&info);
@@ -108,7 +121,9 @@ impl ExtendedModule {
                     d_module.on_update(&info, &ext_peer_info);
                 }
             },
-            _ => ()
+            _ => {
+                ()
+            },
         }
 
         self.check_stream_unblock();

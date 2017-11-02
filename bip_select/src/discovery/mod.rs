@@ -1,14 +1,12 @@
 //! Module for peer discovery.
 
+use ControlMessage;
+use bip_handshake::InfoHash;
+use bip_metainfo::Metainfo;
+use bip_peer::PeerInfo;
 use bip_peer::messages::UtMetadataMessage;
 use bip_utracker::announce::ClientState;
 use std::net::SocketAddr;
-
-use bip_metainfo::Metainfo;
-use bip_peer::PeerInfo;
-use bip_handshake::InfoHash;
-
-use ControlMessage;
 
 pub mod error;
 pub mod ut_metadata;
@@ -21,7 +19,7 @@ pub enum IDiscoveryMessage {
     /// Find peers and download the metainfo for the `InfoHash`.
     DownloadMetainfo(InfoHash),
     /// Received a UtMetadata message.
-    ReceivedUtMetadataMessage(PeerInfo, UtMetadataMessage)
+    ReceivedUtMetadataMessage(PeerInfo, UtMetadataMessage),
 }
 
 /// Enumeration of discovery messages that can be received from a discovery module.
@@ -34,5 +32,5 @@ pub enum ODiscoveryMessage {
     /// Send a UtMetadata message.
     SendUtMetadataMessage(PeerInfo, UtMetadataMessage),
     /// We have finished downloading the given `Metainfo`.
-    DownloadedMetainfo(Metainfo)
+    DownloadedMetainfo(Metainfo),
 }

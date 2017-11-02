@@ -157,7 +157,7 @@ impl<S> Handshaker<S> where S: AsyncRead + AsyncWrite + 'static {
         // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
         handler::loop_handler(addr_recv, initiator::initiator_handler, hand_send.clone(), (transport, filters.clone(), handle.clone(), initiate_timer), &handle);
         handler::loop_handler(listener, ListenerHandler::new, hand_send, filters.clone(), &handle);
-        handler::loop_handler(hand_recv, handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), handshake_timer), &handle);
+        handler::loop_handler(hand_recv.map(Result::Ok).buffer_unordered(100), handshaker::execute_handshake, sock_send, (builder.ext, builder.pid, filters.clone(), handshake_timer), &handle);
 
         let sink = HandshakerSink::new(addr_send, open_port, builder.pid, filters);
         let stream = HandshakerStream::new(sock_recv);
