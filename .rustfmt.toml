@@ -1,0 +1,10 @@
+reorder_imports        = true
+reorder_imported_names = true
+
+match_arm_forces_newline         = true
+multiline_match_arm_forces_block = true
+match_block_trailing_comma       = true
+
+max_width       = 150
+fn_call_width   = 100
+fn_args_density = "Compressed"
