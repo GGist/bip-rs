@@ -1,6 +1,6 @@
 [package]
 name        = "bip_select"
-version     = "0.0.0"
+version     = "0.1.0"
 description = "Bittorrent Infrastructure Project Piece Selection Module"
 
 authors     = ["Andrew <amiller4421@gmail.com>"]
@@ -12,5 +12,12 @@ keywords    = ["piece", "selection"]
 
 license     = "MIT/Apache-2.0"
 
-[features]
-unstable = []
+[dependencies]
+bip_handshake = "0.7"
+bip_peer      = "0.5"
+bip_metainfo  = "0.11"
+bip_utracker  = "0.3"
+bytes         = "0.4"
+error-chain   = "0.11"
+futures       = "0.1"
+rand          = "0.3"
