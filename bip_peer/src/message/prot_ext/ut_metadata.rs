@@ -12,7 +12,7 @@ const REJECT_MESSAGE_TYPE_ID:  u8 = 2;
 const ROOT_ERROR_KEY: &'static str = "PeerExtensionProtocolMessage";
 
 /// Enumeration of messages for `PeerExtensionProtocolMessage::UtMetadata`.
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum UtMetadataMessage {
     Request(UtMetadataRequestMessage),
     Data(UtMetadataDataMessage),
@@ -71,37 +71,39 @@ impl UtMetadataMessage {
 // ----------------------------------------------------------------------------//
 
 /// Message for requesting a piece of metadata from a peer.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UtMetadataRequestMessage {
-    piece: i64,
-    bytes: Bytes
+    piece:        i64,
+    bencode_size: usize
 }
 
 impl UtMetadataRequestMessage {
     pub fn new(piece: i64) -> UtMetadataRequestMessage {
-        let encoded_bytes = (ben_map!{
+        let encoded_bytes_size = (ben_map!{
             bencode::MESSAGE_TYPE_KEY => ben_int!(REQUEST_MESSAGE_TYPE_ID as i64),
             bencode::PIECE_INDEX_KEY  => ben_int!(piece)
-        }).encode();
+        }).encode().len();
         
-        let mut bytes = Bytes::with_capacity(encoded_bytes.len());
-        bytes.extend_from_slice(&encoded_bytes[..]);
-
-        UtMetadataRequestMessage::with_bytes(piece, bytes)
+        UtMetadataRequestMessage{ piece: piece, bencode_size: encoded_bytes_size }
     }
 
     pub fn with_bytes(piece: i64, bytes: Bytes) -> UtMetadataRequestMessage {
-        UtMetadataRequestMessage{ piece: piece, bytes: bytes }
+        UtMetadataRequestMessage{ piece: piece, bencode_size: bytes.len() }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write
     {
-        writer.write_all(self.bytes.as_ref())
+        let encoded_bytes = (ben_map!{
+            bencode::MESSAGE_TYPE_KEY => ben_int!(REQUEST_MESSAGE_TYPE_ID as i64),
+            bencode::PIECE_INDEX_KEY  => ben_int!(self.piece)
+        }).encode();
+
+        writer.write_all(encoded_bytes.as_ref())
     }
 
     pub fn message_size(&self) -> usize {
-        self.bytes.len()
+        self.bencode_size
     }
 
     pub fn piece(&self) -> i64 {
@@ -110,42 +112,45 @@ impl UtMetadataRequestMessage {
 }
 
 /// Message for sending a piece of metadata from a peer.
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UtMetadataDataMessage {
-    piece:      i64,
-    total_size: i64,
-    data:       Bytes,
-    bytes:      Bytes
+    piece:        i64,
+    total_size:   i64,
+    data:         Bytes,
+    bencode_size: usize
 }
 
 impl UtMetadataDataMessage {
     pub fn new(piece: i64, total_size: i64, data: Bytes) -> UtMetadataDataMessage {
-        let encoded_bytes = (ben_map!{
+        let encoded_bytes_len = (ben_map!{
             bencode::MESSAGE_TYPE_KEY => ben_int!(DATA_MESSAGE_TYPE_ID as i64),
             bencode::PIECE_INDEX_KEY  => ben_int!(piece),
             bencode::TOTAL_SIZE_KEY   => ben_int!(total_size)
-        }).encode();
+        }).encode().len();
 
-        let mut bytes = Bytes::with_capacity(encoded_bytes.len());
-        bytes.extend_from_slice(&encoded_bytes[..]);
-
-        UtMetadataDataMessage::with_bytes(piece, total_size, data, bytes)
+        UtMetadataDataMessage{ piece: piece, total_size: total_size, data: data, bencode_size: encoded_bytes_len }
     }
 
     pub fn with_bytes(piece: i64, total_size: i64, data: Bytes, bytes: Bytes) -> UtMetadataDataMessage {
-        UtMetadataDataMessage{ piece: piece, total_size: total_size, data: data, bytes: bytes }
+        UtMetadataDataMessage{ piece: piece, total_size: total_size, data: data, bencode_size: bytes.len() }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write
     {
-        try!(writer.write_all(self.bytes.as_ref()));
+        let encoded_bytes = (ben_map!{
+            bencode::MESSAGE_TYPE_KEY => ben_int!(DATA_MESSAGE_TYPE_ID as i64),
+            bencode::PIECE_INDEX_KEY  => ben_int!(self.piece),
+            bencode::TOTAL_SIZE_KEY   => ben_int!(self.total_size)
+        }).encode();
+
+        try!(writer.write_all(encoded_bytes.as_ref()));
 
         writer.write_all(self.data.as_ref())
     }
 
     pub fn message_size(&self) -> usize {
-        self.bytes.len() + self.data.len()
+        self.bencode_size + self.data.len()
     }
 
     pub fn piece(&self) -> i64 {
@@ -162,37 +167,39 @@ impl UtMetadataDataMessage {
 }
 
 /// Message for rejecting a request for metadata from a peer.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UtMetadataRejectMessage {
-    piece: i64,
-    bytes: Bytes
+    piece:        i64,
+    bencode_size: usize
 }
 
 impl UtMetadataRejectMessage {
     pub fn new(piece: i64) -> UtMetadataRejectMessage {
-        let encoded_bytes = (ben_map!{
+        let encoded_bytes_size = (ben_map!{
             bencode::MESSAGE_TYPE_KEY => ben_int!(REJECT_MESSAGE_TYPE_ID as i64),
             bencode::PIECE_INDEX_KEY  => ben_int!(piece)
-        }).encode();
+        }).encode().len();
 
-        let mut bytes = Bytes::with_capacity(encoded_bytes.len());
-        bytes.extend_from_slice(&encoded_bytes[..]);
-
-        UtMetadataRejectMessage::with_bytes(piece, bytes)
+        UtMetadataRejectMessage{ piece: piece, bencode_size: encoded_bytes_size }
     }
 
     pub fn with_bytes(piece: i64, bytes: Bytes) -> UtMetadataRejectMessage {
-        UtMetadataRejectMessage{ piece: piece, bytes: bytes }
+        UtMetadataRejectMessage{ piece: piece, bencode_size: bytes.len() }
     }
 
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
         where W: Write
     {
-        writer.write_all(self.bytes.as_ref())
+        let encoded_bytes = (ben_map!{
+            bencode::MESSAGE_TYPE_KEY => ben_int!(REJECT_MESSAGE_TYPE_ID as i64),
+            bencode::PIECE_INDEX_KEY  => ben_int!(self.piece)
+        }).encode();
+
+        writer.write_all(encoded_bytes.as_ref())
     }
 
     pub fn message_size(&self) -> usize {
-        self.bytes.len()
+        self.bencode_size
     }
 
     pub fn piece(&self) -> i64 {
