@@ -9,7 +9,7 @@ extern crate futures;
 extern crate hex;
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate tokio_timer;
+extern crate pendulum;
 
 use bip_dht::{DhtBuilder, DhtEvent, Handshaker, Router};
 use bip_handshake::{Extension, Extensions, HandshakerBuilder, HandshakerConfig, InfoHash, InitiateMessage, Protocol};
@@ -33,6 +33,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tokio_core::reactor::Core;
 use tokio_io::AsyncRead;
+use pendulum::{HashedWheelBuilder};
+use pendulum::future::{TimerBuilder};
 
 // Legacy Handshaker, when bip_dht is migrated, it will accept S directly
 struct LegacyHandshaker<S> {
@@ -161,9 +163,16 @@ fn main() {
             .map_err(|_| ()),
     ).unwrap();
 
-    // TODO: See #116
-    //let timer = tokio_timer::wheel().build();
-    let merged_recv = peer_manager_recv.map(Either::A).map_err(|_| ()).select(futures::stream::empty::<Either<_, ()>, _>());
+    let timer = TimerBuilder::default()
+        .build(HashedWheelBuilder::default().build());
+    let timer_recv = timer.sleep_stream(Duration::from_millis(100))
+        .unwrap()
+        .map(Either::B);
+
+    let merged_recv = peer_manager_recv
+        .map(Either::A)
+        .map_err(|_| ())
+        .select(timer_recv);
 
     // Hook up a future that receives messages from the peer manager
     core.handle().spawn(future::loop_fn(

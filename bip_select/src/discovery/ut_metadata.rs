@@ -119,6 +119,8 @@ impl UtMetadataModule {
             .their_message()
             .and_then(ExtendedMessage::metadata_size);
 
+        info!("Our Support For UtMetadata Is {:?} And {:?} Support For UtMetadata Is {:?} With Metdata Size {:?}",
+            our_support, info.addr(), they_support, opt_metadata_size);
         // If peer supports it, but they dont have the metadata size, then they probably dont have the file yet...
         match (our_support, they_support, opt_metadata_size) {
             (true, true, Some(metadata_size)) => {
@@ -160,6 +162,7 @@ impl UtMetadataModule {
     fn apply_tick(&mut self, duration: Duration) -> StartSend<IDiscoveryMessage, DiscoveryError> {
         let active_requests = &mut self.active_requests;
         let active_peers = &mut self.active_peers;
+        let pending_map = &mut self.pending_map;
 
         // Retain only the requests that arent expired
         active_requests.retain(|request| {
@@ -170,6 +173,14 @@ impl UtMetadataModule {
                 if let Some(active) = active_peers.get_mut(&request.sent_to.hash()) {
                     active.peers.remove(&request.sent_to);
                 }
+
+                // Push request back to pending
+                pending_map.get_mut(&request.sent_to.hash())
+                    .map(|opt_pending| {
+                        opt_pending.as_mut().map(|pending| {
+                            pending.messages.push(request.message);
+                        })
+                    });
             }
 
             !is_expired
@@ -288,6 +299,7 @@ impl UtMetadataModule {
                 self.active_requests
                     .push(generate_active_request(selected_message, *selected_peer));
 
+                info!("Requesting Piece {:?} For Hash {:?}", selected_message.piece(), selected_peer.hash());
                 return Some(Ok(ODiscoveryMessage::SendUtMetadataMessage(
                     *selected_peer,
                     UtMetadataMessage::Request(selected_message),
