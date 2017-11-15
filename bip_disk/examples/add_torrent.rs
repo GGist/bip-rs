@@ -7,7 +7,7 @@ use std::fs::File;
 
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage};
 use bip_disk::fs::NativeFileSystem;
-use bip_metainfo::MetainfoFile;
+use bip_metainfo::Metainfo;
 use futures::{Stream, Sink, Future};
 
 fn main() {
@@ -27,7 +27,7 @@ fn main() {
 
     let mut torrent_bytes = Vec::new();
     File::open(torrent_path).unwrap().read_to_end(&mut torrent_bytes).unwrap();
-    let metainfo_file = MetainfoFile::from_bytes(torrent_bytes).unwrap();
+    let metainfo_file = Metainfo::from_bytes(torrent_bytes).unwrap();
 
     let native_fs = NativeFileSystem::with_directory(download_path);
     let disk_manager = DiskManagerBuilder::new().build(native_fs);

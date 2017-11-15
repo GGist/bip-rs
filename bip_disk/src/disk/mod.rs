@@ -1,7 +1,7 @@
 use error::{TorrentError, BlockError};
 use memory::block::{Block, BlockMut};
 
-use bip_metainfo::MetainfoFile;
+use bip_metainfo::Metainfo;
 use bip_util::bt::{InfoHash};
 
 pub mod builder;
@@ -15,7 +15,7 @@ mod tasks;
 #[derive(Debug)]
 pub enum IDiskMessage {
     /// Message to add a torrent to the disk manager.
-    AddTorrent(MetainfoFile),
+    AddTorrent(Metainfo),
     /// Message to remove a torrent from the disk manager.
     ///
     /// Note, this will NOT remove any data from the `FileSystem`,

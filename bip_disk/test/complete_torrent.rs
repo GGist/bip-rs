@@ -1,6 +1,6 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage};
-use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
+use bip_metainfo::{MetainfoBuilder, PieceLength, Metainfo};
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
 use futures::stream::Stream;
@@ -17,8 +17,8 @@ fn positive_complete_torrent() {
         vec![data_a.clone(), data_b.clone()]);
     let metainfo_bytes = MetainfoBuilder::new()
         .set_piece_length(PieceLength::Custom(1024))
-        .build_as_bytes(1, files_accessor, |_| ()).unwrap();
-    let metainfo_file = MetainfoFile::from_bytes(metainfo_bytes).unwrap();
+        .build(1, files_accessor, |_| ()).unwrap();
+    let metainfo_file = Metainfo::from_bytes(metainfo_bytes).unwrap();
 
     // Spin up a disk manager and add our created torrent to it
     let filesystem = InMemoryFileSystem::new();
@@ -50,18 +50,18 @@ fn positive_complete_torrent() {
     files_bytes.extend_from_slice(&data_b.0);
 
     // Send piece 0 with a bad last block
-    ::send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info_hash(), 0, 0, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info_hash(), 0, 500, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |bytes| { bytes[0] = !bytes[0]; });
+    ::send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info().info_hash(), 0, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info().info_hash(), 0, 500, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info().info_hash(), 0, 1000, 24, |bytes| { bytes[0] = !bytes[0]; });
 
     // Send piece 1 with good blocks
-    ::send_block(&mut blocking_send, &files_bytes[(1024 + 0)..(1024 + 500)], metainfo_file.info_hash(), 1, 0, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[(1024 + 500)..(1024 + 1000)], metainfo_file.info_hash(), 1, 500, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[(1024 + 1000)..(1024 + 1024)], metainfo_file.info_hash(), 1, 1000, 24, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(1024 + 0)..(1024 + 500)], metainfo_file.info().info_hash(), 1, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(1024 + 500)..(1024 + 1000)], metainfo_file.info().info_hash(), 1, 500, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(1024 + 1000)..(1024 + 1024)], metainfo_file.info().info_hash(), 1, 1000, 24, |_| ());
 
     // Send piece 2 with good blocks
-    ::send_block(&mut blocking_send, &files_bytes[(2048 + 0)..(2048 + 500)], metainfo_file.info_hash(), 2, 0, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[(2048 + 500)..(2048 + 975)], metainfo_file.info_hash(), 2, 500, 475, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(2048 + 0)..(2048 + 500)], metainfo_file.info().info_hash(), 2, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[(2048 + 500)..(2048 + 975)], metainfo_file.info().info_hash(), 2, 500, 475, |_| ());
 
     // Verify that piece 0 is bad, but piece 1 and 2 are good
     let (recv, piece_zero_good, piece_one_good, piece_two_good) = ::core_loop_with_timeout(&mut core, 500, ((false, false, false, 0), recv),
@@ -99,9 +99,9 @@ fn positive_complete_torrent() {
     assert_eq!(true, piece_two_good);
 
     // Resend piece 0 with good blocks
-    ::send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info_hash(), 0, 0, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info_hash(), 0, 500, 500, |_| ());
-    ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info_hash(), 0, 1000, 24, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[0..500], metainfo_file.info().info_hash(), 0, 0, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[500..1000], metainfo_file.info().info_hash(), 0, 500, 500, |_| ());
+    ::send_block(&mut blocking_send, &files_bytes[1000..1024], metainfo_file.info().info_hash(), 0, 1000, 24, |_| ());
 
     // Verify that piece 0 is now good
     let piece_zero_good = ::core_loop_with_timeout(&mut core, 500, ((false, 0), recv),

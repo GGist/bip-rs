@@ -6,7 +6,7 @@ use disk::tasks::context::DiskManagerContext;
 use memory::block::{Block, BlockMut};
 use error::{TorrentResult, BlockResult, BlockError, BlockErrorKind, TorrentError, TorrentErrorKind};
 
-use bip_metainfo::MetainfoFile;
+use bip_metainfo::Metainfo;
 use bip_util::bt::InfoHash;
 use futures::sink::Wait;
 use futures::sync::mpsc::Sender;
@@ -22,7 +22,7 @@ pub fn execute_on_pool<F>(msg: IDiskMessage, pool: &CpuPool, context: DiskManage
 
         let out_msg = match msg {
             IDiskMessage::AddTorrent(metainfo) => {
-                let info_hash = metainfo.info_hash();
+                let info_hash = metainfo.info().info_hash();
                 
                 match execute_add_torrent(metainfo, &context, &mut blocking_sender) {
                     Ok(_)    => ODiskMessage::TorrentAdded(info_hash),
@@ -64,9 +64,9 @@ pub fn execute_on_pool<F>(msg: IDiskMessage, pool: &CpuPool, context: DiskManage
     }).forget()
 }
 
-fn execute_add_torrent<F>(file: MetainfoFile, context: &DiskManagerContext<F>, blocking_sender: &mut Wait<Sender<ODiskMessage>>) -> TorrentResult<()>
+fn execute_add_torrent<F>(file: Metainfo, context: &DiskManagerContext<F>, blocking_sender: &mut Wait<Sender<ODiskMessage>>) -> TorrentResult<()>
     where F: FileSystem {
-    let info_hash = file.info_hash();
+    let info_hash = file.info().info_hash();
     let mut init_state = try!(PieceChecker::init_state(context.filesystem(), file.info()));
 
     // In case we are resuming a download, we need to send the diff for the newly added torrent
@@ -137,7 +137,7 @@ fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, 
 
     let mut block_result = Ok(());
     let found_hash = context.update_torrent(info_hash, |metainfo_file, mut checker_state| {
-        info!("Processsing Block, Acquired Torrent Lock For {:?}", metainfo_file.info_hash());
+        info!("Processsing Block, Acquired Torrent Lock For {:?}", metainfo_file.info().info_hash());
 
         let piece_accessor = PieceAccessor::new(context.filesystem(), metainfo_file.info());
 
@@ -150,9 +150,9 @@ fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, 
                     .calculate_diff()
             });
 
-        send_piece_diff(checker_state, metainfo_file.info_hash(), blocking_sender, false);
+        send_piece_diff(checker_state, metainfo_file.info().info_hash(), blocking_sender, false);
 
-        info!("Processsing Block, Released Torrent Lock For {:?}", metainfo_file.info_hash());
+        info!("Processsing Block, Released Torrent Lock For {:?}", metainfo_file.info().info_hash());
     });
 
     if found_hash {

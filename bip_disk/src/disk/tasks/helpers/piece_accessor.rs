@@ -5,15 +5,15 @@ use disk::fs::{FileSystem};
 use memory::block::BlockMetadata;
 use disk::tasks::helpers;
 
-use bip_metainfo::{InfoDictionary};
+use bip_metainfo::{Info};
 
 pub struct PieceAccessor<'a, F> {
     fs:        F,
-    info_dict: &'a InfoDictionary
+    info_dict: &'a Info
 }
 
 impl<'a, F> PieceAccessor<'a, F> where F: FileSystem {
-    pub fn new(fs: F, info_dict: &'a InfoDictionary) -> PieceAccessor<'a, F> {
+    pub fn new(fs: F, info_dict: &'a Info) -> PieceAccessor<'a, F> {
         PieceAccessor{
             fs: fs,
             info_dict: info_dict

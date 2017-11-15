@@ -1,6 +1,6 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockMetadata, Block};
-use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
+use bip_metainfo::{MetainfoBuilder, PieceLength, Metainfo};
 use bytes::BytesMut;
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
@@ -19,9 +19,9 @@ fn positive_remove_torrent() {
         vec![data_a.clone(), data_b.clone(), data_c.clone()]);
     let metainfo_bytes = MetainfoBuilder::new()
         .set_piece_length(PieceLength::Custom(1024))
-        .build_as_bytes(1, files_accessor, |_| ()).unwrap();
-    let metainfo_file = MetainfoFile::from_bytes(metainfo_bytes).unwrap();
-    let info_hash = metainfo_file.info_hash();
+        .build(1, files_accessor, |_| ()).unwrap();
+    let metainfo_file = Metainfo::from_bytes(metainfo_bytes).unwrap();
+    let info_hash = metainfo_file.info().info_hash();
 
     // Spin up a disk manager and add our created torrent to it
     let filesystem = InMemoryFileSystem::new();

@@ -1,6 +1,6 @@
 use {MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem, BlockMetadata, Block};
-use bip_metainfo::{MetainfoBuilder, PieceLength, MetainfoFile};
+use bip_metainfo::{MetainfoBuilder, PieceLength, Metainfo};
 use bytes::BytesMut;
 use tokio_core::reactor::{Core};
 use futures::future::{Loop};
@@ -18,8 +18,8 @@ fn positive_process_block() {
         vec![data_a.clone(), data_b.clone()]);
     let metainfo_bytes = MetainfoBuilder::new()
         .set_piece_length(PieceLength::Custom(1024))
-        .build_as_bytes(1, files_accessor, |_| ()).unwrap();
-    let metainfo_file = MetainfoFile::from_bytes(metainfo_bytes).unwrap();
+        .build(1, files_accessor, |_| ()).unwrap();
+    let metainfo_file = Metainfo::from_bytes(metainfo_bytes).unwrap();
 
     // Spin up a disk manager and add our created torrent to its
     let filesystem = InMemoryFileSystem::new();
@@ -29,7 +29,7 @@ fn positive_process_block() {
     let mut process_bytes = BytesMut::new();
     process_bytes.extend_from_slice(&data_b.0[1..(50 + 1)]);
 
-    let process_block = Block::new(BlockMetadata::new(metainfo_file.info_hash(), 1, 0, 50), process_bytes.freeze());
+    let process_block = Block::new(BlockMetadata::new(metainfo_file.info().info_hash(), 1, 0, 50), process_bytes.freeze());
 
     let (send, recv) = disk_manager.split();
     let mut blocking_send = send.wait();

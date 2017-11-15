@@ -8,19 +8,19 @@ use memory::block::BlockMetadata;
 use error::{TorrentResult, TorrentError, TorrentErrorKind};
 use disk::tasks::helpers;
 
-use bip_metainfo::{InfoDictionary};
+use bip_metainfo::{Info};
 use bip_util::bt::InfoHash;
 
 /// Calculates hashes on existing files within the file system given and reports good/bad pieces.
 pub struct PieceChecker<'a, F> {
     fs:            F,
-    info_dict:     &'a InfoDictionary,
+    info_dict:     &'a Info,
     checker_state: &'a mut PieceCheckerState
 }
 
 impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     /// Create the initial PieceCheckerState for the PieceChecker.
-    pub fn init_state(fs: F, info_dict: &'a InfoDictionary) -> TorrentResult<PieceCheckerState> {
+    pub fn init_state(fs: F, info_dict: &'a Info) -> TorrentResult<PieceCheckerState> {
         let total_blocks = info_dict.pieces().count();
         let last_piece_size = last_piece_size(info_dict);
 
@@ -37,7 +37,7 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     }
 
     /// Create a new PieceChecker with the given state.
-    pub fn with_state(fs: F, info_dict: &'a InfoDictionary, checker_state: &'a mut PieceCheckerState) -> PieceChecker<'a, F> {
+    pub fn with_state(fs: F, info_dict: &'a Info, checker_state: &'a mut PieceCheckerState) -> PieceChecker<'a, F> {
         PieceChecker {
             fs:            fs,
             info_dict:     info_dict,
@@ -134,7 +134,7 @@ impl<'a, F> PieceChecker<'a, F> where F: FileSystem + 'a {
     }
 }
 
-fn last_piece_size(info_dict: &InfoDictionary) -> usize {
+fn last_piece_size(info_dict: &Info) -> usize {
     let piece_length = info_dict.piece_length() as u64;
     let total_bytes: u64 = info_dict.files().map(|file| file.length() as u64).sum();
 

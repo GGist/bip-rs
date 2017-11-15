@@ -14,7 +14,7 @@ mod benches {
     use bip_disk::fs::NativeFileSystem;
     use bip_disk::fs_cache::FileHandleCache;
     use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, InfoHash, Block, BlockMetadata, FileSystem};
-    use bip_metainfo::{DirectAccessor, MetainfoBuilder, MetainfoFile, PieceLength};
+    use bip_metainfo::{DirectAccessor, MetainfoBuilder, Metainfo, PieceLength};
     use bytes::BytesMut;
     use futures::stream::{self, Stream};
     use futures::sink::{self, Sink};
@@ -32,7 +32,7 @@ mod benches {
     /// Generates a torrent with a single file of the given length.
     ///
     /// Returns both the torrent file, as well as the (random) data of the file.
-    fn generate_single_file_torrent(piece_len: usize, file_len: usize) -> (MetainfoFile, Vec<u8>) {
+    fn generate_single_file_torrent(piece_len: usize, file_len: usize) -> (Metainfo, Vec<u8>) {
         let mut rng = rand::weak_rng();
         
         let file_bytes: Vec<u8> = rng.gen_iter().take(file_len).collect();
@@ -42,17 +42,17 @@ mod benches {
 
             MetainfoBuilder::new()
                 .set_piece_length(PieceLength::Custom(piece_len))
-                .build_as_bytes(1, accessor, |_| ())
+                .build(1, accessor, |_| ())
                 .unwrap()
         };
-        let metainfo = MetainfoFile::from_bytes(&metainfo_bytes)
+        let metainfo = Metainfo::from_bytes(&metainfo_bytes)
             .unwrap();
 
         (metainfo, file_bytes)
     }
 
     /// Adds the given metainfo file to the given sender, and waits for the added notification.
-    fn add_metainfo_file<S, R>(metainfo: MetainfoFile, block_send: &mut sink::Wait<S>, block_recv: &mut stream::Wait<R>)    
+    fn add_metainfo_file<S, R>(metainfo: Metainfo, block_send: &mut sink::Wait<S>, block_recv: &mut stream::Wait<R>)    
         where S: Sink<SinkItem=IDiskMessage, SinkError=()>, R: Stream<Item=ODiskMessage, Error=()> {
         block_send.send(IDiskMessage::AddTorrent(metainfo)).unwrap();
 
@@ -103,7 +103,7 @@ mod benches {
     fn bench_process_file_with_fs<F>(b: &mut Bencher, piece_length: usize, block_length: usize, file_length: usize, fs: F)
         where F: FileSystem + Send + Sync + 'static {
         let (metainfo, bytes) = generate_single_file_torrent(piece_length, file_length);
-        let info_hash = metainfo.info_hash();
+        let info_hash = metainfo.info().info_hash();
 
         let disk_manager = DiskManagerBuilder::new()
             .with_sink_buffer_capacity(1000000)

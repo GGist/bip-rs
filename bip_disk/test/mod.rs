@@ -7,14 +7,14 @@ extern crate tokio_core;
 extern crate rand;
 
 use std::collections::HashMap;
-use std::io::{self, Read};
+use std::io::{self};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, Arc};
 use std::cmp;
 use std::time::Duration;
 
 use bip_disk::{FileSystem, IDiskMessage, BlockMetadata, BlockMut};
-use bip_metainfo::{IntoAccessor, Accessor};
+use bip_metainfo::{IntoAccessor, Accessor, PieceAccess};
 use bip_util::bt::InfoHash;
 use bytes::BytesMut;
 use rand::Rng;
@@ -126,9 +126,9 @@ impl Accessor for MultiFileDirectAccessor {
     }
 
     fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
-        where C: FnMut(&mut Read) -> io::Result<()> {
+        where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()> {
         for &(ref buffer, _) in self.files.iter() {
-            try!(callback(&mut &buffer[..]))
+            try!(callback(PieceAccess::Compute(&mut &buffer[..])))
         }
 
         Ok(())

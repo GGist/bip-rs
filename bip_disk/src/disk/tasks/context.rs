@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use disk::ODiskMessage;
 use disk::tasks::helpers::piece_checker::PieceCheckerState;
 
-use bip_metainfo::MetainfoFile;
+use bip_metainfo::Metainfo;
 use bip_util::bt::InfoHash;
 use futures::sync::mpsc::Sender;
 use futures::sink::Sink;
@@ -17,12 +17,12 @@ pub struct DiskManagerContext<F> {
 }
 
 pub struct MetainfoState {
-    file:  MetainfoFile,
+    file:  Metainfo,
     state: PieceCheckerState
 }
 
 impl MetainfoState {
-    pub fn new(file: MetainfoFile, state: PieceCheckerState) -> MetainfoState {
+    pub fn new(file: Metainfo, state: PieceCheckerState) -> MetainfoState {
         MetainfoState{ file: file, state: state }
     }
 }
@@ -40,11 +40,11 @@ impl<F> DiskManagerContext<F> {
         &self.fs
     }
 
-    pub fn insert_torrent(&self, file: MetainfoFile, state: PieceCheckerState) -> bool {
+    pub fn insert_torrent(&self, file: Metainfo, state: PieceCheckerState) -> bool {
         let mut write_torrents = self.torrents.write()
             .expect("bip_disk: DiskManagerContext::insert_torrents Failed To Write Torrent");
 
-        let hash = file.info_hash();
+        let hash = file.info().info_hash();
         let hash_not_exists = !write_torrents.contains_key(&hash);
 
         if hash_not_exists {
@@ -55,7 +55,7 @@ impl<F> DiskManagerContext<F> {
     }
 
     pub fn update_torrent<C>(&self, hash: InfoHash, call: C) -> bool
-        where C: FnOnce(&MetainfoFile, &mut PieceCheckerState) {
+        where C: FnOnce(&Metainfo, &mut PieceCheckerState) {
         let read_torrents = self.torrents.read()
             .expect("bip_disk: DiskManagerContext::update_torrent Failed To Read Torrent");
 
