@@ -6,7 +6,7 @@ use std::collections::hash_map::Entry;
 use std::io::{self, Write};
 
 use byteorder::WriteBytesExt;
-use nom::{IResult, be_u8, eof};
+use nom::{IResult, be_u8};
 
 const END_OF_OPTIONS_BYTE: u8 = 0x00;
 const NO_OPERATION_BYTE: u8 = 0x01;
@@ -144,7 +144,7 @@ fn parse_options<'a>(bytes: &'a [u8],
 
 /// Parse an end of buffer or the end of option byte.
 named!(parse_end_option<&[u8], bool>, map!(alt!(
-    eof | tag!([END_OF_OPTIONS_BYTE])
+    eof!() | tag!([END_OF_OPTIONS_BYTE])
 ), |_| true));
 
 /// Parse a noop byte.
@@ -156,17 +156,17 @@ fn parse_no_option<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], bool> {
 fn parse_user_option<'a>(bytes: &'a [u8],
                          option_map: &mut HashMap<u8, Cow<'a, [u8]>>)
                          -> IResult<&'a [u8], bool> {
-    chain!(bytes,
-        option_byte:     be_u8 ~
-        option_contents: length_bytes!(byte_usize) ,
-        || {
+    do_parse!(bytes,
+        option_byte:     be_u8 >>
+        option_contents: length_bytes!(byte_usize) >>
+        ({
             match option_map.entry(option_byte) {
                 Entry::Occupied(mut occ) => { occ.get_mut().to_mut().extend_from_slice(option_contents); },
-                Entry::Vacant(vac)       => { vac.insert(Cow::Borrowed(option_contents)); } 
+                Entry::Vacant(vac)       => { vac.insert(Cow::Borrowed(option_contents)); }
             };
-            
+
             false
-        }
+        })
     )
 }
 

@@ -154,16 +154,16 @@ impl<'a> AnnounceRequest<'a> {
 fn parse_request<'a>(bytes: &'a [u8],
                      ip_type: fn(bytes: &[u8]) -> IResult<&[u8], SourceIP>)
                      -> IResult<&'a [u8], AnnounceRequest<'a>> {
-    chain!(bytes,
-        info_hash:  map!(take!(bt::INFO_HASH_LEN), |bytes| InfoHash::from_hash(bytes).unwrap()) ~
-        peer_id:    map!(take!(bt::PEER_ID_LEN), |bytes| PeerId::from_hash(bytes).unwrap()) ~
-        state:   call!(ClientState::from_bytes) ~
-        ip:         call!(ip_type) ~
-        key:        be_u32 ~
-        num_want:   call!(DesiredPeers::from_bytes) ~
-        port:       be_u16 ~
-        options:    call!(AnnounceOptions::from_bytes) ,
-        || { AnnounceRequest::new(info_hash, peer_id, state, ip, key, num_want, port, options) }
+    do_parse!(bytes,
+        info_hash:  map!(take!(bt::INFO_HASH_LEN), |bytes| InfoHash::from_hash(bytes).unwrap()) >>
+        peer_id:    map!(take!(bt::PEER_ID_LEN), |bytes| PeerId::from_hash(bytes).unwrap()) >>
+        state:      call!(ClientState::from_bytes) >>
+        ip:         call!(ip_type) >>
+        key:        be_u32 >>
+        num_want:   call!(DesiredPeers::from_bytes) >>
+        port:       be_u16 >>
+        options:    call!(AnnounceOptions::from_bytes) >>
+        (AnnounceRequest::new(info_hash, peer_id, state, ip, key, num_want, port, options))
     )
 }
 
@@ -253,12 +253,12 @@ impl<'a> AnnounceResponse<'a> {
 fn parse_respone<'a>(bytes: &'a [u8],
                      peers_type: fn(bytes: &'a [u8]) -> IResult<&'a [u8], CompactPeers<'a>>)
                      -> IResult<&'a [u8], AnnounceResponse<'a>> {
-    chain!(bytes,
-        interval: be_i32 ~
-        leechers: be_i32 ~
-        seeders:  be_i32 ~
-        peers:    call!(peers_type) ,
-        || { AnnounceResponse::new(interval, leechers, seeders, peers) }
+    do_parse!(bytes,
+        interval: be_i32 >>
+        leechers: be_i32 >>
+        seeders:  be_i32 >>
+        peers:    call!(peers_type) >>
+        (AnnounceResponse::new(interval, leechers, seeders, peers))
     )
 }
 
@@ -328,12 +328,12 @@ impl ClientState {
 }
 
 fn parse_state(bytes: &[u8]) -> IResult<&[u8], ClientState> {
-    chain!(bytes,
-        downloaded: be_i64 ~
-        left:       be_i64 ~
-        uploaded:   be_i64 ~
-        event:      call!(AnnounceEvent::from_bytes) ,
-        || { ClientState::new(downloaded, left, uploaded, event) }
+    do_parse!(bytes,
+        downloaded: be_i64 >>
+        left:       be_i64 >>
+        uploaded:   be_i64 >>
+        event:      call!(AnnounceEvent::from_bytes) >>
+        (ClientState::new(downloaded, left, uploaded, event))
     )
 }
 

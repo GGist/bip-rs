@@ -6,7 +6,8 @@ use std::thread;
 
 use bip_handshake::{DiscoveryInfo, InitiateMessage, Protocol};
 use bip_util::bt::PeerId;
-use chrono::{DateTime, UTC, Duration};
+use chrono::{DateTime, Duration};
+use chrono::offset::Utc;
 use futures::future::Either;
 use futures::sink::{Wait, Sink};
 use nom::IResult;
@@ -384,7 +385,7 @@ fn calculate_message_timeout_millis(attempt: u64) -> u64 {
 
 /// Cache for storing connection ids associated with a specific server address.
 struct ConnectIdCache {
-    cache: HashMap<SocketAddr, (u64, DateTime<UTC>)>,
+    cache: HashMap<SocketAddr, (u64, DateTime<Utc>)>,
 }
 
 impl ConnectIdCache {
@@ -398,7 +399,7 @@ impl ConnectIdCache {
         match self.cache.entry(addr) {
             Entry::Vacant(_) => None,
             Entry::Occupied(occ) => {
-                let curr_time = UTC::now();
+                let curr_time = Utc::now();
                 let prev_time = occ.get().1;
 
                 if is_expired(curr_time, prev_time) {
@@ -414,14 +415,14 @@ impl ConnectIdCache {
 
     /// Put an un expired connection id into cache for the given addr.
     fn put(&mut self, addr: SocketAddr, connect_id: u64) {
-        let curr_time = UTC::now();
+        let curr_time = Utc::now();
 
         self.cache.insert(addr, (connect_id, curr_time));
     }
 
     /// Removes all entries that have expired.
     fn clean_expired(&mut self) {
-        let curr_time = UTC::now();
+        let curr_time = Utc::now();
         let mut curr_index = 0;
 
         let mut opt_curr_entry = self.cache.iter().skip(curr_index).map(|(&k, &v)| (k, v)).next();
@@ -437,8 +438,9 @@ impl ConnectIdCache {
 }
 
 /// Returns true if the connect id received at prev_time is now expired.
-fn is_expired(curr_time: DateTime<UTC>, prev_time: DateTime<UTC>) -> bool {
+fn is_expired(curr_time: DateTime<Utc>, prev_time: DateTime<Utc>) -> bool {
     let valid_duration = Duration::milliseconds(CONNECTION_ID_VALID_DURATION_MILLIS);
+    let difference = prev_time.signed_duration_since(curr_time);
 
-    curr_time - prev_time >= valid_duration
+    difference >= valid_duration
 }

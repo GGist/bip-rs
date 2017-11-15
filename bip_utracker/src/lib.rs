@@ -4,6 +4,9 @@
 //! and a customizable trait based implementation of a bittorrent UDP tracker
 //! server.
 
+// For nom...
+#![allow(unused)]
+
 extern crate bip_handshake;
 extern crate bip_util;
 extern crate byteorder;
@@ -38,5 +41,4 @@ pub use client::error::{ClientResult, ClientError};
 pub use server::TrackerServer;
 pub use server::handler::{ServerResult, ServerHandler};
 
-pub use bip_handshake::Handshaker;
 pub use bip_util::bt::{InfoHash, PeerId};

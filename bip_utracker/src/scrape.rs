@@ -49,11 +49,11 @@ impl ScrapeStats {
 }
 
 fn parse_stats(bytes: &[u8]) -> IResult<&[u8], ScrapeStats> {
-    chain!(bytes,
-        seeders:    be_i32 ~
-        downloaded: be_i32 ~
-        leechers:   be_i32 ,
-        || { ScrapeStats::new(seeders, downloaded, leechers) }
+    do_parse!(bytes,
+        seeders:    be_i32 >>
+        downloaded: be_i32 >>
+        leechers:   be_i32 >>
+        (ScrapeStats::new(seeders, downloaded, leechers))
     )
 }
 

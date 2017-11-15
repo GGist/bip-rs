@@ -1,6 +1,6 @@
 [package]
 name          = "bip_utracker"
-version       = "0.3.2"
+version       = "0.4.0"
 description   = "Communication with bittorrent UDP trackers"
 
 authors       = ["Andrew <amiller4421@gmail.com>"]
@@ -14,12 +14,12 @@ keywords      = ["tracker", "bittorrent", "udp"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_handshake = { version = "0.5" }
+bip_handshake = { version = "0.7" }
 bip_util      = { version = "0.5" }
-byteorder     = "0.5"
-chrono        = "0.2"
+byteorder     = "1.1"
+chrono        = "0.4"
 futures       = "0.1"
-nom           = "1.2"
+nom           = "3.2"
 rand          = "0.3"
 umio          = "0.3"
 
