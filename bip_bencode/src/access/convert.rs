@@ -135,8 +135,8 @@ pub trait BConvert {
     }
 
     /// Combines a lookup operation on the given key with a conversion of the value, if found, to a list.
-    fn lookup_and_convert_list<'a, B, K>(&self, dictionary: &'a BDictAccess<K, B>, key: K) -> Result<&'a BListAccess<B::BType>, Self::Error>
-        where B: BRefAccess, K: AsRef<[u8]>
+    fn lookup_and_convert_list<'a, B, K1, K2>(&self, dictionary: &'a BDictAccess<K1, B>, key: K2) -> Result<&'a BListAccess<B::BType>, Self::Error>
+        where B: BRefAccess, K2: AsRef<[u8]>
     {
         self.convert_list(try!(self.lookup(dictionary, &key)), &key)
     }
