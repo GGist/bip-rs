@@ -8,7 +8,7 @@ use std::io::{self, Write, BufRead};
 
 use bip_metainfo::{MetainfoBuilder, Metainfo};
 use bip_metainfo::error::{ParseResult};
-use chrono::{TimeZone, UTC};
+use chrono::offset::{TimeZone, Utc};
 use pbr::{ProgressBar};
 
 fn main() {
@@ -72,7 +72,7 @@ fn print_metainfo_overview(bytes: &[u8]) {
         acc
     });
     let utc_creation_date = metainfo.creation_date().map(|c| {
-        UTC.timestamp(c, 0)
+        Utc.timestamp(c, 0)
     });
     
     println!("\n\n-----------------------------Metainfo File Overview-----------------------------");

@@ -2,7 +2,7 @@
 use std::path::{Path, PathBuf};
 use std::io;
 
-use bip_bencode::{BencodeRef, BDictAccess, BDecodeOpt};
+use bip_bencode::{BencodeRef, BDictAccess, BDecodeOpt, BRefAccess};
 use bip_util::bt::InfoHash;
 use bip_util::sha::{self, ShaHash};
 
@@ -284,7 +284,8 @@ fn parse_info_dictionary<'a>(info_bencode: &BencodeRef<'a>) -> ParseResult<Info>
 }
 
 /// Returns whether or not this is a multi file torrent.
-fn is_multi_file_torrent<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>) -> bool {
+fn is_multi_file_torrent<B>(info_dict: &BDictAccess<B::BKey, B>) -> bool
+    where B: BRefAccess {
     parse::parse_length(info_dict).is_err()
 }
 
@@ -321,7 +322,8 @@ pub struct File {
 
 impl File {
     /// Parse the info dictionary and generate a single file File.
-    fn as_single_file<'a>(info_dict: &BDictAccess<'a, BencodeRef<'a>>) -> ParseResult<File> {
+    fn as_single_file<B>(info_dict: &BDictAccess<B::BKey, B>) -> ParseResult<File>
+        where B: BRefAccess {
         let length = try!(parse::parse_length(info_dict));
         let md5sum = parse::parse_md5sum(info_dict).map(|m| m.to_owned());
         let name = try!(parse::parse_name(info_dict));
@@ -334,7 +336,8 @@ impl File {
     }
 
     /// Parse the file dictionary and generate a multi file File.
-    fn as_multi_file<'a>(file_dict: &BDictAccess<'a, BencodeRef<'a>>) -> ParseResult<File> {
+    fn as_multi_file<B>(file_dict: &BDictAccess<B::BKey, B>) -> ParseResult<File>
+        where B: BRefAccess<BType=B> {
         let length = try!(parse::parse_length(file_dict));
         let md5sum = parse::parse_md5sum(file_dict).map(|m| m.to_owned());
 
@@ -403,30 +406,30 @@ mod tests {
         let info_hash = {
             let root_dict_access = root_dict.dict_mut().unwrap();
             
-            tracker.as_ref().map(|t| root_dict_access.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(t)));
-            create_date.as_ref().map(|&c| root_dict_access.insert(parse::CREATION_DATE_KEY, ben_int!(c)));
-            comment.as_ref().map(|c| root_dict_access.insert(parse::COMMENT_KEY, ben_bytes!(c)));
-            create_by.as_ref().map(|c| root_dict_access.insert(parse::CREATED_BY_KEY, ben_bytes!(c)));
-            encoding.as_ref().map(|e| root_dict_access.insert(parse::ENCODING_KEY, ben_bytes!(e)));
+            tracker.map(|t| root_dict_access.insert(parse::ANNOUNCE_URL_KEY.into(), ben_bytes!(t)));
+            create_date.as_ref().map(|&c| root_dict_access.insert(parse::CREATION_DATE_KEY.into(), ben_int!(c)));
+            comment.map(|c| root_dict_access.insert(parse::COMMENT_KEY.into(), ben_bytes!(c)));
+            create_by.map(|c| root_dict_access.insert(parse::CREATED_BY_KEY.into(), ben_bytes!(c)));
+            encoding.map(|e| root_dict_access.insert(parse::ENCODING_KEY.into(), ben_bytes!(e)));
 
             let mut info_dict = BencodeMut::new_dict();
             {
                 let info_dict_access = info_dict.dict_mut().unwrap();
 
-                piece_length.as_ref().map(|&p| info_dict_access.insert(parse::PIECE_LENGTH_KEY, ben_int!(p)));
-                pieces.as_ref().map(|p| info_dict_access.insert(parse::PIECES_KEY, ben_bytes!(p)));
-                private.as_ref().map(|&p| info_dict_access.insert(parse::PRIVATE_KEY, ben_int!(p)));
+                piece_length.as_ref().map(|&p| info_dict_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(p)));
+                pieces.map(|p| info_dict_access.insert(parse::PIECES_KEY.into(), ben_bytes!(p)));
+                private.as_ref().map(|&p| info_dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(p)));
 
-                directory.as_ref()
+                directory
                     .and_then(|d| {
                         // We intended to build a multi file torrent since we provided a directory
-                        info_dict_access.insert(parse::NAME_KEY, ben_bytes!(d));
+                        info_dict_access.insert(parse::NAME_KEY.into(), ben_bytes!(d));
 
                         files.as_ref().map(|files| {
                             let mut bencode_files = BencodeMut::new_list();
 
                             {
-                                let mut bencode_files_access = bencode_files.list_mut().unwrap();
+                                let bencode_files_access = bencode_files.list_mut().unwrap();
 
                                 for &(ref opt_len, ref opt_md5, ref opt_paths) in files.iter() {
                                     let opt_bencode_paths = opt_paths.as_ref().map(|paths| {
@@ -435,7 +438,7 @@ mod tests {
                                         {
                                             let bencode_paths_access = bencode_paths.list_mut().unwrap();
                                             for path in paths.iter() {
-                                                bencode_paths_access.push(ben_bytes!(path));
+                                                bencode_paths_access.push(ben_bytes!(&path[..]));
                                             }
                                         }
 
@@ -446,16 +449,16 @@ mod tests {
                                     {
                                         let file_dict_access = file_dict.dict_mut().unwrap();
 
-                                        opt_bencode_paths.map(|p| file_dict_access.insert(parse::PATH_KEY, p));
-                                        opt_len.map(|l| file_dict_access.insert(parse::LENGTH_KEY, ben_int!(l)));
-                                        opt_md5.map(|m| file_dict_access.insert(parse::MD5SUM_KEY, ben_bytes!(m)));
+                                        opt_bencode_paths.map(|p| file_dict_access.insert(parse::PATH_KEY.into(), p));
+                                        opt_len.map(|l| file_dict_access.insert(parse::LENGTH_KEY.into(), ben_int!(l)));
+                                        opt_md5.map(|m| file_dict_access.insert(parse::MD5SUM_KEY.into(), ben_bytes!(m)));
                                     }
 
                                     bencode_files_access.push(file_dict)
                                 }
                             }
 
-                            info_dict_access.insert(parse::FILES_KEY, bencode_files);
+                            info_dict_access.insert(parse::FILES_KEY.into(), bencode_files);
                         });
 
                         Some(d)
@@ -465,9 +468,9 @@ mod tests {
                         files.as_ref().map(|files| {
                             let (ref opt_len, ref opt_md5, ref opt_path) = files[0];
 
-                            opt_path.as_ref().map(|p| info_dict_access.insert(parse::NAME_KEY, ben_bytes!(&p[0])));
-                            opt_len.map(|l| info_dict_access.insert(parse::LENGTH_KEY, ben_int!(l)));
-                            opt_md5.map(|m| info_dict_access.insert(parse::MD5SUM_KEY, ben_bytes!(m)));
+                            opt_path.as_ref().map(|p| info_dict_access.insert(parse::NAME_KEY.into(), ben_bytes!(&p[0][..])));
+                            opt_len.map(|l| info_dict_access.insert(parse::LENGTH_KEY.into(), ben_int!(l)));
+                            opt_md5.map(|m| info_dict_access.insert(parse::MD5SUM_KEY.into(), ben_bytes!(m)));
                         });
 
                         None
@@ -475,7 +478,7 @@ mod tests {
             }
             let info_hash = InfoHash::from_bytes(&info_dict.encode());
 
-            root_dict_access.insert(parse::INFO_KEY, info_dict);
+            root_dict_access.insert(parse::INFO_KEY.into(), info_dict);
 
             info_hash
         };

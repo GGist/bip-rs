@@ -69,7 +69,7 @@ impl<'a> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
             opt_tracker_url
-                .and_then(|tracker_url| dict_access.insert(parse::ANNOUNCE_URL_KEY, ben_bytes!(tracker_url)))
+                .and_then(|tracker_url| dict_access.insert(parse::ANNOUNCE_URL_KEY.into(), ben_bytes!(tracker_url)))
                 .or_else(|| dict_access.remove(parse::ANNOUNCE_URL_KEY));
         }
 
@@ -81,7 +81,7 @@ impl<'a> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
             opt_secs_epoch
-                .and_then(|secs_epoch| dict_access.insert(parse::CREATION_DATE_KEY, ben_int!(secs_epoch)))
+                .and_then(|secs_epoch| dict_access.insert(parse::CREATION_DATE_KEY.into(), ben_int!(secs_epoch)))
                 .or_else(|| dict_access.remove(parse::CREATION_DATE_KEY));
         }
 
@@ -93,7 +93,7 @@ impl<'a> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
             opt_comment
-                .and_then(|comment| dict_access.insert(parse::COMMENT_KEY, ben_bytes!(comment)))
+                .and_then(|comment| dict_access.insert(parse::COMMENT_KEY.into(), ben_bytes!(comment)))
                 .or_else(|| dict_access.remove(parse::COMMENT_KEY));
         }
 
@@ -105,7 +105,7 @@ impl<'a> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
             opt_created_by
-                .and_then(|created_by| dict_access.insert(parse::CREATED_BY_KEY, ben_bytes!(created_by)))
+                .and_then(|created_by| dict_access.insert(parse::CREATED_BY_KEY.into(), ben_bytes!(created_by)))
                 .or_else(|| dict_access.remove(parse::CREATED_BY_KEY));
         }
 
@@ -161,7 +161,7 @@ impl<'a> InfoBuilder<'a> {
         {
             let dict_access = self.info.dict_mut().unwrap();
             opt_numeric_is_private
-                .and_then(|numeric_is_private| dict_access.insert(parse::PRIVATE_KEY, ben_int!(numeric_is_private)))
+                .and_then(|numeric_is_private| dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(numeric_is_private)))
                 .or_else(|| dict_access.remove(parse::PRIVATE_KEY));
         }
 
@@ -234,8 +234,8 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
         {
             let info_access = info.dict_mut().unwrap();
 
-            info_access.insert(parse::PIECE_LENGTH_KEY, ben_int!(piece_length as i64));
-            info_access.insert(parse::PIECES_KEY, ben_bytes!(&pieces));
+            info_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(piece_length as i64));
+            info_access.insert(parse::PIECES_KEY.into(), ben_bytes!(&pieces[..]));
 
             // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
             // If the directory is not present but there are multiple files, the direcotry field will be set to empty
@@ -254,7 +254,7 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
                                 let bencode_path_access = bencode_path.list_mut().unwrap();
 
                                 for path_element in path.iter() {
-                                    bencode_path_access.push(ben_bytes!(path_element));
+                                    bencode_path_access.push(ben_bytes!(&path_element[..]));
                                 }
                             }
 
@@ -265,8 +265,8 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
                         }
                     }
 
-                    info_access.insert(parse::NAME_KEY, ben_bytes!(directory.as_ref()));
-                    info_access.insert(parse::FILES_KEY, bencode_files);
+                    info_access.insert(parse::NAME_KEY.into(), ben_bytes!(directory.as_ref()));
+                    info_access.insert(parse::FILES_KEY.into(), bencode_files);
                 }
                 (&None, true) => {
                     let mut bencode_files = BencodeMut::new_list();
@@ -282,7 +282,7 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
                                 let bencode_path_access = bencode_path.list_mut().unwrap();
 
                                 for path_element in path.iter() {
-                                    bencode_path_access.push(ben_bytes!(path_element));
+                                    bencode_path_access.push(ben_bytes!(&path_element[..]));
                                 }
                             }
 
@@ -293,8 +293,8 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
                         }
                     }
 
-                    info_access.insert(parse::NAME_KEY, ben_bytes!(""));
-                    info_access.insert(parse::FILES_KEY, bencode_files);
+                    info_access.insert(parse::NAME_KEY.into(), ben_bytes!(""));
+                    info_access.insert(parse::FILES_KEY.into(), bencode_files);
                 }
                 (&None, false) => {
                     // Single File
@@ -302,14 +302,14 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
                         single_file_name.push_str(name_component);
                     }
 
-                    info_access.insert(parse::LENGTH_KEY, ben_int!(files_info[0].0 as i64));
-                    info_access.insert(parse::NAME_KEY, ben_bytes!(&single_file_name));
+                    info_access.insert(parse::LENGTH_KEY.into(), ben_int!(files_info[0].0 as i64));
+                    info_access.insert(parse::NAME_KEY.into(), ben_bytes!(&single_file_name[..]));
                 }
             }
         }
 
         if let Some(mut root) = opt_root {
-            root.dict_mut().unwrap().insert(parse::INFO_KEY, info);
+            root.dict_mut().unwrap().insert(parse::INFO_KEY.into(), info);
 
             Ok(root.encode())
         } else {
