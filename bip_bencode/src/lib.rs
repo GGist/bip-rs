@@ -84,7 +84,7 @@ macro_rules! ben_map {
 
             let mut bencode_map = BencodeMut::new_dict();
             {
-                let mut map = bencode_map.dict_mut().unwrap();
+                let map = bencode_map.dict_mut().unwrap();
                 $(
                     map.insert(BCowConvert::convert($key), $val);
                 )*
@@ -104,7 +104,7 @@ macro_rules! ben_list {
             
             let mut bencode_list = BencodeMut::new_list();
             {
-                let mut list = bencode_list.list_mut().unwrap();
+                let list = bencode_list.list_mut().unwrap();
                 $(
                     list.push($ben);
                 )*
