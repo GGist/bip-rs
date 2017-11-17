@@ -1,6 +1,6 @@
 [package]
 name             = "bip_bencode"
-version          = "0.4.3"
+version          = "0.4.4"
 description      = "Efficient decoding and encoding for bencode"
 
 authors          = ["Andrew <amiller4421@gmail.com>"]
@@ -27,3 +27,7 @@ lto              = false
 debug-assertions = false
 codegen-units    = 1
 panic            = 'unwind'
+
+[[test]]
+name             = "test"
+path             = "test/mod.rs"
