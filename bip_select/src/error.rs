@@ -1,3 +1,5 @@
+//! Module for uber error types.
+
 use discovery::error::{DiscoveryError, DiscoveryErrorKind};
 
 error_chain! {

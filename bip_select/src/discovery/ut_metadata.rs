@@ -12,7 +12,7 @@ use bip_peer::messages::builders::ExtendedMessageBuilder;
 use bytes::BytesMut;
 use discovery::IDiscoveryMessage;
 use discovery::ODiscoveryMessage;
-use discovery::error::DiscoveryError;
+use discovery::error::{DiscoveryError, DiscoveryErrorKind};
 use extended::ExtendedListener;
 use extended::ExtendedPeerInfo;
 use futures::Async;
@@ -29,6 +29,7 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::time::Duration;
+use std::collections::hash_map::Entry;
 
 const REQUEST_TIMEOUT_MILLIS: u64 = 2000;
 const MAX_REQUEST_SIZE: usize = 16 * 1024;
@@ -92,18 +93,27 @@ impl UtMetadataModule {
     }
 
     fn add_torrent(&mut self, metainfo: Metainfo) -> StartSend<IDiscoveryMessage, DiscoveryError> {
-        let info_bytes = metainfo.info().to_bytes();
+        let info_hash = metainfo.info().info_hash();
 
-        self.completed_map
-            .insert(metainfo.info().info_hash(), info_bytes);
+        match self.completed_map.entry(info_hash) {
+            Entry::Occupied(_) => {
+                Err(DiscoveryError::from_kind(DiscoveryErrorKind::InvalidMetainfoExists{ hash: info_hash }))
+            },
+            Entry::Vacant(vac) => {
+                let info_bytes = metainfo.info().to_bytes();
+                vac.insert(info_bytes);
 
-        Ok(AsyncSink::Ready)
+                Ok(AsyncSink::Ready)
+            }
+        }
     }
 
     fn remove_torrent(&mut self, metainfo: Metainfo) -> StartSend<IDiscoveryMessage, DiscoveryError> {
-        self.completed_map.remove(&metainfo.info().info_hash());
-
-        Ok(AsyncSink::Ready)
+        if self.completed_map.remove(&metainfo.info().info_hash()).is_none() {
+            Err(DiscoveryError::from_kind(DiscoveryErrorKind::InvalidMetainfoNotExists{ hash: metainfo.info().info_hash() }))
+        } else {
+            Ok(AsyncSink::Ready)
+        }
     }
 
     fn add_peer(&mut self, info: PeerInfo, ext_info: &ExtendedPeerInfo) -> StartSend<IDiscoveryMessage, DiscoveryError> {

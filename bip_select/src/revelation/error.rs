@@ -1,11 +1,11 @@
-//! Module for discovery error types.
+//! Module for revelation error types.
 
 use bip_handshake::InfoHash;
 use bip_peer::PeerInfo;
 
 error_chain! {
     types {
-        DiscoveryError, DiscoveryErrorKind, DiscoveryResultExt;
+        RevealError, RevealErrorKind, RevealResultExt;
     }
 
     errors {
@@ -30,3 +30,4 @@ error_chain! {
         }
     }
 }
+
