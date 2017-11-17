@@ -20,8 +20,8 @@ use bip_peer::{IPeerManagerMessage, OPeerManagerMessage, PeerInfo, PeerManagerBu
 use bip_peer::messages::{BitsExtensionMessage, PeerExtensionProtocolMessage, PeerWireProtocolMessage};
 use bip_peer::messages::builders::ExtendedMessageBuilder;
 use bip_peer::protocols::{NullProtocol, PeerExtensionProtocol, PeerWireProtocol};
-use bip_select::{ControlMessage, IDiscoveryMessage, IExtendedMessage, IUberMessage, ODiscoveryMessage, OExtendedMessage, OUberMessage,
-                 UberModuleBuilder, UtMetadataModule};
+use bip_select::{ControlMessage, IExtendedMessage, IUberMessage, OExtendedMessage, OUberMessage, UberModuleBuilder};
+use bip_select::discovery::{IDiscoveryMessage, ODiscoveryMessage, UtMetadataModule};
 use futures::{Future, Sink, Stream};
 use futures::future::{self, Either, Loop};
 use futures::sink::Wait;
