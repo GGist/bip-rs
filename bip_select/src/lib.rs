@@ -7,9 +7,9 @@ extern crate bytes;
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
-extern crate rand;
 #[macro_use]
 extern crate log;
+extern crate rand;
 
 use bip_metainfo::Metainfo;
 use bip_peer::PeerInfo;

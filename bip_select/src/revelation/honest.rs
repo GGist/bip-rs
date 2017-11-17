@@ -1,45 +1,49 @@
 
 
-use bytes::BytesMut;
-use bip_metainfo::Metainfo;
-use futures::task::Task;
+use ControlMessage;
 use bip_handshake::InfoHash;
-use std::collections::HashMap;
-use futures::{Sink, AsyncSink, Async};
-use futures::Stream;
+use bip_metainfo::Metainfo;
+use bip_peer::PeerInfo;
+use bip_peer::messages::{BitFieldMessage, HaveMessage};
+use bit_set::BitSet;
+use bytes::BytesMut;
+use futures::{Async, AsyncSink, Sink};
 use futures::Poll;
 use futures::StartSend;
-use revelation::error::{RevealError, RevealErrorKind};
-use revelation::IRevealMessage;
-use bip_peer::PeerInfo;
-use std::collections::HashSet;
-use bit_set::BitSet;
-use revelation::ORevealMessage;
-use std::collections::VecDeque;
-use ControlMessage;
-use std::collections::hash_map::Entry;
-use bip_peer::messages::{BitFieldMessage, HaveMessage};
+use futures::Stream;
 use futures::task;
+use futures::task::Task;
+use revelation::IRevealMessage;
+use revelation::ORevealMessage;
+use revelation::error::{RevealError, RevealErrorKind};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 
 /// Revelation module that will honestly report any pieces we have to peers.
 pub struct HonestRevealModule {
-    torrents:   HashMap<InfoHash, PeersInfo>,
-    out_queue:  VecDeque<ORevealMessage>,
+    torrents: HashMap<InfoHash, PeersInfo>,
+    out_queue: VecDeque<ORevealMessage>,
     // Shared bytes container to write bitfield messages to
-    out_bytes:  BytesMut,
-    opt_stream: Option<Task>
+    out_bytes: BytesMut,
+    opt_stream: Option<Task>,
 }
 
 struct PeersInfo {
     status: BitSet<u8>,
-    peers:  HashSet<PeerInfo>
+    peers: HashSet<PeerInfo>,
 }
 
 impl HonestRevealModule {
     /// Create a new `HonestRevelationModule`.
     pub fn new() -> HonestRevealModule {
-        HonestRevealModule{ torrents: HashMap::new(), out_queue: VecDeque::new(),
-            out_bytes: BytesMut::new(), opt_stream: None }
+        HonestRevealModule {
+            torrents: HashMap::new(),
+            out_queue: VecDeque::new(),
+            out_bytes: BytesMut::new(),
+            opt_stream: None,
+        }
     }
 
     fn add_torrent(&mut self, metainfo: &Metainfo) -> StartSend<IRevealMessage, RevealError> {
@@ -47,17 +51,20 @@ impl HonestRevealModule {
 
         match self.torrents.entry(info_hash) {
             Entry::Occupied(_) => {
-                Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoExists{ hash: info_hash }))
+                Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoExists { hash: info_hash }))
             },
             Entry::Vacant(vac) => {
                 let mut piece_set = BitSet::default();
                 piece_set.reserve_len_exact(metainfo.info().pieces().count());
 
-                let peers_info = PeersInfo{ status: piece_set, peers: HashSet::new() };
+                let peers_info = PeersInfo {
+                    status: piece_set,
+                    peers: HashSet::new(),
+                };
                 vac.insert(peers_info);
 
                 Ok(AsyncSink::Ready)
-            }
+            },
         }
     }
 
@@ -65,7 +72,7 @@ impl HonestRevealModule {
         let info_hash = metainfo.info().info_hash();
 
         if self.torrents.remove(&info_hash).is_none() {
-            Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists{ hash: info_hash }))
+            Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash: info_hash }))
         } else {
             Ok(AsyncSink::Ready)
         }
@@ -76,7 +83,8 @@ impl HonestRevealModule {
 
         let out_bytes = &mut self.out_bytes;
         let out_queue = &mut self.out_queue;
-        self.torrents.get_mut(&info_hash)
+        self.torrents
+            .get_mut(&info_hash)
             .map(|peers_info| {
                 // Add the peer to our list, so we send have messages to them
                 peers_info.peers.insert(peer);
@@ -87,28 +95,32 @@ impl HonestRevealModule {
                 // Split off what we wrote, send this in the message, will be re-used on drop
                 let bitfield_bytes = out_bytes.split_off(0).freeze();
                 let bitfield = BitFieldMessage::new(bitfield_bytes);
-                
+
                 // Enqueue the bitfield message so that we send it to the peer
                 out_queue.push_back(ORevealMessage::SendBitField(peer, bitfield));
 
                 Ok(AsyncSink::Ready)
-            }).unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists{ hash: info_hash })))
+            })
+            .unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash: info_hash })))
     }
 
     fn remove_peer(&mut self, peer: PeerInfo) -> StartSend<IRevealMessage, RevealError> {
         let info_hash = *peer.hash();
 
-        self.torrents.get_mut(&info_hash)
+        self.torrents
+            .get_mut(&info_hash)
             .map(|peers_info| {
                 peers_info.peers.remove(&peer);
 
                 Ok(AsyncSink::Ready)
-            }).unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists{ hash: info_hash })))
+            })
+            .unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash: info_hash })))
     }
 
     fn insert_piece(&mut self, hash: InfoHash, index: u64) -> StartSend<IRevealMessage, RevealError> {
         let out_queue = &mut self.out_queue;
-        self.torrents.get_mut(&hash)
+        self.torrents
+            .get_mut(&hash)
             .map(|peers_info| {
                 // Queue up all have messages
                 for peer in peers_info.peers.iter() {
@@ -119,7 +131,8 @@ impl HonestRevealModule {
                 peers_info.status.insert(index as usize);
 
                 Ok(AsyncSink::Ready)
-            }).unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists{ hash: hash })))
+            })
+            .unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash: hash })))
     }
 
     //------------------------------------------------------//
@@ -137,14 +150,24 @@ impl Sink for HonestRevealModule {
 
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         let result = match item {
-            IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)) => self.add_torrent(&metainfo),
-            IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo)) => self.remove_torrent(&metainfo),
-            IRevealMessage::Control(ControlMessage::PeerConnected(info)) => self.add_peer(info),
-            IRevealMessage::Control(ControlMessage::PeerDisconnected(info)) => self.remove_peer(info),
-            IRevealMessage::FoundGoodPiece(hash, index) => self.insert_piece(hash, index),
-            IRevealMessage::Control(ControlMessage::Tick(_)) |
-            IRevealMessage::ReceivedBitField(_, _) |
-            IRevealMessage::ReceivedHave(_, _) => Ok(AsyncSink::Ready)
+            IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)) => {
+                self.add_torrent(&metainfo)
+            },
+            IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo)) => {
+                self.remove_torrent(&metainfo)
+            },
+            IRevealMessage::Control(ControlMessage::PeerConnected(info)) => {
+                self.add_peer(info)
+            },
+            IRevealMessage::Control(ControlMessage::PeerDisconnected(info)) => {
+                self.remove_peer(info)
+            },
+            IRevealMessage::FoundGoodPiece(hash, index) => {
+                self.insert_piece(hash, index)
+            },
+            IRevealMessage::Control(ControlMessage::Tick(_)) | IRevealMessage::ReceivedBitField(_, _) | IRevealMessage::ReceivedHave(_, _) => {
+                Ok(AsyncSink::Ready)
+            },
         };
 
         self.check_stream_unblock();
@@ -162,12 +185,49 @@ impl Stream for HonestRevealModule {
     type Error = RevealError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let next_item = self.out_queue.pop_front().map(|item| Ok(Async::Ready(Some(item))));
+        let next_item = self.out_queue
+            .pop_front()
+            .map(|item| Ok(Async::Ready(Some(item))));
 
         next_item.unwrap_or_else(|| {
             self.opt_stream = Some(task::current());
 
             Ok(Async::NotReady)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::HonestRevealModule;
+
+    use ControlMessage;
+    use revelation::{IRevealMessage, ORevealMessage};
+
+    use bip_metainfo::{DirectAccessor, MetainfoBuilder, Metainfo};
+    use futures::{Stream, Sink, Future};
+
+    fn metainfo() -> Metainfo {
+        let accessor = DirectAccessor::new("MyFile.txt", b"MyData");
+        let bytes = MetainfoBuilder::new()
+            .build(1, accessor, |_| ())
+            .unwrap();
+
+        Metainfo::from_bytes(bytes)
+            .unwrap()
+    }
+
+    #[test]
+    fn positive_add_and_remove_metainfo() {
+        let (send, _recv) = HonestRevealModule::new()
+            .split();
+        let metainfo = metainfo();
+
+        let mut block_send = send.wait();
+
+        block_send.send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo.clone())))
+            .unwrap();
+        block_send.send(IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo.clone())))
+            .unwrap();
     }
 }

@@ -1,10 +1,10 @@
 //! Module for piece revelation.
 
-use bip_peer::messages::HaveMessage;
-use bip_peer::messages::BitFieldMessage;
-use bip_peer::PeerInfo;
-use bip_handshake::InfoHash;
 use ControlMessage;
+use bip_handshake::InfoHash;
+use bip_peer::PeerInfo;
+use bip_peer::messages::BitFieldMessage;
+use bip_peer::messages::HaveMessage;
 
 pub mod error;
 
@@ -21,7 +21,7 @@ pub enum IRevealMessage {
     /// Received a `BitFieldMessage`.
     ReceivedBitField(PeerInfo, BitFieldMessage),
     /// Received a `HaveMessage`.
-    ReceivedHave(PeerInfo, HaveMessage)
+    ReceivedHave(PeerInfo, HaveMessage),
 }
 
 /// Enumeration of revelation messages that can be received from a revelation module.
@@ -29,5 +29,5 @@ pub enum ORevealMessage {
     /// Send a `BitFieldMessage`.
     SendBitField(PeerInfo, BitFieldMessage),
     /// Send a `HaveMessage`.
-    SendHave(PeerInfo, HaveMessage)
+    SendHave(PeerInfo, HaveMessage),
 }
