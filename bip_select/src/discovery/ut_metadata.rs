@@ -12,7 +12,7 @@ use bip_peer::messages::builders::ExtendedMessageBuilder;
 use bytes::BytesMut;
 use discovery::IDiscoveryMessage;
 use discovery::ODiscoveryMessage;
-use discovery::error::DiscoveryError;
+use discovery::error::{DiscoveryError, DiscoveryErrorKind};
 use extended::ExtendedListener;
 use extended::ExtendedPeerInfo;
 use futures::Async;
@@ -27,6 +27,7 @@ use rand::{self, Rng};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::io::Write;
 use std::time::Duration;
 
@@ -92,18 +93,32 @@ impl UtMetadataModule {
     }
 
     fn add_torrent(&mut self, metainfo: Metainfo) -> StartSend<IDiscoveryMessage, DiscoveryError> {
-        let info_bytes = metainfo.info().to_bytes();
+        let info_hash = metainfo.info().info_hash();
 
-        self.completed_map
-            .insert(metainfo.info().info_hash(), info_bytes);
+        match self.completed_map.entry(info_hash) {
+            Entry::Occupied(_) => {
+                Err(DiscoveryError::from_kind(DiscoveryErrorKind::InvalidMetainfoExists { hash: info_hash }))
+            },
+            Entry::Vacant(vac) => {
+                let info_bytes = metainfo.info().to_bytes();
+                vac.insert(info_bytes);
 
-        Ok(AsyncSink::Ready)
+                Ok(AsyncSink::Ready)
+            },
+        }
     }
 
     fn remove_torrent(&mut self, metainfo: Metainfo) -> StartSend<IDiscoveryMessage, DiscoveryError> {
-        self.completed_map.remove(&metainfo.info().info_hash());
-
-        Ok(AsyncSink::Ready)
+        if self.completed_map
+            .remove(&metainfo.info().info_hash())
+            .is_none()
+        {
+            Err(DiscoveryError::from_kind(DiscoveryErrorKind::InvalidMetainfoNotExists {
+                hash: metainfo.info().info_hash(),
+            }))
+        } else {
+            Ok(AsyncSink::Ready)
+        }
     }
 
     fn add_peer(&mut self, info: PeerInfo, ext_info: &ExtendedPeerInfo) -> StartSend<IDiscoveryMessage, DiscoveryError> {
@@ -119,8 +134,13 @@ impl UtMetadataModule {
             .their_message()
             .and_then(ExtendedMessage::metadata_size);
 
-        info!("Our Support For UtMetadata Is {:?} And {:?} Support For UtMetadata Is {:?} With Metdata Size {:?}",
-            our_support, info.addr(), they_support, opt_metadata_size);
+        info!(
+            "Our Support For UtMetadata Is {:?} And {:?} Support For UtMetadata Is {:?} With Metdata Size {:?}",
+            our_support,
+            info.addr(),
+            they_support,
+            opt_metadata_size
+        );
         // If peer supports it, but they dont have the metadata size, then they probably dont have the file yet...
         match (our_support, they_support, opt_metadata_size) {
             (true, true, Some(metadata_size)) => {
@@ -175,7 +195,8 @@ impl UtMetadataModule {
                 }
 
                 // Push request back to pending
-                pending_map.get_mut(&request.sent_to.hash())
+                pending_map
+                    .get_mut(&request.sent_to.hash())
                     .map(|opt_pending| {
                         opt_pending.as_mut().map(|pending| {
                             pending.messages.push(request.message);

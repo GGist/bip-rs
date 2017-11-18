@@ -1,32 +1,31 @@
 extern crate bip_handshake;
 extern crate bip_metainfo;
 extern crate bip_peer;
+extern crate bip_util;
 extern crate bip_utracker;
+extern crate bit_set;
 extern crate bytes;
 #[macro_use]
 extern crate error_chain;
 extern crate futures;
-extern crate rand;
 #[macro_use]
 extern crate log;
+extern crate rand;
+
+#[cfg(test)]
+extern crate futures_test;
 
 use bip_metainfo::Metainfo;
 use bip_peer::PeerInfo;
 use std::time::Duration;
 
-mod discovery;
+pub mod discovery;
+pub mod error;
+pub mod revelation;
+
 mod extended;
-mod error;
 mod uber;
 
-/// Error types for all modules.
-pub mod errors {
-    pub use discovery::error::{DiscoveryError, DiscoveryErrorKind, DiscoveryResultExt};
-    pub use error::{UberError, UberErrorKind, UberResultExt};
-}
-
-pub use discovery::{IDiscoveryMessage, ODiscoveryMessage};
-pub use discovery::ut_metadata::UtMetadataModule;
 pub use extended::{ExtendedListener, ExtendedPeerInfo, IExtendedMessage, OExtendedMessage};
 pub use uber::{IUberMessage, OUberMessage, UberModule, UberModuleBuilder};
 

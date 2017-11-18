@@ -9,7 +9,10 @@ use bip_utracker::announce::ClientState;
 use std::net::SocketAddr;
 
 pub mod error;
-pub mod ut_metadata;
+
+mod ut_metadata;
+
+pub use self::ut_metadata::UtMetadataModule;
 
 /// Enumeration of discovery messages that can be sent to a discovery module.
 #[derive(Clone, Debug, PartialEq, Eq)]
