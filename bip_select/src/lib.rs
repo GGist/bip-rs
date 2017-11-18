@@ -1,6 +1,7 @@
 extern crate bip_handshake;
 extern crate bip_metainfo;
 extern crate bip_peer;
+extern crate bip_util;
 extern crate bip_utracker;
 extern crate bit_set;
 extern crate bytes;
@@ -10,6 +11,9 @@ extern crate futures;
 #[macro_use]
 extern crate log;
 extern crate rand;
+
+#[cfg(test)]
+extern crate futures_test;
 
 use bip_metainfo::Metainfo;
 use bip_peer::PeerInfo;

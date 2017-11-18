@@ -6,7 +6,7 @@ use bip_metainfo::Metainfo;
 use bip_peer::PeerInfo;
 use bip_peer::messages::{BitFieldMessage, HaveMessage};
 use bit_set::BitSet;
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use futures::{Async, AsyncSink, Sink};
 use futures::Poll;
 use futures::StartSend;
@@ -31,6 +31,7 @@ pub struct HonestRevealModule {
 }
 
 struct PeersInfo {
+    num_pieces: usize,
     status: BitSet<u8>,
     peers: HashSet<PeerInfo>,
 }
@@ -54,10 +55,13 @@ impl HonestRevealModule {
                 Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoExists { hash: info_hash }))
             },
             Entry::Vacant(vac) => {
+                let num_pieces = metainfo.info().pieces().count();
+
                 let mut piece_set = BitSet::default();
-                piece_set.reserve_len_exact(metainfo.info().pieces().count());
+                piece_set.reserve_len_exact(num_pieces);
 
                 let peers_info = PeersInfo {
+                    num_pieces: num_pieces,
                     status: piece_set,
                     peers: HashSet::new(),
                 };
@@ -89,15 +93,20 @@ impl HonestRevealModule {
                 // Add the peer to our list, so we send have messages to them
                 peers_info.peers.insert(peer);
 
-                // Get our current bitfield, write it to our shared bytes
-                let bitfield_slice = peers_info.status.get_ref().storage();
-                out_bytes.extend_from_slice(bitfield_slice);
-                // Split off what we wrote, send this in the message, will be re-used on drop
-                let bitfield_bytes = out_bytes.split_off(0).freeze();
-                let bitfield = BitFieldMessage::new(bitfield_bytes);
+                // If our bitfield has any pieces in it, send the bitfield, otherwise, dont send it
+                if !peers_info.status.is_empty() {
+                    // Get our current bitfield, write it to our shared bytes
+                    let bitfield_slice = peers_info.status.get_ref().storage();
+                    // Bitfield stores index 0 at bit 7 from the left, we want index 0 to be at bit 0 from the left
+                    insert_reversed_bits(out_bytes, bitfield_slice);
 
-                // Enqueue the bitfield message so that we send it to the peer
-                out_queue.push_back(ORevealMessage::SendBitField(peer, bitfield));
+                    // Split off what we wrote, send this in the message, will be re-used on drop
+                    let bitfield_bytes = out_bytes.split_off(0).freeze();
+                    let bitfield = BitFieldMessage::new(bitfield_bytes);
+
+                    // Enqueue the bitfield message so that we send it to the peer
+                    out_queue.push_back(ORevealMessage::SendBitField(peer, bitfield));
+                }
 
                 Ok(AsyncSink::Ready)
             })
@@ -122,15 +131,22 @@ impl HonestRevealModule {
         self.torrents
             .get_mut(&hash)
             .map(|peers_info| {
-                // Queue up all have messages
-                for peer in peers_info.peers.iter() {
-                    out_queue.push_back(ORevealMessage::SendHave(*peer, HaveMessage::new(index as u32)));
+                if index as usize >= peers_info.num_pieces {
+                    Err(RevealError::from_kind(RevealErrorKind::InvalidPieceOutOfRange {
+                        index: index,
+                        hash: hash,
+                    }))
+                } else {
+                    // Queue up all have messages
+                    for peer in peers_info.peers.iter() {
+                        out_queue.push_back(ORevealMessage::SendHave(*peer, HaveMessage::new(index as u32)));
+                    }
+
+                    // Insert into bitfield
+                    peers_info.status.insert(index as usize);
+
+                    Ok(AsyncSink::Ready)
                 }
-
-                // Insert into bitfield
-                peers_info.status.insert(index as usize);
-
-                Ok(AsyncSink::Ready)
             })
             .unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash: hash })))
     }
@@ -141,6 +157,24 @@ impl HonestRevealModule {
         if !self.out_queue.is_empty() {
             self.opt_stream.take().as_ref().map(Task::notify);
         }
+    }
+}
+
+/// Inserts the slice into the `BytesMut` but reverses the bits in each byte.
+fn insert_reversed_bits(bytes: &mut BytesMut, slice: &[u8]) {
+    for mut byte in slice.iter().map(|byte| *byte) {
+        let mut reversed_byte = 0;
+
+        for _ in 0..8 {
+            // Make room for the bit
+            reversed_byte <<= 1;
+            // Push the last bit over
+            reversed_byte |= byte & 0x01;
+            // Push the last bit off
+            byte >>= 1;
+        }
+
+        bytes.put_u8(reversed_byte);
     }
 }
 
@@ -200,34 +234,207 @@ impl Stream for HonestRevealModule {
 #[cfg(test)]
 mod tests {
     use super::HonestRevealModule;
-
     use ControlMessage;
+    use bip_handshake::Extensions;
+    use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
+    use bip_peer::PeerInfo;
+    use bip_util::bt;
+    use bip_util::bt::InfoHash;
+    use futures::{Async, Sink, Stream};
+    use futures_test::harness::Harness;
     use revelation::{IRevealMessage, ORevealMessage};
+    use revelation::error::RevealErrorKind;
 
-    use bip_metainfo::{DirectAccessor, MetainfoBuilder, Metainfo};
-    use futures::{Stream, Sink, Future};
+    fn metainfo(num_pieces: usize) -> Metainfo {
+        let data = vec![0u8; num_pieces];
 
-    fn metainfo() -> Metainfo {
-        let accessor = DirectAccessor::new("MyFile.txt", b"MyData");
+        let accessor = DirectAccessor::new("MyFile.txt", &data);
         let bytes = MetainfoBuilder::new()
+            .set_piece_length(PieceLength::Custom(1))
             .build(1, accessor, |_| ())
             .unwrap();
 
-        Metainfo::from_bytes(bytes)
-            .unwrap()
+        Metainfo::from_bytes(bytes).unwrap()
+    }
+
+    fn peer_info(hash: InfoHash) -> PeerInfo {
+        PeerInfo::new("0.0.0.0:0".parse().unwrap(), [0u8; bt::PEER_ID_LEN].into(), hash, Extensions::new())
     }
 
     #[test]
     fn positive_add_and_remove_metainfo() {
-        let (send, _recv) = HonestRevealModule::new()
-            .split();
-        let metainfo = metainfo();
+        let (send, _recv) = HonestRevealModule::new().split();
+        let metainfo = metainfo(1);
 
         let mut block_send = send.wait();
 
-        block_send.send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo.clone())))
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo.clone())))
             .unwrap();
-        block_send.send(IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo.clone())))
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo.clone())))
             .unwrap();
+    }
+
+    #[test]
+    fn positive_send_bitfield_single_piece() {
+        let (send, recv) = HonestRevealModule::new().split();
+        let metainfo = metainfo(8);
+        let info_hash = metainfo.info().info_hash();
+        let peer_info = peer_info(info_hash);
+
+        let mut block_send = send.wait();
+        let mut block_recv = recv.wait();
+
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 0))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::PeerConnected(peer_info)))
+            .unwrap();
+
+        let (info, bitfield) = match block_recv.next().unwrap().unwrap() {
+            ORevealMessage::SendBitField(info, bitfield) => {
+                (info, bitfield)
+            },
+            _ => {
+                panic!("Received Unexpected Message")
+            },
+        };
+
+        assert_eq!(peer_info, info);
+        assert_eq!(1, bitfield.bitfield().len());
+        assert_eq!(0x80, bitfield.bitfield()[0]);
+    }
+
+    #[test]
+    fn positive_send_bitfield_multiple_pieces() {
+        let (send, recv) = HonestRevealModule::new().split();
+        let metainfo = metainfo(16);
+        let info_hash = metainfo.info().info_hash();
+        let peer_info = peer_info(info_hash);
+
+        let mut block_send = send.wait();
+        let mut block_recv = recv.wait();
+
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 0))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 8))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 15))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::PeerConnected(peer_info)))
+            .unwrap();
+
+        let (info, bitfield) = match block_recv.next().unwrap().unwrap() {
+            ORevealMessage::SendBitField(info, bitfield) => {
+                (info, bitfield)
+            },
+            _ => {
+                panic!("Received Unexpected Message")
+            },
+        };
+
+        assert_eq!(peer_info, info);
+        assert_eq!(2, bitfield.bitfield().len());
+        assert_eq!(0x80, bitfield.bitfield()[0]);
+        assert_eq!(0x81, bitfield.bitfield()[1]);
+    }
+
+    #[test]
+    fn negative_dont_send_empty_bitfield() {
+        let (send, recv) = HonestRevealModule::new().split();
+        let metainfo = metainfo(16);
+        let info_hash = metainfo.info().info_hash();
+        let peer_info = peer_info(info_hash);
+
+        let mut block_send = send.wait();
+        let mut non_block_recv = Harness::new(recv);
+
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::PeerConnected(peer_info)))
+            .unwrap();
+
+        assert!(
+            non_block_recv
+                .poll_next()
+                .as_ref()
+                .map(Async::is_not_ready)
+                .unwrap_or(false)
+        );
+    }
+
+    #[test]
+    fn negative_found_good_piece_out_of_range() {
+        let (send, _recv) = HonestRevealModule::new().split();
+        let metainfo = metainfo(8);
+        let info_hash = metainfo.info().info_hash();
+
+        let mut block_send = send.wait();
+
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)))
+            .unwrap();
+
+        let error = block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 8))
+            .unwrap_err();
+        match error.kind() {
+            &RevealErrorKind::InvalidPieceOutOfRange { hash, index } => {
+                assert_eq!(info_hash, hash);
+                assert_eq!(8, index);
+            },
+            _ => {
+                panic!("Received Unexpected Message")
+            },
+        };
+    }
+
+    #[test]
+    fn negative_all_pieces_good_found_good_piece_out_of_range() {
+        let (send, _recv) = HonestRevealModule::new().split();
+        let metainfo = metainfo(3);
+        let info_hash = metainfo.info().info_hash();
+
+        let mut block_send = send.wait();
+
+        block_send
+            .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo)))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 0))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 1))
+            .unwrap();
+        block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 2))
+            .unwrap();
+
+        let error = block_send
+            .send(IRevealMessage::FoundGoodPiece(info_hash, 3))
+            .unwrap_err();
+        match error.kind() {
+            &RevealErrorKind::InvalidPieceOutOfRange { hash, index } => {
+                assert_eq!(info_hash, hash);
+                assert_eq!(3, index);
+            },
+            _ => {
+                panic!("Received Unexpected Message")
+            },
+        };
     }
 }

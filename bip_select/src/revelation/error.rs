@@ -28,5 +28,12 @@ error_chain! {
             description("Metainfo Was Not Already Added")
             display("Metainfo With Hash {:?} Was Not Already Added", hash)
         }
+        InvalidPieceOutOfRange {
+            hash: InfoHash,
+            index: u64
+        } {
+            description("Piece Index Was Out Of Range")
+            display("Piece Index {:?} Was Out Of Range For Hash {:?}", index, hash)
+        }
     }
 }
