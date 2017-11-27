@@ -41,7 +41,9 @@ A collection of crates for building applications using bittorrent technologies.
 
 * Official Specifications: http://www.bittorrent.org/beps/bep_0000.html
 * Readable Specification: https://wiki.theory.org/index.php/BitTorrentSpecification
-* Piece Related Algorithms: http://ieeexplore.ieee.org/document/6409840/
+* Other Interesting Papers
+    * Piece Related Algorithms: http://ieeexplore.ieee.org/document/6409840/
+    * Performance Modelling: https://arxiv.org/ftp/arxiv/papers/1311/1311.1195.pdf
 
 ## License
 
