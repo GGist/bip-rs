@@ -21,6 +21,7 @@ const CONVERT: MetainfoConverter = MetainfoConverter;
 pub const ROOT_ERROR_KEY: &'static [u8] = b"root";
 
 /// Keys found within the root dictionary of a metainfo file.
+pub const ANNOUNCE_LIST_KEY: &'static [u8] = b"announce-list";
 pub const ANNOUNCE_URL_KEY:  &'static [u8] = b"announce";
 pub const CREATION_DATE_KEY: &'static [u8] = b"creation date";
 pub const COMMENT_KEY:       &'static [u8] = b"comment";
@@ -44,6 +45,27 @@ pub const PATH_KEY:   &'static [u8] = b"path";
 pub fn parse_root_dict<B>(root_bencode: &B) -> ParseResult<&BDictAccess<B::BKey, B::BType>>
     where B: BRefAccess {
     CONVERT.convert_dict(root_bencode, ROOT_ERROR_KEY)
+}
+
+/// Parses the announce list from the root dictionary.
+pub fn parse_announce_list<B>(root_dict: &BDictAccess<B::BKey, B>) -> Option<&BListAccess<B>>
+    where B: BRefAccess<BType=B> {
+    CONVERT.lookup_and_convert_list(root_dict, ANNOUNCE_LIST_KEY).ok()
+}
+
+
+/// Converts list of lists to vec of vecs
+pub fn convert_announce_list<B>(list: &BListAccess<B>) -> Vec<Vec<String>>
+    where B: BRefAccess<BType=B> {
+    list.into_iter()
+        .filter_map(|entry| entry.list())
+        .map(|entry| {
+            entry.into_iter()
+                .filter_map(|bencode_str| bencode_str.str())
+                .map(String::from)
+                .collect()
+        })
+        .collect()
 }
 
 /// Parses the announce url from the root dictionary.
