@@ -76,40 +76,6 @@ impl<'a> MetainfoBuilder<'a> {
         self
     }
 
-    /// Set announce-list content
-    pub fn set_trackers(mut self, opt_trackers: Option<&'a Vec<Vec<String>>>) -> MetainfoBuilder<'a> {
-        {
-            let dict_access = self.root.dict_mut().unwrap();
-
-            opt_trackers
-                .and_then(|trackers| {
-                    let mut list = BencodeMut::new_list();
-
-                    {
-                        let list_access = list.list_mut().unwrap();
-
-                        for tracker_list in trackers.iter() {
-                            let mut tier_list = BencodeMut::new_list();
-                            {
-                                let tier_list_access = tier_list.list_mut().unwrap();
-
-                                for url in tracker_list.iter() {
-                                    tier_list_access.push(ben_bytes!(&url[..]));
-                                }
-                            }
-
-                            list_access.push(tier_list);
-                        }
-                    }
-
-                    dict_access.insert(parse::ANNOUNCE_LIST_KEY.into(), list)
-                })
-                .or_else(|| dict_access.remove(parse::ANNOUNCE_LIST_KEY));
-        }
-
-        self
-    }
-
     /// Set or unset the creation date for the torrent.
     pub fn set_creation_date(mut self, opt_secs_epoch: Option<i64>) -> MetainfoBuilder<'a> {
         {
