@@ -53,7 +53,6 @@ pub fn parse_announce_list<B>(root_dict: &BDictAccess<B::BKey, B>) -> Option<&BL
     CONVERT.lookup_and_convert_list(root_dict, ANNOUNCE_LIST_KEY).ok()
 }
 
-
 /// Converts list of lists to vec of vecs
 pub fn convert_announce_list<B>(list: &BListAccess<B>) -> Vec<Vec<String>>
     where B: BRefAccess<BType=B> {
