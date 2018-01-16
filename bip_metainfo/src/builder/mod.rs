@@ -102,7 +102,7 @@ impl<'a> MetainfoBuilder<'a> {
                         }
                     }
 
-                    dict_access.insert(parse::ANNOUNCE_LIST_KEY.into(), list))
+                    dict_access.insert(parse::ANNOUNCE_LIST_KEY.into(), list)
                 })
                 .or_else(|| dict_access.remove(parse::ANNOUNCE_LIST_KEY));
         }
