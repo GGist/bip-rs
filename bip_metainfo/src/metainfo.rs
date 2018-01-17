@@ -17,6 +17,7 @@ use iter::{Files, Pieces};
 pub struct Metainfo {
     comment: Option<String>,
     announce: Option<String>,
+    announce_list: Option<Vec<Vec<String>>>,
     encoding: Option<String>,
     created_by: Option<String>,
     creation_date: Option<i64>,
@@ -36,6 +37,11 @@ impl Metainfo {
     /// Announce url for the main tracker of the metainfo file.
     pub fn main_tracker(&self) -> Option<&str> {
         self.announce.as_ref().map(|a| &a[..])
+    }
+
+    /// List of announce urls.
+    pub fn trackers(&self) -> Option<&Vec<Vec<String>>> {
+        self.announce_list.as_ref()
     }
 
     /// Comment included within the metainfo file.
@@ -81,8 +87,15 @@ impl Metainfo {
 
 impl From<Info> for Metainfo {
     fn from(info: Info) -> Metainfo {
-        Metainfo{ comment: None, announce: None, encoding: None,
-                  created_by: None, creation_date: None, info: info }
+        Metainfo{
+            comment: None,
+            announce: None,
+            announce_list: None,
+            encoding: None,
+            created_by: None,
+            creation_date: None,
+            info: info
+        }
     }
 }
 
@@ -92,6 +105,13 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
     let root_dict = try!(parse::parse_root_dict(&root_bencode));
 
     let announce = parse::parse_announce_url(root_dict).map(|e| e.to_owned());
+
+    let opt_announce_list = {
+        parse::parse_announce_list(root_dict)
+            .and_then(|list| Some(parse::convert_announce_list(list)))
+            .or(None)
+    };
+
     let opt_comment = parse::parse_comment(root_dict).map(|e| e.to_owned());
     let opt_encoding = parse::parse_encoding(root_dict).map(|e| e.to_owned());
     let opt_created_by = parse::parse_created_by(root_dict).map(|e| e.to_owned());
@@ -103,6 +123,7 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
     Ok(Metainfo {
         comment: opt_comment,
         announce: announce,
+        announce_list: opt_announce_list,
         encoding: opt_encoding,
         created_by: opt_created_by,
         creation_date: opt_creation_date,
