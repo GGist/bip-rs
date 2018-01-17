@@ -2,7 +2,7 @@
 use std::path::{Path, PathBuf};
 use std::io;
 
-use bip_bencode::{BencodeRef, BListAccess, BDictAccess, BDecodeOpt, BRefAccess};
+use bip_bencode::{BencodeRef, BDictAccess, BDecodeOpt, BRefAccess};
 use bip_util::bt::InfoHash;
 use bip_util::sha::{self, ShaHash};
 
