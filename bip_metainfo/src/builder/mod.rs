@@ -64,6 +64,41 @@ impl<'a> MetainfoBuilder<'a> {
         }
     }
 
+    /// Set announce-list content
+    pub fn set_trackers(mut self, opt_trackers: Option<&'a Vec<Vec<String>>>) -> MetainfoBuilder<'a> {
+        {
+            let dict_access = self.root.dict_mut().unwrap();
+
+            if let Some(groups) = opt_trackers {
+                let mut list = BencodeMut::new_list();
+
+                {
+                    let list_access = list.list_mut().unwrap();
+
+                    for group in groups.iter() {
+                        let mut tracker_list = BencodeMut::new_list();
+
+                        {
+                            let tracker_list_access = tracker_list.list_mut().unwrap();
+
+                            for tracker_url in group.iter() {
+                                tracker_list_access.push(ben_bytes!(&tracker_url[..]));
+                            }
+                        }
+
+                        list_access.push(tracker_list);
+                    }
+                }
+
+                dict_access.insert(parse::ANNOUNCE_LIST_KEY.into(), list);
+            } else {
+                dict_access.remove(parse::ANNOUNCE_LIST_KEY);
+            }
+        }
+
+        self
+    }
+
     /// Set or unset the main tracker that this torrent file points to.
     pub fn set_main_tracker(mut self, opt_tracker_url: Option<&'a str>) -> MetainfoBuilder<'a> {
         {
