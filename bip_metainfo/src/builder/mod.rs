@@ -173,30 +173,55 @@ impl<'a> MetainfoBuilder<'a> {
         self
     }
 
-    /// Get decoded announce-url key value
-    pub fn get_main_tracker(self) -> Option<String> {
-        self.get_string_key(parse::ANNOUNCE_URL_KEY)
+    /// Get decoded value of announce-list key
+    pub fn get_trackers(self) -> Option<Vec<Vec<String>>> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_announce_list(dict_access)
+            .and_then(|list| {
+                Some(parse::convert_announce_list(list))
+            })
+            .or(None)
     }
 
-    /// Get decoded creation-date key from root dict
+    /// Get decoded value of announce-url key
+    pub fn get_main_tracker(self) -> Option<String> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_announce_url(dict_access)
+            .and_then(|value| {
+                Some(value.to_string())
+            })
+            .or(None)
+    }
+
+    /// Get decoded value of creation-date key
     pub fn get_creation_date(self) -> Option<i64> {
         let dict_access = self.root.dict().unwrap();
 
-        if let Some(bencode) = dict_access.lookup(parse::CREATION_DATE_KEY) {
-            bencode.int()
-        } else {
-            None
-        }
+        parse::parse_creation_date(dict_access)
     }
 
-    /// Get decoded comment key value
+    /// Get decoded value of comment key
     pub fn get_comment(self) -> Option<String> {
-        self.get_string_key(parse::COMMENT_KEY)
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_comment(dict_access)
+            .and_then(|value| {
+                Some(value.to_string())
+            })
+            .or(None)
     }
 
-    /// Get decoded created-by key value
+    /// Get decoded value of created-by key
     pub fn get_created_by(self) -> Option<String> {
-        self.get_string_key(parse::CREATED_BY_KEY)
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_created_by(dict_access)
+            .and_then(|value| {
+                Some(value.to_string())
+            })
+            .or(None)
     }
 
     /// Build the metainfo file from the given accessor and the number of worker threads.
@@ -209,21 +234,6 @@ impl<'a> MetainfoBuilder<'a> {
         let accessor = try!(accessor.into_accessor());
 
         build_with_accessor(threads, accessor, progress, Some(self.root), self.info.info, self.info.piece_length)
-    }
-
-    /// Get decoded value of string key from root dict
-    fn get_string_key(self, key: &[u8]) -> Option<String> {
-        let dict_access = self.root.dict().unwrap();
-
-        if let Some(bencode) = dict_access.lookup(key) {
-            bencode.str()
-                .and_then(|value| {
-                    Some(value.to_string())
-                })
-                .or(None)
-        } else {
-            None
-        }
     }
 }
 
