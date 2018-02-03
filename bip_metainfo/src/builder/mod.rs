@@ -1,6 +1,6 @@
 use std::iter::ExactSizeIterator;
 
-use bip_bencode::{BencodeMut, BMutAccess};
+use bip_bencode::{BencodeMut, BMutAccess, BRefAccess};
 use bip_util::sha::{self, ShaHash};
 
 use accessor::{Accessor, IntoAccessor};
@@ -138,6 +138,32 @@ impl<'a> MetainfoBuilder<'a> {
         self
     }
 
+    /// Get decoded announce-url key value
+    pub fn get_main_tracker(self) -> Option<String> {
+        self.get_string_key(parse::ANNOUNCE_URL_KEY)
+    }
+
+    /// Get decoded creation-date key from root dict
+    pub fn get_creation_date(self) -> Option<i64> {
+        let dict_access = self.root.dict().unwrap();
+
+        if let Some(bencode) = dict_access.lookup(parse::CREATION_DATE_KEY) {
+            bencode.int()
+        } else {
+            None
+        }
+    }
+
+    /// Get decoded comment key value
+    pub fn get_comment(self) -> Option<String> {
+        self.get_string_key(parse::COMMENT_KEY)
+    }
+
+    /// Get decoded created-by key value
+    pub fn get_created_by(self) -> Option<String> {
+        self.get_string_key(parse::CREATED_BY_KEY)
+    }
+
     /// Build the metainfo file from the given accessor and the number of worker threads.
     ///
     /// Panics if threads is equal to zero.
@@ -148,6 +174,21 @@ impl<'a> MetainfoBuilder<'a> {
         let accessor = try!(accessor.into_accessor());
 
         build_with_accessor(threads, accessor, progress, Some(self.root), self.info.info, self.info.piece_length)
+    }
+
+    /// Get decoded value of string key from root dict
+    fn get_string_key(self, key: &[u8]) -> Option<String> {
+        let dict_access = self.root.dict().unwrap();
+
+        if let Some(bencode) = dict_access.lookup(key) {
+            bencode.str()
+                .and_then(|value| {
+                    Some(value.to_string())
+                })
+                .or(None)
+        } else {
+            None
+        }
     }
 }
 
@@ -169,7 +210,7 @@ impl<'a> InfoBuilder<'a> {
     /// Set or unset the private flag for the torrent file.
     pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> InfoBuilder<'a> {
         let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private{ 1 } else { 0 });
-        
+
         {
             let dict_access = self.info.dict_mut().unwrap();
             opt_numeric_is_private
@@ -213,7 +254,7 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
         if threads == 0 {
             panic!("bip_metainfo: Cannot Build Metainfo File With threads == 0");
         }
-        
+
         // Collect all of the file information into a list
         let mut files_info = Vec::new();
         try!(accessor.access_metadata(|len, path| {
