@@ -8,6 +8,18 @@ const COMMENT: &'static str = "Foo bar baz";
 const CREATED_BY: &'static str = "Fridge";
 
 #[test]
+fn positive_set_trackers() {
+    let trackers = vec![
+        vec![TRACKER.to_string()]
+    ];
+
+    let builder = MetainfoBuilder::new()
+        .set_trackers(Some(&trackers));
+
+    assert_eq!(builder.get_trackers(), Some(trackers.clone()));
+}
+
+#[test]
 fn positive_set_main_tracker() {
     let builder = MetainfoBuilder::new()
         .set_main_tracker(Some(TRACKER));
