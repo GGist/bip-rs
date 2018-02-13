@@ -174,35 +174,35 @@ impl<'a> MetainfoBuilder<'a> {
     }
 
     /// Get decoded value of announce-list key
-    pub fn get_trackers(self) -> Option<Vec<Vec<String>>> {
+    pub fn get_trackers(&self) -> Option<Vec<Vec<String>>> {
         let dict_access = self.root.dict().unwrap();
 
         parse::parse_announce_list(dict_access).map(parse::convert_announce_list)
     }
 
     /// Get decoded value of announce-url key
-    pub fn get_main_tracker(self) -> Option<String> {
+    pub fn get_main_tracker(&self) -> Option<String> {
         let dict_access = self.root.dict().unwrap();
 
         parse::parse_announce_url(dict_access).map(String::from)
     }
 
     /// Get decoded value of creation-date key
-    pub fn get_creation_date(self) -> Option<i64> {
+    pub fn get_creation_date(&self) -> Option<i64> {
         let dict_access = self.root.dict().unwrap();
 
         parse::parse_creation_date(dict_access)
     }
 
     /// Get decoded value of comment key
-    pub fn get_comment(self) -> Option<String> {
+    pub fn get_comment(&self) -> Option<String> {
         let dict_access = self.root.dict().unwrap();
 
         parse::parse_comment(dict_access).map(String::from)
     }
 
     /// Get decoded value of created-by key
-    pub fn get_created_by(self) -> Option<String> {
+    pub fn get_created_by(&self) -> Option<String> {
         let dict_access = self.root.dict().unwrap();
 
         parse::parse_created_by(dict_access).map(String::from)
