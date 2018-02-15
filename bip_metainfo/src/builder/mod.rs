@@ -1,6 +1,6 @@
 use std::iter::ExactSizeIterator;
 
-use bip_bencode::{BencodeMut, BMutAccess};
+use bip_bencode::{BencodeMut, BMutAccess, BRefAccess};
 use bip_util::sha::{self, ShaHash};
 
 use accessor::{Accessor, IntoAccessor};
@@ -103,9 +103,12 @@ impl<'a> MetainfoBuilder<'a> {
     pub fn set_main_tracker(mut self, opt_tracker_url: Option<&'a str>) -> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
-            opt_tracker_url
-                .and_then(|tracker_url| dict_access.insert(parse::ANNOUNCE_URL_KEY.into(), ben_bytes!(tracker_url)))
-                .or_else(|| dict_access.remove(parse::ANNOUNCE_URL_KEY));
+
+            if let Some(tracker_url) = opt_tracker_url {
+                dict_access.insert(parse::ANNOUNCE_URL_KEY.into(), ben_bytes!(tracker_url));
+            } else {
+                dict_access.remove(parse::ANNOUNCE_URL_KEY);
+            }
         }
 
         self
@@ -115,9 +118,12 @@ impl<'a> MetainfoBuilder<'a> {
     pub fn set_creation_date(mut self, opt_secs_epoch: Option<i64>) -> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
-            opt_secs_epoch
-                .and_then(|secs_epoch| dict_access.insert(parse::CREATION_DATE_KEY.into(), ben_int!(secs_epoch)))
-                .or_else(|| dict_access.remove(parse::CREATION_DATE_KEY));
+
+            if let Some(secs_epoch) = opt_secs_epoch {
+                dict_access.insert(parse::CREATION_DATE_KEY.into(), ben_int!(secs_epoch));
+            } else {
+                dict_access.remove(parse::CREATION_DATE_KEY);
+            }
         }
 
         self
@@ -127,9 +133,12 @@ impl<'a> MetainfoBuilder<'a> {
     pub fn set_comment(mut self, opt_comment: Option<&'a str>) -> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
-            opt_comment
-                .and_then(|comment| dict_access.insert(parse::COMMENT_KEY.into(), ben_bytes!(comment)))
-                .or_else(|| dict_access.remove(parse::COMMENT_KEY));
+
+            if let Some(comment) = opt_comment {
+                dict_access.insert(parse::COMMENT_KEY.into(), ben_bytes!(comment));
+            } else {
+                dict_access.remove(parse::COMMENT_KEY);
+            }
         }
 
         self
@@ -139,9 +148,12 @@ impl<'a> MetainfoBuilder<'a> {
     pub fn set_created_by(mut self, opt_created_by: Option<&'a str>) -> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
-            opt_created_by
-                .and_then(|created_by| dict_access.insert(parse::CREATED_BY_KEY.into(), ben_bytes!(created_by)))
-                .or_else(|| dict_access.remove(parse::CREATED_BY_KEY));
+
+            if let Some(created_by) = opt_created_by {
+                dict_access.insert(parse::CREATED_BY_KEY.into(), ben_bytes!(created_by));
+            } else {
+                dict_access.remove(parse::CREATED_BY_KEY);
+            }
         }
 
         self
@@ -159,6 +171,41 @@ impl<'a> MetainfoBuilder<'a> {
         self.info = self.info.set_piece_length(piece_length);
 
         self
+    }
+
+    /// Get decoded value of announce-list key
+    pub fn get_trackers(&self) -> Option<Vec<Vec<String>>> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_announce_list(dict_access).map(parse::convert_announce_list)
+    }
+
+    /// Get decoded value of announce-url key
+    pub fn get_main_tracker(&self) -> Option<String> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_announce_url(dict_access).map(String::from)
+    }
+
+    /// Get decoded value of creation-date key
+    pub fn get_creation_date(&self) -> Option<i64> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_creation_date(dict_access)
+    }
+
+    /// Get decoded value of comment key
+    pub fn get_comment(&self) -> Option<String> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_comment(dict_access).map(String::from)
+    }
+
+    /// Get decoded value of created-by key
+    pub fn get_created_by(&self) -> Option<String> {
+        let dict_access = self.root.dict().unwrap();
+
+        parse::parse_created_by(dict_access).map(String::from)
     }
 
     /// Build the metainfo file from the given accessor and the number of worker threads.
@@ -192,7 +239,7 @@ impl<'a> InfoBuilder<'a> {
     /// Set or unset the private flag for the torrent file.
     pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> InfoBuilder<'a> {
         let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private{ 1 } else { 0 });
-        
+
         {
             let dict_access = self.info.dict_mut().unwrap();
             opt_numeric_is_private
@@ -236,7 +283,7 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
         if threads == 0 {
             panic!("bip_metainfo: Cannot Build Metainfo File With threads == 0");
         }
-        
+
         // Collect all of the file information into a list
         let mut files_info = Vec::new();
         try!(accessor.access_metadata(|len, path| {
