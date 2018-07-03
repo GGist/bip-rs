@@ -3,6 +3,8 @@
 
 A collection of crates for building applications using bittorrent technologies.
 
+Chat: irc.mozilla.org <a href="http://mibbit.com/?server=irc.mozilla.org&channel=%23bip.rs" target="_new_win">#bip.rs</a>
+
 ## Bencode (bip_bencode) - [![Documentation](https://docs.rs/bip_bencode/badge.svg)](https://docs.rs/bip_bencode) [![Crate](http://meritbadge.herokuapp.com/bip_bencode)](https://crates.io/crates/bip_bencode)
 
 **About**: Bencode is the binary encoding used throughout bittorrent technologies from metainfo files to DHT messages. Bencode types include integers, byte arrays, lists, and dictionarys, of which the last two can hold any bencode type (they could be recursively constructed).
