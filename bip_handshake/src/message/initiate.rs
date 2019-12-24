@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use message::protocol::Protocol;
+use crate::message::protocol::Protocol;
 
 use bip_util::bt::InfoHash;
 
@@ -15,7 +15,7 @@ pub struct InitiateMessage {
 impl InitiateMessage {
     /// Create a new `InitiateMessage`.
     pub fn new(prot: Protocol, hash: InfoHash, addr: SocketAddr) -> InitiateMessage {
-        InitiateMessage{ prot: prot, hash: hash, addr: addr }
+        InitiateMessage{ prot, hash, addr }
     }
 
     /// Protocol that we want to connect to the peer with.

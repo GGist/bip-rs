@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
 
-use filter::FilterDecision;
-use message::initiate::InitiateMessage;
-use message::protocol::Protocol;
-use message::extensions::Extensions;
-use filter::filters::Filters;
+use crate::filter::FilterDecision;
+use crate::message::initiate::InitiateMessage;
+use crate::message::protocol::Protocol;
+use crate::message::extensions::Extensions;
+use crate::filter::filters::Filters;
 
 use bip_util::bt::{PeerId, InfoHash};
 use futures::stream::Stream;

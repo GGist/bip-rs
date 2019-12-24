@@ -1,12 +1,12 @@
 use std::io;
 use std::net::SocketAddr;
 
-use local_addr::LocalAddr;
+use crate::local_addr::LocalAddr;
 
-use futures::Poll;
 use futures::future::Future;
 use futures::stream::Stream;
-use tokio_core::net::{TcpStream, TcpStreamNew, Incoming, TcpListener};
+use futures::Poll;
+use tokio_core::net::{Incoming, TcpListener, TcpStream, TcpStreamNew};
 use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -16,10 +16,10 @@ pub trait Transport {
     type Socket: AsyncRead + AsyncWrite + 'static;
 
     /// Future `Self::Socket`.
-    type FutureSocket: Future<Item=Self::Socket, Error=io::Error> + 'static;
+    type FutureSocket: Future<Item = Self::Socket, Error = io::Error> + 'static;
 
     /// Concrete listener.
-    type Listener: Stream<Item=(Self::Socket, SocketAddr), Error=io::Error> + LocalAddr + 'static;
+    type Listener: Stream<Item = (Self::Socket, SocketAddr), Error = io::Error> + LocalAddr + 'static;
 
     /// Connect to the given address over this transport, using the supplied `Handle`.
     fn connect(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket>;
@@ -43,8 +43,8 @@ impl Transport for TcpTransport {
     }
 
     fn listen(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener> {
-        let listener = try!(TcpListener::bind(addr, handle));
-        let listen_addr = try!(listener.local_addr());
+        let listener = TcpListener::bind(addr, handle)?;
+        let listen_addr = listener.local_addr()?;
 
         Ok(TcpListenerStream::new(listen_addr, listener.incoming()))
     }
@@ -53,16 +53,19 @@ impl Transport for TcpTransport {
 /// Convenient object that wraps a listener stream `L`, and also implements `LocalAddr`.
 pub struct TcpListenerStream<L> {
     listen_addr: SocketAddr,
-    listener:    L
+    listener: L,
 }
 
 impl<L> TcpListenerStream<L> {
     fn new(listen_addr: SocketAddr, listener: L) -> TcpListenerStream<L> {
-        TcpListenerStream{ listen_addr: listen_addr, listener: listener }
+        TcpListenerStream { listen_addr, listener }
     }
 }
 
-impl<L> Stream for TcpListenerStream<L> where L: Stream {
+impl<L> Stream for TcpListenerStream<L>
+where
+    L: Stream,
+{
     type Item = L::Item;
     type Error = L::Error;
 
@@ -85,19 +88,19 @@ pub mod test_transports {
     use std::net::SocketAddr;
 
     use super::Transport;
-    use local_addr::LocalAddr;
+    use crate::local_addr::LocalAddr;
 
-    use futures::{Poll};
     use futures::future::{self, FutureResult};
-    use futures::stream::{self, Stream, Empty};
+    use futures::stream::{self, Empty, Stream};
+    use futures::Poll;
     use tokio_core::reactor::Handle;
 
     pub struct MockTransport;
 
     impl Transport for MockTransport {
-        type Socket       = Cursor<Vec<u8>>;
+        type Socket = Cursor<Vec<u8>>;
         type FutureSocket = FutureResult<Self::Socket, io::Error>;
-        type Listener     = MockListener;
+        type Listener = MockListener;
 
         fn connect(&self, _addr: &SocketAddr, _handle: &Handle) -> io::Result<Self::FutureSocket> {
             Ok(future::ok(Cursor::new(Vec::new())))
@@ -112,12 +115,15 @@ pub mod test_transports {
 
     pub struct MockListener {
         addr: SocketAddr,
-        empty: Empty<(Cursor<Vec<u8>>, SocketAddr), io::Error>
+        empty: Empty<(Cursor<Vec<u8>>, SocketAddr), io::Error>,
     }
 
     impl MockListener {
         fn new(addr: SocketAddr) -> MockListener {
-            MockListener{ addr: addr, empty: stream::empty() }
+            MockListener {
+                addr,
+                empty: stream::empty(),
+            }
         }
     }
 

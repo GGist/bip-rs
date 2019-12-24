@@ -12,6 +12,7 @@ documentation = "https://docs.rs/bip_dht/"
 keywords      = ["dht", "distributed", "hash", "mainline", "bittorrent"]
 
 license       = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
 bip_bencode   = { version = "0.2.0" }

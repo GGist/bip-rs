@@ -2,8 +2,8 @@ use std::cmp::{PartialEq, Eq};
 use std::net::SocketAddr;
 use std::any::Any;
 
-use message::protocol::Protocol;
-use message::extensions::{Extensions};
+use crate::message::protocol::Protocol;
+use crate::message::extensions::{Extensions};
 
 use bip_util::bt::{InfoHash, PeerId};
 
@@ -55,7 +55,7 @@ pub trait HandshakeFilter {
     /// Used to implement generic equality.
     ///
     /// Should typically just return `self`.
-    fn as_any(&self) -> &Any;
+    fn as_any(&self) -> &dyn Any;
 
     /// Make a filter decision based on the peer `SocketAddr`.
     fn on_addr(&self, opt_addr: Option<&SocketAddr>) -> FilterDecision { FilterDecision::Pass }

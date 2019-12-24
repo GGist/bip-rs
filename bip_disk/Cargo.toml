@@ -11,6 +11,7 @@ repository       = "https://github.com/GGist/bip-rs/bip_disk"
 keywords         = ["filesystem", "fs", "disk"]
 
 license          = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
 bip_metainfo     = { version = "0.11" }

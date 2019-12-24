@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::any::Any;
 
-use {TimeoutResult};
+use crate::{TimeoutResult};
 use bip_handshake::{HandshakerBuilder, InitiateMessage, Protocol, DiscoveryInfo,
     FilterDecision, HandshakeFilter, HandshakeFilters};
 use bip_handshake::transports::TcpTransport;
@@ -16,7 +16,7 @@ use futures::sink::Sink;
 pub struct FilterBlockAllHash;
 
 impl HandshakeFilter for FilterBlockAllHash {
-    fn as_any(&self) -> &Any { self }
+    fn as_any(&self) -> &dyn Any { self }
 
     fn on_hash(&self, _opt_hash: Option<&InfoHash>) -> FilterDecision { FilterDecision::Block }
 }
@@ -27,7 +27,7 @@ pub struct FilterAllowHash {
 }
 
 impl HandshakeFilter for FilterAllowHash {
-    fn as_any(&self) -> &Any { self }
+    fn as_any(&self) -> &dyn Any { self }
 
     fn on_hash(&self, opt_hash: Option<&InfoHash>) -> FilterDecision {
         opt_hash.map(|hash| {

@@ -12,6 +12,7 @@ documentation = "https://docs.rs/bip_handshake/"
 keywords      = ["handshake", "bittorrent"]
 
 license       = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
 bip_util      = { version = "0.5" }

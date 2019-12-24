@@ -79,13 +79,13 @@ impl Extensions {
 
     /// Create a new `Extensions` using the given bytes directly.
     fn with_bytes(bytes: [u8; NUM_EXTENSION_BYTES]) -> Extensions {
-        Extensions{ bytes: bytes }
+        Extensions{ bytes }
     }
 }
 
 impl From<[u8; NUM_EXTENSION_BYTES]> for Extensions {
     fn from(bytes: [u8; NUM_EXTENSION_BYTES]) -> Extensions {
-        Extensions{ bytes: bytes }
+        Extensions{ bytes }
     }
 }
 

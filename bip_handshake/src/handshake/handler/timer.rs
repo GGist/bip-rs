@@ -11,7 +11,7 @@ pub struct HandshakeTimer {
 
 impl HandshakeTimer {
     pub fn new(timer: Timer, duration: Duration) -> HandshakeTimer {
-        HandshakeTimer{ timer: timer, duration: duration }
+        HandshakeTimer{ timer, duration }
     }
 
     pub fn timeout<F, E>(&self, future: F) -> Timeout<F>

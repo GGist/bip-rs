@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use filter::{HandshakeFilter};
+use crate::filter::{HandshakeFilter};
 
 #[derive(Clone)]
 pub struct Filters {
-    filters: Arc<RwLock<Vec<Box<HandshakeFilter + Send + Sync>>>>
+    filters: Arc<RwLock<Vec<Box<dyn HandshakeFilter + Send + Sync>>>>
 }
 
 impl Filters {
@@ -38,7 +38,7 @@ impl Filters {
     }
 
     pub fn access_filters<B>(&self, block: B)
-        where B: FnOnce(&[Box<HandshakeFilter + Send + Sync>]) {
+        where B: FnOnce(&[Box<dyn HandshakeFilter + Send + Sync>]) {
         self.read_filters(|ref_filters| {
             block(ref_filters)
         })
@@ -51,7 +51,7 @@ impl Filters {
     }
 
     fn read_filters<B, R>(&self, block: B) -> R
-        where B: FnOnce(&[Box<HandshakeFilter + Send + Sync>]) -> R {
+        where B: FnOnce(&[Box<dyn HandshakeFilter + Send + Sync>]) -> R {
         let ref_filters = self.filters.as_ref().read()
             .expect("bip_handshake: Poisoned Read Lock In Filters");
         
@@ -59,7 +59,7 @@ impl Filters {
     }
 
     fn write_filters<B, R>(&self, block: B) -> R
-        where B: FnOnce(&mut Vec<Box<HandshakeFilter + Send + Sync>>) -> R {
+        where B: FnOnce(&mut Vec<Box<dyn HandshakeFilter + Send + Sync>>) -> R {
         let mut mut_filters = self.filters.as_ref().write()
             .expect("bip_handshake: Poisoned Write Lock In Filters");
 
@@ -67,9 +67,9 @@ impl Filters {
     }
 }
 
-fn check_index<F>(ref_filters: &[Box<HandshakeFilter + Send + Sync>], filter: &F) -> Option<usize>
+fn check_index<F>(ref_filters: &[Box<dyn HandshakeFilter + Send + Sync>], filter: &F) -> Option<usize>
     where F: HandshakeFilter + PartialEq + Eq + 'static {
-    for (index, ref_filter) in ref_filters.into_iter().enumerate() {
+    for (index, ref_filter) in ref_filters.iter().enumerate() {
         let opt_match = ref_filter.as_any().downcast_ref::<F>()
             .map(|downcast_filter| downcast_filter == filter);
 
@@ -87,8 +87,8 @@ pub mod test_filters {
     use std::net::SocketAddr;
     use std::any::Any;
 
-    use message::protocol::Protocol;
-    use filter::{HandshakeFilter, FilterDecision};
+    use crate::message::protocol::Protocol;
+    use crate::filter::{HandshakeFilter, FilterDecision};
 
     use bip_util::bt::PeerId;
 
@@ -99,12 +99,12 @@ pub mod test_filters {
 
     impl BlockAddrFilter {
         pub fn new(addr: SocketAddr) -> BlockAddrFilter {
-            BlockAddrFilter{ addr: addr }
+            BlockAddrFilter{ addr }
         }
     }
 
     impl HandshakeFilter for BlockAddrFilter {
-        fn as_any(&self) -> &Any {
+        fn as_any(&self) -> &dyn Any {
             self
         }
 
@@ -126,12 +126,12 @@ pub mod test_filters {
 
     impl BlockProtocolFilter {
         pub fn new(prot: Protocol) -> BlockProtocolFilter {
-            BlockProtocolFilter{ prot: prot }
+            BlockProtocolFilter{ prot }
         }
     }
 
     impl HandshakeFilter for BlockProtocolFilter {
-        fn as_any(&self) -> &Any {
+        fn as_any(&self) -> &dyn Any {
             self
         }
 
@@ -153,12 +153,12 @@ pub mod test_filters {
 
     impl BlockPeerIdFilter {
         pub fn new(pid: PeerId) -> BlockPeerIdFilter {
-            BlockPeerIdFilter{ pid: pid }
+            BlockPeerIdFilter{ pid }
         }
     }
 
     impl HandshakeFilter for BlockPeerIdFilter {
-        fn as_any(&self) -> &Any {
+        fn as_any(&self) -> &dyn Any {
             self
         }
 

@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use message::protocol::Protocol;
-use message::extensions::{Extensions};
+use crate::message::protocol::Protocol;
+use crate::message::extensions::{Extensions};
 
 use bip_util::bt::{InfoHash, PeerId};
 
@@ -18,7 +18,7 @@ pub struct CompleteMessage<S> {
 impl<S> CompleteMessage<S> {
     /// Create a new `CompleteMessage` over the given socket S.
     pub fn new(prot: Protocol, ext: Extensions, hash: InfoHash, pid: PeerId, addr: SocketAddr, sock: S) -> CompleteMessage<S> {
-        CompleteMessage{ prot: prot, ext: ext, hash: hash, pid: pid, addr: addr, sock: sock }
+        CompleteMessage{ prot, ext, hash, pid, addr, sock }
     }
 
     /// Protocol that this peer is operating over.

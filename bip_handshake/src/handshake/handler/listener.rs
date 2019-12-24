@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
-use handshake::handler::HandshakeType;
-use filter::filters::Filters;
-use handshake::handler;
+use crate::handshake::handler::HandshakeType;
+use crate::filter::filters::Filters;
+use crate::handshake::handler;
 
 use futures::{Poll, Async};
 use futures::future::{Future};
@@ -21,7 +21,7 @@ impl<S> ListenerHandler<S> {
             Some(HandshakeType::Complete(sock, addr))
         };
 
-        ListenerHandler{ opt_item: opt_item }
+        ListenerHandler{ opt_item }
     }
 }
 
@@ -37,10 +37,10 @@ impl<S> Future for ListenerHandler<S> {
 #[cfg(test)]
 mod tests {
     use super::ListenerHandler;
-    use filter::filters::Filters;
-    use handshake::handler::HandshakeType;
-    use filter::filters::test_filters::{BlockAddrFilter, BlockProtocolFilter};
-    use message::protocol::Protocol;
+    use crate::filter::filters::Filters;
+    use crate::handshake::handler::HandshakeType;
+    use crate::filter::filters::test_filters::{BlockAddrFilter, BlockProtocolFilter};
+    use crate::message::protocol::Protocol;
 
     use futures::Future;
 

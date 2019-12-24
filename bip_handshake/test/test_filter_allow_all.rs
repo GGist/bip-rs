@@ -2,7 +2,7 @@ use std::time::Duration;
 use std::any::Any;
 use std::net::SocketAddr;
 
-use {TimeoutResult};
+use crate::{TimeoutResult};
 use bip_handshake::{HandshakerBuilder, InitiateMessage, Protocol, DiscoveryInfo,
     FilterDecision, HandshakeFilter, HandshakeFilters, Extensions};
 use bip_handshake::transports::TcpTransport;
@@ -17,7 +17,7 @@ use futures::sink::Sink;
 pub struct FilterAllowAll;
 
 impl HandshakeFilter for FilterAllowAll {
-    fn as_any(&self) -> &Any { self }
+    fn as_any(&self) -> &dyn Any { self }
 
     fn on_addr(&self, _opt_addr: Option<&SocketAddr>) -> FilterDecision { FilterDecision::Allow }
     fn on_prot(&self, _opt_prot: Option<&Protocol>) -> FilterDecision { FilterDecision::Allow }
