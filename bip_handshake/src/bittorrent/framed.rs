@@ -7,7 +7,6 @@ use bytes::BytesMut;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::{Async, AsyncSink, Poll, StartSend};
-use nom::IResult;
 use tokio_io::try_nb;
 use tokio_io::{AsyncRead, AsyncWrite};
 
@@ -113,15 +112,13 @@ where
 
                     if self.read_pos == expected_length {
                         match HandshakeMessage::from_bytes(&*self.read_buffer) {
-                            IResult::Done(_, message) => {
+                            Ok((_, message)) => {
                                 self.state = HandshakeState::Finished;
 
                                 return Ok(Async::Ready(Some(message)));
                             }
-                            IResult::Incomplete(_) => panic!("bip_handshake: HandshakeMessage Failed With Incomplete Bytes"),
-                            IResult::Error(_) => {
-                                return Err(io::Error::new(io::ErrorKind::InvalidData, "HandshakeMessage Failed To Parse"))
-                            }
+                            Err(nom::Err::Incomplete(_)) => panic!("bip_handshake: HandshakeMessage Failed With Incomplete Bytes"),
+                            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "HandshakeMessage Failed To Parse")),
                         }
                     } else {
                         let read_result = {

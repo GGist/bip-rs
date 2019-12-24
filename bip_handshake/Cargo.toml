@@ -18,7 +18,7 @@ edition = "2018"
 bip_util      = { path = "../bip_util" }
 bytes         = "0.4"
 futures       = "0.1"
-nom           = "3.1"
+nom           = "5.0.1"
 rand          = "0.3"
 tokio-core    = "0.1"
 tokio-io      = "0.1"

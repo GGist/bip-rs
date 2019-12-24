@@ -1,7 +1,8 @@
+use nom::count;
+use nom::number::streaming::be_u8;
+use nom::{do_parse, IResult};
 use std::io;
 use std::io::Write;
-
-use nom::{be_u8, call, count_fixed, do_parse, error_position, IResult};
 
 /// Number of bytes that the extension protocol takes.
 pub const NUM_EXTENSION_BYTES: usize = 8;
@@ -91,12 +92,18 @@ impl From<[u8; NUM_EXTENSION_BYTES]> for Extensions {
     }
 }
 
+impl From<Vec<u8>> for Extensions {
+    fn from(v: Vec<u8>) -> Extensions {
+        assert_eq!(v.len(), NUM_EXTENSION_BYTES);
+        let mut bytes = [0; NUM_EXTENSION_BYTES];
+        bytes.copy_from_slice(&v);
+        Extensions { bytes }
+    }
+}
+
 /// Parse the given bytes for extension bits.
 fn parse_extension_bits(bytes: &[u8]) -> IResult<&[u8], Extensions> {
-    do_parse!(
-        bytes,
-        bytes: count_fixed!(u8, be_u8, NUM_EXTENSION_BYTES) >> (Extensions::with_bytes(bytes))
-    )
+    do_parse!(bytes, bytes: count!(be_u8, NUM_EXTENSION_BYTES) >> (bytes.into()))
 }
 
 #[cfg(test)]

@@ -2,7 +2,8 @@ use std::io;
 use std::io::Write;
 use std::u8;
 
-use nom::{be_u8, call, do_parse, error_node_position, error_position, map, switch, take, value, IResult};
+use nom::number::streaming::be_u8;
+use nom::{do_parse, switch, take, value, IResult};
 
 const BT_PROTOCOL: &[u8] = b"BitTorrent protocol";
 
