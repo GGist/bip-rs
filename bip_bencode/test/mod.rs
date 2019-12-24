@@ -7,7 +7,7 @@ fn positive_ben_map_macro() {
         "key" => ben_bytes!("value")
     }).encode();
 
-    assert_eq!("d3:key5:valuee".as_bytes(), &result[..]);
+    assert_eq!(b"d3:key5:valuee", &result[..]);
 }
 
 #[test]
@@ -16,5 +16,5 @@ fn positive_ben_list_macro() {
         ben_int!(5)
     )).encode();
 
-    assert_eq!("li5ee".as_bytes(), &result[..]);
+    assert_eq!(b"li5ee", &result[..]);
 }

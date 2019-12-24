@@ -21,7 +21,7 @@ pub trait BListAccess<V> {
     fn len(&self) -> usize;
 }
 
-impl<'a, V: 'a> Index<usize> for &'a BListAccess<V> {
+impl<'a, V: 'a> Index<usize> for &'a dyn BListAccess<V> {
     type Output = V;
 
     fn index(&self, index: usize) -> &V {
@@ -29,7 +29,7 @@ impl<'a, V: 'a> Index<usize> for &'a BListAccess<V> {
     }
 }
 
-impl<'a, V: 'a> Index<usize> for &'a mut BListAccess<V> {
+impl<'a, V: 'a> Index<usize> for &'a mut dyn BListAccess<V> {
     type Output = V;
 
     fn index(&self, index: usize) -> &V {
@@ -37,13 +37,13 @@ impl<'a, V: 'a> Index<usize> for &'a mut BListAccess<V> {
     }
 }
 
-impl<'a, V: 'a> IndexMut<usize> for &'a mut BListAccess<V> {
+impl<'a, V: 'a> IndexMut<usize> for &'a mut dyn BListAccess<V> {
     fn index_mut(&mut self, index: usize) -> &mut V {
         self.get_mut(index).unwrap()
     }
 }
 
-impl<'a, V: 'a> IntoIterator for &'a BListAccess<V> {
+impl<'a, V: 'a> IntoIterator for &'a dyn BListAccess<V> {
     type Item = &'a V;
     type IntoIter = BListIter<'a, V>;
 
@@ -54,7 +54,7 @@ impl<'a, V: 'a> IntoIterator for &'a BListAccess<V> {
 
 pub struct BListIter<'a, V: 'a> {
     index:  usize,
-    access: &'a BListAccess<V>
+    access: &'a dyn BListAccess<V>
 }
 
 impl<'a, V> Iterator for BListIter<'a, V> {

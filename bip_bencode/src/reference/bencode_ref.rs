@@ -1,13 +1,13 @@
-use access::bencode::BRefAccessExt;
+use crate::access::bencode::BRefAccessExt;
 use std::collections::BTreeMap;
 use std::str;
 
-use access::bencode::{BRefAccess, BencodeRefKind};
-use reference::decode;
-use reference::decode_opt::BDecodeOpt;
-use access::dict::BDictAccess;
-use access::list::BListAccess;
-use error::{BencodeParseResult, BencodeParseError, BencodeParseErrorKind};
+use crate::access::bencode::{BRefAccess, BencodeRefKind};
+use crate::access::dict::BDictAccess;
+use crate::access::list::BListAccess;
+use crate::error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
+use crate::reference::decode;
+use crate::reference::decode_opt::BDecodeOpt;
 
 /// Bencode object that holds references to the underlying data.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -24,24 +24,24 @@ pub enum InnerBencodeRef<'a> {
 
 impl<'a> Into<BencodeRef<'a>> for InnerBencodeRef<'a> {
     fn into(self) -> BencodeRef<'a> {
-        BencodeRef{ inner: self }
+        BencodeRef { inner: self }
     }
 }
 
 /// `BencodeRef` object that stores references to some buffer.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct BencodeRef<'a> {
-    inner: InnerBencodeRef<'a>
+    inner: InnerBencodeRef<'a>,
 }
 
 impl<'a> BencodeRef<'a> {
     /// Decode the given bytes into a `BencodeRef` using the given decode options.
     pub fn decode(bytes: &'a [u8], opts: BDecodeOpt) -> BencodeParseResult<BencodeRef<'a>> {
         // Apply try so any errors return before the eof check
-        let (bencode, end_pos) = try!(decode::decode(bytes, 0, opts, 0));
+        let (bencode, end_pos) = decode::decode(bytes, 0, opts, 0)?;
 
         if end_pos != bytes.len() && opts.enforce_full_decode() {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty{ pos: end_pos }));
+            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::BytesEmpty { pos: end_pos }));
         }
 
         Ok(bencode)
@@ -50,24 +50,24 @@ impl<'a> BencodeRef<'a> {
     /// Get a byte slice of the current bencode byte representation.
     pub fn buffer(&self) -> &'a [u8] {
         match self.inner {
-            InnerBencodeRef::Int(_, buffer)   => buffer,
+            InnerBencodeRef::Int(_, buffer) => buffer,
             InnerBencodeRef::Bytes(_, buffer) => buffer,
-            InnerBencodeRef::List(_, buffer)  => buffer,
-            InnerBencodeRef::Dict(_, buffer)  => buffer
+            InnerBencodeRef::List(_, buffer) => buffer,
+            InnerBencodeRef::Dict(_, buffer) => buffer,
         }
     }
 }
 
 impl<'a> BRefAccess for BencodeRef<'a> {
-    type BKey  = &'a [u8];
+    type BKey = &'a [u8];
     type BType = BencodeRef<'a>;
 
     fn kind<'b>(&'b self) -> BencodeRefKind<'b, &'a [u8], BencodeRef<'a>> {
         match self.inner {
-            InnerBencodeRef::Int(n, _)       => BencodeRefKind::Int(n),
+            InnerBencodeRef::Int(n, _) => BencodeRefKind::Int(n),
             InnerBencodeRef::Bytes(ref n, _) => BencodeRefKind::Bytes(n),
-            InnerBencodeRef::List(ref n, _)  => BencodeRefKind::List(n),
-            InnerBencodeRef::Dict(ref n, _)  => BencodeRefKind::Dict(n),
+            InnerBencodeRef::List(ref n, _) => BencodeRefKind::List(n),
+            InnerBencodeRef::Dict(ref n, _) => BencodeRefKind::Dict(n),
         }
     }
 
@@ -86,14 +86,14 @@ impl<'a> BRefAccess for BencodeRef<'a> {
         self.bytes_ext()
     }
 
-    fn list(&self) -> Option<&BListAccess<BencodeRef<'a>>> {
+    fn list(&self) -> Option<&dyn BListAccess<BencodeRef<'a>>> {
         match self.inner {
             InnerBencodeRef::List(ref n, _) => Some(n),
             _ => None,
         }
     }
 
-    fn dict(&self) -> Option<&BDictAccess<&'a [u8], BencodeRef<'a>>> {
+    fn dict(&self) -> Option<&dyn BDictAccess<&'a [u8], BencodeRef<'a>>> {
         match self.inner {
             InnerBencodeRef::Dict(ref n, _) => Some(n),
             _ => None,
@@ -126,9 +126,9 @@ impl<'a> BRefAccessExt<'a> for BencodeRef<'a> {
 mod tests {
     use std::default::Default;
 
-    use access::bencode::BRefAccess;
-    use reference::bencode_ref::BencodeRef;
-    use reference::decode_opt::BDecodeOpt;
+    use crate::access::bencode::BRefAccess;
+    use crate::reference::bencode_ref::BencodeRef;
+    use crate::reference::decode_opt::BDecodeOpt;
 
     #[test]
     fn positive_int_buffer() {
