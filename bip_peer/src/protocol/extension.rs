@@ -2,8 +2,8 @@ use std::io::{self, Write};
 
 use bytes::Bytes;
 
-use message::{ExtendedMessage, PeerExtensionProtocolMessage};
-use protocol::{PeerProtocol, NestedPeerProtocol};
+use crate::message::{ExtendedMessage, PeerExtensionProtocolMessage};
+use crate::protocol::{PeerProtocol, NestedPeerProtocol};
 
 /// Protocol for `BEP 10` peer extensions.
 pub struct PeerExtensionProtocol<P> {
@@ -17,7 +17,7 @@ impl<P> PeerExtensionProtocol<P> {
     ///
     /// Notes for `PeerWireProtocol` apply to this custom extension protocol.
     pub fn new(custom_protocol: P) -> PeerExtensionProtocol<P> {
-        PeerExtensionProtocol{ our_extended_msg: None, their_extended_msg: None, custom_protocol: custom_protocol }
+        PeerExtensionProtocol{ our_extended_msg: None, their_extended_msg: None, custom_protocol }
     }
 }
 

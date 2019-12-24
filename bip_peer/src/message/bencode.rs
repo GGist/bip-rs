@@ -6,7 +6,7 @@ use std::str;
 use bip_bencode::{BencodeConvertError, BConvert, BRefAccess, BDictAccess};
 use bip_util::convert;
 
-use message::bits_ext::ExtendedType;
+use crate::message::bits_ext::ExtendedType;
 
 pub const CONVERT: IoErrorBencodeConvert = IoErrorBencodeConvert;
 
@@ -22,16 +22,16 @@ impl BConvert for IoErrorBencodeConvert {
 
 // ----------------------------------------------------------------------------//
 
-pub const ID_MAP_KEY:              &'static [u8] = b"m";
-pub const CLIENT_ID_KEY:           &'static [u8] = b"v";
-pub const CLIENT_TCP_PORT_KEY:     &'static [u8] = b"p";
-pub const OUR_IP_KEY:              &'static [u8] = b"yourip";
-pub const CLIENT_IPV6_ADDR_KEY:    &'static [u8] = b"ipv6";
-pub const CLIENT_IPV4_ADDR_KEY:    &'static [u8] = b"ipv4";
-pub const CLIENT_MAX_REQUESTS_KEY: &'static [u8] = b"reqq";
-pub const METADATA_SIZE_KEY:       &'static [u8] = b"metadata_size";
+pub const ID_MAP_KEY:              &[u8] = b"m";
+pub const CLIENT_ID_KEY:           &[u8] = b"v";
+pub const CLIENT_TCP_PORT_KEY:     &[u8] = b"p";
+pub const OUR_IP_KEY:              &[u8] = b"yourip";
+pub const CLIENT_IPV6_ADDR_KEY:    &[u8] = b"ipv6";
+pub const CLIENT_IPV4_ADDR_KEY:    &[u8] = b"ipv4";
+pub const CLIENT_MAX_REQUESTS_KEY: &[u8] = b"reqq";
+pub const METADATA_SIZE_KEY:       &[u8] = b"metadata_size";
 
-pub fn parse_id_map<K, V>(root: &BDictAccess<K, V>) -> HashMap<ExtendedType, u8>
+pub fn parse_id_map<K, V>(root: &dyn BDictAccess<K, V>) -> HashMap<ExtendedType, u8>
     where V: BRefAccess, V::BKey: AsRef<[u8]> {
     let mut id_map = HashMap::new();
     
@@ -47,14 +47,14 @@ pub fn parse_id_map<K, V>(root: &BDictAccess<K, V>) -> HashMap<ExtendedType, u8>
     id_map
 }
 
-pub fn parse_client_id<K, V>(root: &BDictAccess<K, V>) -> Option<String>
+pub fn parse_client_id<K, V>(root: &dyn BDictAccess<K, V>) -> Option<String>
     where V: BRefAccess {
     CONVERT.lookup_and_convert_str(root, CLIENT_ID_KEY)
         .map(|id| id.to_string())
         .ok()
 }
 
-pub fn parse_client_tcp_port<K, V>(root: &BDictAccess<K, V>) -> Option<u16>
+pub fn parse_client_tcp_port<K, V>(root: &dyn BDictAccess<K, V>) -> Option<u16>
     where V: BRefAccess {
     CONVERT.lookup_and_convert_int(root, CLIENT_TCP_PORT_KEY)
         .ok()
@@ -67,7 +67,7 @@ pub fn parse_client_tcp_port<K, V>(root: &BDictAccess<K, V>) -> Option<u16>
         })
 }
 
-pub fn parse_our_ip<K, V>(root: &BDictAccess<K, V>) -> Option<IpAddr>
+pub fn parse_our_ip<K, V>(root: &dyn BDictAccess<K, V>) -> Option<IpAddr>
     where V: BRefAccess {
     CONVERT.lookup_and_convert_bytes(root, OUR_IP_KEY)
         .ok()
@@ -82,7 +82,7 @@ pub fn parse_our_ip<K, V>(root: &BDictAccess<K, V>) -> Option<IpAddr>
         })
 }
 
-pub fn parse_client_ipv6_addr<K, V>(root: &BDictAccess<K, V>) -> Option<Ipv6Addr>
+pub fn parse_client_ipv6_addr<K, V>(root: &dyn BDictAccess<K, V>) -> Option<Ipv6Addr>
     where V: BRefAccess {
     CONVERT.lookup_and_convert_bytes(root, CLIENT_IPV6_ADDR_KEY)
         .ok()
@@ -95,7 +95,7 @@ pub fn parse_client_ipv6_addr<K, V>(root: &BDictAccess<K, V>) -> Option<Ipv6Addr
         })
 }
 
-pub fn parse_client_ipv4_addr<K, V>(root: &BDictAccess<K, V>) -> Option<Ipv4Addr> 
+pub fn parse_client_ipv4_addr<K, V>(root: &dyn BDictAccess<K, V>) -> Option<Ipv4Addr> 
     where V: BRefAccess {
     CONVERT.lookup_and_convert_bytes(root, CLIENT_IPV4_ADDR_KEY)
         .ok()
@@ -108,13 +108,13 @@ pub fn parse_client_ipv4_addr<K, V>(root: &BDictAccess<K, V>) -> Option<Ipv4Addr
         })
 }
 
-pub fn parse_client_max_requests<K, V>(root: &BDictAccess<K, V>) -> Option<i64>
+pub fn parse_client_max_requests<K, V>(root: &dyn BDictAccess<K, V>) -> Option<i64>
     where V: BRefAccess {
     CONVERT.lookup_and_convert_int(root, CLIENT_MAX_REQUESTS_KEY)
         .ok()
 }
 
-pub fn parse_metadata_size<K, V>(root: &BDictAccess<K, V>) -> Option<i64>
+pub fn parse_metadata_size<K, V>(root: &dyn BDictAccess<K, V>) -> Option<i64>
     where V: BRefAccess {
     CONVERT.lookup_and_convert_int(root, METADATA_SIZE_KEY)
         .ok()
@@ -133,21 +133,21 @@ fn parse_ipv6_addr(ipv6_bytes: &[u8]) -> Ipv6Addr {
 
 // ----------------------------------------------------------------------------//
 
-pub const MESSAGE_TYPE_KEY: &'static [u8] = b"msg_type";
-pub const PIECE_INDEX_KEY:  &'static [u8] = b"piece";
-pub const TOTAL_SIZE_KEY:   &'static [u8] = b"total_size";
+pub const MESSAGE_TYPE_KEY: &[u8] = b"msg_type";
+pub const PIECE_INDEX_KEY:  &[u8] = b"piece";
+pub const TOTAL_SIZE_KEY:   &[u8] = b"total_size";
 
-pub fn parse_message_type<K, V>(root: &BDictAccess<K, V>) -> io::Result<u8>
+pub fn parse_message_type<K, V>(root: &dyn BDictAccess<K, V>) -> io::Result<u8>
     where V: BRefAccess {
-    CONVERT.lookup_and_convert_int(root, MESSAGE_TYPE_KEY).map(|msg_type| msg_type as u8).into()
+    CONVERT.lookup_and_convert_int(root, MESSAGE_TYPE_KEY).map(|msg_type| msg_type as u8)
 }
 
-pub fn parse_piece_index<K, V>(root: &BDictAccess<K, V>) -> io::Result<i64>
+pub fn parse_piece_index<K, V>(root: &dyn BDictAccess<K, V>) -> io::Result<i64>
     where V: BRefAccess {
-    CONVERT.lookup_and_convert_int(root, PIECE_INDEX_KEY).into()
+    CONVERT.lookup_and_convert_int(root, PIECE_INDEX_KEY)
 }
 
-pub fn parse_total_size<K, V>(root: &BDictAccess<K, V>) -> io::Result<i64>
+pub fn parse_total_size<K, V>(root: &dyn BDictAccess<K, V>) -> io::Result<i64>
     where V: BRefAccess {
-    CONVERT.lookup_and_convert_int(root, TOTAL_SIZE_KEY).into()
+    CONVERT.lookup_and_convert_int(root, TOTAL_SIZE_KEY)
 }

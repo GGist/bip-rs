@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
-use message::{PeerWireProtocolMessage, ExtendedMessage, BitsExtensionMessage};
-use protocol::{PeerProtocol, NestedPeerProtocol};
+use crate::message::{PeerWireProtocolMessage, ExtendedMessage, BitsExtensionMessage};
+use crate::protocol::{PeerProtocol, NestedPeerProtocol};
 
 use bytes::Bytes;
 
@@ -17,7 +17,7 @@ impl<P> PeerWireProtocol<P> {
     /// as the peer wire protocol. This means it should expect a 4 byte (`u32`) message
     /// length prefix. Nested protocols will NOT have their `bytes_needed` method called.
     pub fn new(ext_protocol: P) -> PeerWireProtocol<P> {
-        PeerWireProtocol{ ext_protocol: ext_protocol }
+        PeerWireProtocol{ ext_protocol }
     }
 }
 

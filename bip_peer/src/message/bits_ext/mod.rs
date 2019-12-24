@@ -8,8 +8,8 @@ use bytes::Bytes;
 use byteorder::{WriteBytesExt, BigEndian};
 use nom::{IResult, be_u32, be_u8, be_u16, Needed};
 
-use message;
-use message::bencode;
+use crate::message;
+use crate::message::bencode;
 
 const PORT_MESSAGE_LEN:          u32 = 3;
 const BASE_EXTENDED_MESSAGE_LEN: u32 = 6;
@@ -67,7 +67,7 @@ fn parse_extension(mut bytes: Bytes) -> IResult<(), io::Result<BitsExtensionMess
             switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, be_u8)),
                 (PORT_MESSAGE_LEN, PORT_MESSAGE_ID) => map!(
                     call!(PortMessage::parse_bytes, bytes.split_off(message::HEADER_LEN)),
-                    |res_port| res_port.map(|port| BitsExtensionMessage::Port(port))
+                    |res_port| res_port.map(BitsExtensionMessage::Port)
                 )
             )
         ) |
@@ -75,7 +75,7 @@ fn parse_extension(mut bytes: Bytes) -> IResult<(), io::Result<BitsExtensionMess
             switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, be_u8, be_u8)),
                 (message_len, EXTENDED_MESSAGE_ID, EXTENDED_MESSAGE_HANDSHAKE_ID) => map!(
                     call!(ExtendedMessage::parse_bytes, bytes.split_off(message::HEADER_LEN + 1), message_len - 2),
-                    |res_extended| res_extended.map(|extended| BitsExtensionMessage::Extended(extended))
+                    |res_extended| res_extended.map(BitsExtensionMessage::Extended)
                 )
             )
         )
