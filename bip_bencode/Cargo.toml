@@ -15,18 +15,10 @@ license          = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-error-chain      = "0.11"
+error-chain      = "0.12.1"
 
 [features]
 unstable         = []
-
-[profile.bench]
-opt-level        = 3
-debug            = false
-rpath            = false
-lto              = false
-debug-assertions = false
-codegen-units    = 1
 
 [[test]]
 name             = "test"

@@ -15,7 +15,7 @@ license       = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-bip_util      = { version = "0.5" }
+bip_util      = { path = "../bip_util" }
 bytes         = "0.4"
 futures       = "0.1"
 nom           = "3.1"

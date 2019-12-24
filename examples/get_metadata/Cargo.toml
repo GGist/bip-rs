@@ -8,10 +8,10 @@ authors       = ["Andrew <amiller4421@gmail.com>"]
 license       = "MIT/Apache-2.0"
 
 [dependencies]
-bip_dht       = "0.6"
-bip_handshake = "0.7"
-bip_metainfo  = "0.12"
-bip_peer      = "0.5"
+bip_dht       = { path = "../../bip_dht" }
+bip_handshake = { path = "../../bip_handshake" }
+bip_metainfo  = { path = "../../bip_metainfo" }
+bip_peer      = { path = "../../bip_peer" }
 bip_select    = { path = "../../bip_select" }
 clap          = "2.25"
 futures       = "0.1"

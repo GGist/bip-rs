@@ -1,0 +1,25 @@
+[workspace]
+
+members = [
+  "bip_bencode",
+  "bip_dht",
+  "bip_disk",
+  "bip_handshake",
+  "bip_htracker",
+  "bip_lpd",
+  "bip_magnet",
+  "bip_metainfo",
+  "bip_peer",
+  "bip_select",
+  "bip_util",
+  "bip_utp",
+  "bip_utracker",
+]
+
+[profile.bench]
+opt-level        = 3
+debug            = false
+rpath            = false
+lto              = false
+debug-assertions = false
+codegen-units    = 1
