@@ -6,7 +6,7 @@ use crate::message::extensions::{self, Extensions};
 use crate::message::protocol::Protocol;
 
 use bip_util::bt::{self, InfoHash, PeerId};
-use nom::IResult;
+use nom::{call, do_parse, take, IResult};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct HandshakeMessage {
