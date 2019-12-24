@@ -2,7 +2,7 @@
 
 use bip_util::sha;
 
-use metainfo::File;
+use crate::metainfo::File;
 
 /// Iterator over each File within the MetainfoFile.
 pub struct Files<'a> {
@@ -14,7 +14,7 @@ impl<'a> Files<'a> {
     pub fn new(files: &'a [File]) -> Files<'a> {
         Files {
             index: 0,
-            files: files,
+            files,
         }
     }
 }
@@ -44,7 +44,7 @@ impl<'a> Pieces<'a> {
     pub fn new(pieces: &'a [[u8; sha::SHA_HASH_LEN]]) -> Pieces<'a> {
         Pieces {
             index: 0,
-            pieces: pieces,
+            pieces,
         }
     }
 }

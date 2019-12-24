@@ -21,7 +21,7 @@ impl PieceBuffers {
             piece_queue.push(PieceBuffer::new(piece_length));
         }
 
-        PieceBuffers { piece_queue: piece_queue }
+        PieceBuffers { piece_queue }
     }
 
     /// Checkin the given piece buffer to be re-used.
@@ -61,9 +61,10 @@ impl PieceBuffer {
     }
 
     pub fn write_bytes<C>(&mut self, mut callback: C) -> io::Result<usize>
-        where C: FnMut(&mut [u8]) -> io::Result<usize>
+    where
+        C: FnMut(&mut [u8]) -> io::Result<usize>,
     {
-        let new_bytes_read = try!(callback(&mut self.buffer[self.bytes_read..]));
+        let new_bytes_read = callback(&mut self.buffer[self.bytes_read..])?;
         self.bytes_read += new_bytes_read;
 
         Ok(new_bytes_read)

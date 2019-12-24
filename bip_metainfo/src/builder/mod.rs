@@ -1,11 +1,11 @@
 use std::iter::ExactSizeIterator;
 
-use bip_bencode::{BencodeMut, BMutAccess, BRefAccess};
+use bip_bencode::{BMutAccess, BRefAccess, BencodeMut};
 use bip_util::sha::{self, ShaHash};
 
-use accessor::{Accessor, IntoAccessor};
-use error::ParseResult;
-use parse;
+use crate::accessor::{Accessor, IntoAccessor};
+use crate::error::ParseResult;
+use crate::parse;
 
 mod buffer;
 mod worker;
@@ -52,7 +52,7 @@ pub enum PieceLength {
 /// Builder for generating a torrent file from some accessor.
 pub struct MetainfoBuilder<'a> {
     root: BencodeMut<'a>,
-    info: InfoBuilder<'a>
+    info: InfoBuilder<'a>,
 }
 
 impl<'a> MetainfoBuilder<'a> {
@@ -60,7 +60,7 @@ impl<'a> MetainfoBuilder<'a> {
     pub fn new() -> MetainfoBuilder<'a> {
         MetainfoBuilder {
             root: BencodeMut::new_dict(),
-            info: InfoBuilder::new()
+            info: InfoBuilder::new(),
         }
     }
 
@@ -212,10 +212,11 @@ impl<'a> MetainfoBuilder<'a> {
     ///
     /// Panics if threads is equal to zero.
     pub fn build<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
-        where A: IntoAccessor,
-              C: FnMut(f64) + Send + 'static
+    where
+        A: IntoAccessor,
+        C: FnMut(f64) + Send + 'static,
     {
-        let accessor = try!(accessor.into_accessor());
+        let accessor = accessor.into_accessor()?;
 
         build_with_accessor(threads, accessor, progress, Some(self.root), self.info.info, self.info.piece_length)
     }
@@ -225,20 +226,23 @@ impl<'a> MetainfoBuilder<'a> {
 
 /// Builder for generating an info dictionary file from some accessor.
 pub struct InfoBuilder<'a> {
-    info:         BencodeMut<'a>,
+    info: BencodeMut<'a>,
     // Stored outside of root as some of the variants need the total
     // file sizes in order for the final piece length to be calculated.
-    piece_length: PieceLength
+    piece_length: PieceLength,
 }
 
 impl<'a> InfoBuilder<'a> {
     pub fn new() -> InfoBuilder<'a> {
-        InfoBuilder{ info: BencodeMut::new_dict(), piece_length: PieceLength::OptBalanced }
+        InfoBuilder {
+            info: BencodeMut::new_dict(),
+            piece_length: PieceLength::OptBalanced,
+        }
     }
 
     /// Set or unset the private flag for the torrent file.
     pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> InfoBuilder<'a> {
-        let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private{ 1 } else { 0 });
+        let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private { 1 } else { 0 });
 
         {
             let dict_access = self.info.dict_mut().unwrap();
@@ -261,10 +265,11 @@ impl<'a> InfoBuilder<'a> {
     ///
     /// Panics if threads is equal to zero.
     pub fn build<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
-        where A: IntoAccessor,
-              C: FnMut(f64) + Send + 'static
+    where
+        A: IntoAccessor,
+        C: FnMut(f64) + Send + 'static,
     {
-        let accessor = try!(accessor.into_accessor());
+        let accessor = accessor.into_accessor()?;
 
         build_with_accessor(threads, accessor, progress, None, self.info, self.piece_length)
     }
@@ -272,131 +277,129 @@ impl<'a> InfoBuilder<'a> {
 
 // ----------------------------------------------------------------------------//
 
-fn build_with_accessor<'a, A, C>(threads:       usize,
-                                accessor:       A,
-                                progress:       C,
-                                opt_root:       Option<BencodeMut<'a>>,
-                                info:           BencodeMut<'a>,
-                                piece_length:   PieceLength) -> ParseResult<Vec<u8>>
-    where A: Accessor,
-          C: FnMut(f64) + Send + 'static {
-        if threads == 0 {
-            panic!("bip_metainfo: Cannot Build Metainfo File With threads == 0");
-        }
+fn build_with_accessor<'a, A, C>(
+    threads: usize,
+    accessor: A,
+    progress: C,
+    opt_root: Option<BencodeMut<'a>>,
+    info: BencodeMut<'a>,
+    piece_length: PieceLength,
+) -> ParseResult<Vec<u8>>
+where
+    A: Accessor,
+    C: FnMut(f64) + Send + 'static,
+{
+    if threads == 0 {
+        panic!("bip_metainfo: Cannot Build Metainfo File With threads == 0");
+    }
 
-        // Collect all of the file information into a list
-        let mut files_info = Vec::new();
-        try!(accessor.access_metadata(|len, path| {
-            let path_list: Vec<String> = path.iter()
-                .map(|os_str| os_str.to_string_lossy().into_owned())
-                .collect();
+    // Collect all of the file information into a list
+    let mut files_info = Vec::new();
+    accessor.access_metadata(|len, path| {
+        let path_list: Vec<String> = path.iter().map(|os_str| os_str.to_string_lossy().into_owned()).collect();
 
-            files_info.push((len, path_list));
-        }));
+        files_info.push((len, path_list));
+    })?;
 
-        // Build the pieces for the data our accessor is pointing at
-        let total_files_len = files_info.iter().fold(0, |acc, nex| acc + nex.0);
-        let piece_length = determine_piece_length(total_files_len, piece_length);
-        let total_num_pieces = ((total_files_len as f64) / (piece_length as f64)).ceil() as u64;
-        let pieces_list = try!(worker::start_hasher_workers(&accessor,
-                                                            piece_length,
-                                                            total_num_pieces,
-                                                            threads,
-                                                            progress));
-        let pieces = map_pieces_list(pieces_list.into_iter().map(|(_, piece)| piece));
+    // Build the pieces for the data our accessor is pointing at
+    let total_files_len = files_info.iter().fold(0, |acc, nex| acc + nex.0);
+    let piece_length = determine_piece_length(total_files_len, piece_length);
+    let total_num_pieces = ((total_files_len as f64) / (piece_length as f64)).ceil() as u64;
+    let pieces_list = worker::start_hasher_workers(&accessor, piece_length, total_num_pieces, threads, progress)?;
+    let pieces = map_pieces_list(pieces_list.into_iter().map(|(_, piece)| piece));
 
-        let mut single_file_name = String::new();
-        let access_directory = accessor.access_directory().map(|path| path.to_string_lossy());
+    let mut single_file_name = String::new();
+    let access_directory = accessor.access_directory().map(|path| path.to_string_lossy());
 
-        // Move these below access directory for borrow checker
-        let opt_root = opt_root;
-        let mut info = info;
+    // Move these below access directory for borrow checker
+    let opt_root = opt_root;
+    let mut info = info;
 
-        // Update the info bencode with values
-        {
-            let info_access = info.dict_mut().unwrap();
+    // Update the info bencode with values
+    {
+        let info_access = info.dict_mut().unwrap();
 
-            info_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(piece_length as i64));
-            info_access.insert(parse::PIECES_KEY.into(), ben_bytes!(&pieces[..]));
+        info_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(piece_length as i64));
+        info_access.insert(parse::PIECES_KEY.into(), ben_bytes!(&pieces[..]));
 
-            // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
-            // If the directory is not present but there are multiple files, the direcotry field will be set to empty
-            match (&access_directory, files_info.len() > 1) {
-                (&Some(ref directory), _) => {
-                    let mut bencode_files = BencodeMut::new_list();
+        // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
+        // If the directory is not present but there are multiple files, the direcotry field will be set to empty
+        match (&access_directory, files_info.len() > 1) {
+            (&Some(ref directory), _) => {
+                let mut bencode_files = BencodeMut::new_list();
 
-                    {
-                        let bencode_files_access = bencode_files.list_mut().unwrap();
+                {
+                    let bencode_files_access = bencode_files.list_mut().unwrap();
 
-                        // Multi File
-                        for &(len, ref path) in files_info.iter() {
-                            let mut bencode_path = BencodeMut::new_list();
+                    // Multi File
+                    for &(len, ref path) in files_info.iter() {
+                        let mut bencode_path = BencodeMut::new_list();
 
-                            {
-                                let bencode_path_access = bencode_path.list_mut().unwrap();
+                        {
+                            let bencode_path_access = bencode_path.list_mut().unwrap();
 
-                                for path_element in path.iter() {
-                                    bencode_path_access.push(ben_bytes!(&path_element[..]));
-                                }
+                            for path_element in path.iter() {
+                                bencode_path_access.push(ben_bytes!(&path_element[..]));
                             }
-
-                            bencode_files_access.push(ben_map!{
-                                parse::LENGTH_KEY => ben_int!(len as i64),
-                                parse::PATH_KEY   => bencode_path
-                            });
                         }
+
+                        bencode_files_access.push(ben_map! {
+                            parse::LENGTH_KEY => ben_int!(len as i64),
+                            parse::PATH_KEY   => bencode_path
+                        });
                     }
-
-                    info_access.insert(parse::NAME_KEY.into(), ben_bytes!(directory.as_ref()));
-                    info_access.insert(parse::FILES_KEY.into(), bencode_files);
                 }
-                (&None, true) => {
-                    let mut bencode_files = BencodeMut::new_list();
 
-                    {
-                        let bencode_files_access = bencode_files.list_mut().unwrap();
+                info_access.insert(parse::NAME_KEY.into(), ben_bytes!(directory.as_ref()));
+                info_access.insert(parse::FILES_KEY.into(), bencode_files);
+            },
+            (&None, true) => {
+                let mut bencode_files = BencodeMut::new_list();
 
-                        // Multi File
-                        for &(len, ref path) in files_info.iter() {
-                            let mut bencode_path = BencodeMut::new_list();
+                {
+                    let bencode_files_access = bencode_files.list_mut().unwrap();
 
-                            {
-                                let bencode_path_access = bencode_path.list_mut().unwrap();
+                    // Multi File
+                    for &(len, ref path) in files_info.iter() {
+                        let mut bencode_path = BencodeMut::new_list();
 
-                                for path_element in path.iter() {
-                                    bencode_path_access.push(ben_bytes!(&path_element[..]));
-                                }
+                        {
+                            let bencode_path_access = bencode_path.list_mut().unwrap();
+
+                            for path_element in path.iter() {
+                                bencode_path_access.push(ben_bytes!(&path_element[..]));
                             }
-
-                            bencode_files_access.push(ben_map!{
-                                parse::LENGTH_KEY => ben_int!(len as i64),
-                                parse::PATH_KEY   => bencode_path
-                            });
                         }
+
+                        bencode_files_access.push(ben_map! {
+                            parse::LENGTH_KEY => ben_int!(len as i64),
+                            parse::PATH_KEY   => bencode_path
+                        });
                     }
-
-                    info_access.insert(parse::NAME_KEY.into(), ben_bytes!(""));
-                    info_access.insert(parse::FILES_KEY.into(), bencode_files);
                 }
-                (&None, false) => {
-                    // Single File
-                    for name_component in files_info[0].1.iter() {
-                        single_file_name.push_str(name_component);
-                    }
 
-                    info_access.insert(parse::LENGTH_KEY.into(), ben_int!(files_info[0].0 as i64));
-                    info_access.insert(parse::NAME_KEY.into(), ben_bytes!(&single_file_name[..]));
+                info_access.insert(parse::NAME_KEY.into(), ben_bytes!(""));
+                info_access.insert(parse::FILES_KEY.into(), bencode_files);
+            },
+            (&None, false) => {
+                // Single File
+                for name_component in files_info[0].1.iter() {
+                    single_file_name.push_str(name_component);
                 }
-            }
-        }
 
-        if let Some(mut root) = opt_root {
-            root.dict_mut().unwrap().insert(parse::INFO_KEY.into(), info);
-
-            Ok(root.encode())
-        } else {
-            Ok(info.encode())
+                info_access.insert(parse::LENGTH_KEY.into(), ben_int!(files_info[0].0 as i64));
+                info_access.insert(parse::NAME_KEY.into(), ben_bytes!(&single_file_name[..]));
+            },
         }
+    }
+
+    if let Some(mut root) = opt_root {
+        root.dict_mut().unwrap().insert(parse::INFO_KEY.into(), info);
+
+        Ok(root.encode())
+    } else {
+        Ok(info.encode())
+    }
 }
 
 /// Calculate the final piece length given the total file size and piece length strategy.
@@ -405,29 +408,14 @@ fn build_with_accessor<'a, A, C>(threads:       usize,
 fn determine_piece_length(total_file_size: u64, piece_length: PieceLength) -> usize {
     match piece_length {
         PieceLength::Custom(len) => len,
-        PieceLength::OptBalanced => {
-            calculate_piece_length(total_file_size,
-                                   BALANCED_MAX_PIECES_SIZE,
-                                   BALANCED_MIN_PIECE_LENGTH)
-        }
-        PieceLength::OptFileSize => {
-            calculate_piece_length(total_file_size,
-                                   FILE_SIZE_MAX_PIECES_SIZE,
-                                   FILE_SIZE_MIN_PIECE_LENGTH)
-        }
-        PieceLength::OptTransfer => {
-            calculate_piece_length(total_file_size,
-                                   TRANSFER_MAX_PIECES_SIZE,
-                                   TRANSFER_MIN_PIECE_LENGTH)
-        }
+        PieceLength::OptBalanced => calculate_piece_length(total_file_size, BALANCED_MAX_PIECES_SIZE, BALANCED_MIN_PIECE_LENGTH),
+        PieceLength::OptFileSize => calculate_piece_length(total_file_size, FILE_SIZE_MAX_PIECES_SIZE, FILE_SIZE_MIN_PIECE_LENGTH),
+        PieceLength::OptTransfer => calculate_piece_length(total_file_size, TRANSFER_MAX_PIECES_SIZE, TRANSFER_MIN_PIECE_LENGTH),
     }
 }
 
 /// Calculate the minimum power of 2 piece length for the given max pieces size and total file size.
-fn calculate_piece_length(total_file_size: u64,
-                          max_pieces_size: usize,
-                          min_piece_length: usize)
-                          -> usize {
+fn calculate_piece_length(total_file_size: u64, max_pieces_size: usize, min_piece_length: usize) -> usize {
     let num_pieces = (max_pieces_size as f64) / (sha::SHA_HASH_LEN as f64);
     let piece_length = ((total_file_size as f64) / num_pieces + 0.5) as usize;
 
@@ -441,7 +429,8 @@ fn calculate_piece_length(total_file_size: u64,
 }
 /// Map the pieces list into a list of bytes (byte string).
 fn map_pieces_list<I>(pieces: I) -> Vec<u8>
-    where I: Iterator<Item = ShaHash> + ExactSizeIterator
+where
+    I: Iterator<Item = ShaHash> + ExactSizeIterator,
 {
     let mut concated_pieces = Vec::with_capacity(pieces.len() * sha::SHA_HASH_LEN);
     for piece in pieces {
