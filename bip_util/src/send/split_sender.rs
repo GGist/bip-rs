@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use send::TrySender;
+use crate::send::TrySender;
 
 /// Create two SplitSenders over a single Sender with corresponding capacities.
 pub fn split_sender<S, T>(send: S, cap_one: usize, cap_two: usize) -> (SplitSender<S>, SplitSender<S>)
@@ -94,7 +94,7 @@ impl SplitSenderAck {
 mod tests {
     use std::sync::mpsc;
 
-    use send::TrySender;
+    use crate::send::TrySender;
     use super::SplitSender;
 
     #[test]

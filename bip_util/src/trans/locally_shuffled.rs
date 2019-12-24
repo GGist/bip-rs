@@ -3,7 +3,7 @@ use std::num::Wrapping;
 
 use num::{Bounded, One, Zero};
 
-use trans::{SequentialIds, TransactionIds};
+use crate::trans::{SequentialIds, TransactionIds};
 
 const TRANSACTION_ID_PREALLOC_LEN: usize = 2048;
 
@@ -62,7 +62,7 @@ impl<T> LocallyShuffledIds<T>
             num_ids_generated += 1;
         }
 
-        ::fisher_shuffle(&mut self.stored_ids[..]);
+        crate::fisher_shuffle(&mut self.stored_ids[..]);
     }
 }
 
@@ -81,7 +81,7 @@ impl<T> TransactionIds<T> for LocallyShuffledIds<T>
 #[cfg(test)]
 mod tests {
     use super::LocallyShuffledIds;
-    use trans::TransactionIds;
+    use crate::trans::TransactionIds;
 
     #[test]
     fn positive_single_prealloc_u8_overflow() {
