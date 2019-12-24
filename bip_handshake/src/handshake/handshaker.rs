@@ -24,10 +24,9 @@ use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::sync::mpsc::{self, Receiver, SendError, Sender};
 use futures::{Poll, StartSend};
-use rand::{self, Rng};
+use rand::RngCore;
 use tokio_core::reactor::Handle;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_timer::{self};
 
 /// Build configuration for `Handshaker` object creation.
 #[derive(Copy, Clone)]
