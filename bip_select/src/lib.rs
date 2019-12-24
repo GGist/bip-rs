@@ -26,8 +26,8 @@ pub mod revelation;
 mod extended;
 mod uber;
 
-pub use extended::{ExtendedListener, ExtendedPeerInfo, IExtendedMessage, OExtendedMessage};
-pub use uber::{IUberMessage, OUberMessage, UberModule, UberModuleBuilder};
+pub use crate::extended::{ExtendedListener, ExtendedPeerInfo, IExtendedMessage, OExtendedMessage};
+pub use crate::uber::{IUberMessage, OUberMessage, UberModule, UberModuleBuilder};
 
 /// Enumeration of control messages most modules will be interested in.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,6 +1,6 @@
 //! Module for piece revelation.
 
-use ControlMessage;
+use crate::ControlMessage;
 use bip_handshake::InfoHash;
 use bip_peer::PeerInfo;
 use bip_peer::messages::BitFieldMessage;

@@ -1,4 +1,4 @@
-use ControlMessage;
+use crate::ControlMessage;
 use bip_handshake::InfoHash;
 use bip_metainfo::Info;
 use bip_metainfo::Metainfo;
@@ -10,11 +10,11 @@ use bip_peer::messages::UtMetadataRejectMessage;
 use bip_peer::messages::UtMetadataRequestMessage;
 use bip_peer::messages::builders::ExtendedMessageBuilder;
 use bytes::BytesMut;
-use discovery::IDiscoveryMessage;
-use discovery::ODiscoveryMessage;
-use discovery::error::{DiscoveryError, DiscoveryErrorKind};
-use extended::ExtendedListener;
-use extended::ExtendedPeerInfo;
+use crate::discovery::IDiscoveryMessage;
+use crate::discovery::ODiscoveryMessage;
+use crate::discovery::error::{DiscoveryError, DiscoveryErrorKind};
+use crate::extended::ExtendedListener;
+use crate::extended::ExtendedPeerInfo;
 use futures::Async;
 use futures::AsyncSink;
 use futures::Poll;
@@ -149,14 +149,14 @@ impl UtMetadataModule {
                     .or_insert_with(|| {
                         ActivePeers {
                             peers: HashSet::new(),
-                            metadata_size: metadata_size,
+                            metadata_size,
                         }
                     })
                     .peers
                     .insert(info);
             },
             _ => {
-                ()
+                
             },
         }
 
@@ -216,9 +216,7 @@ impl UtMetadataModule {
     }
 
     fn download_metainfo(&mut self, hash: InfoHash) -> StartSend<IDiscoveryMessage, DiscoveryError> {
-        if !self.pending_map.contains_key(&hash) {
-            self.pending_map.insert(hash, None);
-        }
+        self.pending_map.entry(hash).or_insert(None);
 
         Ok(AsyncSink::Ready)
     }
@@ -231,7 +229,7 @@ impl UtMetadataModule {
         } else {
             self.peer_requests.push_back(PeerRequest {
                 send_to: info,
-                request: request,
+                request,
             });
 
             Ok(AsyncSink::Ready)
@@ -448,7 +446,7 @@ impl UtMetadataModule {
 fn generate_active_request(message: UtMetadataRequestMessage, peer: PeerInfo) -> ActiveRequest {
     ActiveRequest {
         left: Duration::from_millis(REQUEST_TIMEOUT_MILLIS),
-        message: message,
+        message,
         sent_to: peer,
     }
 }
@@ -470,9 +468,9 @@ fn pending_info_from_metadata_size(metadata_size: i64) -> PendingInfo {
     }
 
     PendingInfo {
-        messages: messages,
+        messages,
         left: num_pieces,
-        bytes: bytes,
+        bytes,
     }
 }
 

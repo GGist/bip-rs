@@ -1,6 +1,6 @@
 //! Module for uber error types.
 
-use discovery::error::{DiscoveryError, DiscoveryErrorKind};
+use crate::discovery::error::{DiscoveryError, DiscoveryErrorKind};
 
 error_chain! {
     types {
