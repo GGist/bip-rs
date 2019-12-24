@@ -1,5 +1,5 @@
-use disk::fs::FileSystem;
-use disk::manager::{DiskManager};
+use crate::disk::fs::FileSystem;
+use crate::disk::manager::{DiskManager};
 
 use futures_cpupool::Builder;
 

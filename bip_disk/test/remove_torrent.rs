@@ -1,4 +1,4 @@
-use {MultiFileDirectAccessor, InMemoryFileSystem};
+use crate::{MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, BlockMetadata, Block};
 use bip_metainfo::{MetainfoBuilder, PieceLength, Metainfo};
 use bytes::BytesMut;
@@ -10,13 +10,13 @@ use futures::sink::Sink;
 #[test]
 fn positive_remove_torrent() {
     // Create some "files" as random bytes
-    let data_a = (::random_buffer(50), "/path/to/file/a".into());
-    let data_b = (::random_buffer(2000), "/path/to/file/b".into());
-    let data_c = (::random_buffer(0), "/path/to/file/c".into());
+    let data_a = (crate::random_buffer(50), "/path/to/file/a".into());
+    let data_b = (crate::random_buffer(2000), "/path/to/file/b".into());
+    let data_c = (crate::random_buffer(0), "/path/to/file/c".into());
 
     // Create our accessor for our in memory files and create a torrent file for them
     let files_accessor = MultiFileDirectAccessor::new("/my/downloads/".into(),
-        vec![data_a.clone(), data_b.clone(), data_c.clone()]);
+        vec![data_a.clone(), data_b, data_c]);
     let metainfo_bytes = MetainfoBuilder::new()
         .set_piece_length(PieceLength::Custom(1024))
         .build(1, files_accessor, |_| ()).unwrap();
@@ -26,7 +26,7 @@ fn positive_remove_torrent() {
     // Spin up a disk manager and add our created torrent to it
     let filesystem = InMemoryFileSystem::new();
     let disk_manager = DiskManagerBuilder::new()
-        .build(filesystem.clone());
+        .build(filesystem);
 
     let (send, recv) = disk_manager.split();
     let mut blocking_send = send.wait();
@@ -35,7 +35,7 @@ fn positive_remove_torrent() {
     // Verify that zero pieces are marked as good
     let mut core = Core::new().unwrap();
 
-    let (mut blocking_send, good_pieces, recv) = ::core_loop_with_timeout(&mut core, 500, ((blocking_send, 0), recv),
+    let (mut blocking_send, good_pieces, recv) = crate::core_loop_with_timeout(&mut core, 500, ((blocking_send, 0), recv),
         |(mut blocking_send, good_pieces), recv, msg| {
             match msg {
                 ODiskMessage::TorrentAdded(_)      => {
@@ -44,7 +44,7 @@ fn positive_remove_torrent() {
                 },
                 ODiskMessage::TorrentRemoved(_)    => Loop::Break((blocking_send, good_pieces, recv)),
                 ODiskMessage::FoundGoodPiece(_, _) => Loop::Continue(((blocking_send, good_pieces + 1), recv)),
-                unexpected @ _                     => panic!("Unexpected Message: {:?}", unexpected)
+                unexpected                     => panic!("Unexpected Message: {:?}", unexpected)
             }
     });
 
@@ -57,7 +57,7 @@ fn positive_remove_torrent() {
 
     blocking_send.send(IDiskMessage::ProcessBlock(process_block)).unwrap();
 
-    ::core_loop_with_timeout(&mut core, 500, ((), recv),
+    crate::core_loop_with_timeout(&mut core, 500, ((), recv),
         |_, _, msg| {
             match msg {
                 ODiskMessage::ProcessBlockError(_, _) => Loop::Break(()),

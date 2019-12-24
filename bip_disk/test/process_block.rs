@@ -1,4 +1,4 @@
-use {MultiFileDirectAccessor, InMemoryFileSystem};
+use crate::{MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage, ODiskMessage, FileSystem, BlockMetadata, Block};
 use bip_metainfo::{MetainfoBuilder, PieceLength, Metainfo};
 use bytes::BytesMut;
@@ -10,12 +10,12 @@ use futures::sink::Sink;
 #[test]
 fn positive_process_block() {
     // Create some "files" as random bytes
-    let data_a = (::random_buffer(1023), "/path/to/file/a".into());
-    let data_b = (::random_buffer(2000), "/path/to/file/b".into());
+    let data_a = (crate::random_buffer(1023), "/path/to/file/a".into());
+    let data_b = (crate::random_buffer(2000), "/path/to/file/b".into());
 
     // Create our accessor for our in memory files and create a torrent file for them
     let files_accessor = MultiFileDirectAccessor::new("/my/downloads/".into(),
-        vec![data_a.clone(), data_b.clone()]);
+        vec![data_a, data_b.clone()]);
     let metainfo_bytes = MetainfoBuilder::new()
         .set_piece_length(PieceLength::Custom(1024))
         .build(1, files_accessor, |_| ()).unwrap();
@@ -27,7 +27,7 @@ fn positive_process_block() {
         .build(filesystem.clone());
 
     let mut process_bytes = BytesMut::new();
-    process_bytes.extend_from_slice(&data_b.0[1..(50 + 1)]);
+    process_bytes.extend_from_slice(&data_b.0[1..=50]);
 
     let process_block = Block::new(BlockMetadata::new(metainfo_file.info().info_hash(), 1, 0, 50), process_bytes.freeze());
 
@@ -36,7 +36,7 @@ fn positive_process_block() {
     blocking_send.send(IDiskMessage::AddTorrent(metainfo_file)).unwrap();
 
     let mut core = Core::new().unwrap();
-    ::core_loop_with_timeout(&mut core, 500, ((blocking_send, Some(process_block)), recv),
+    crate::core_loop_with_timeout(&mut core, 500, ((blocking_send, Some(process_block)), recv),
         |(mut blocking_send, opt_pblock), recv, msg| {
             match msg {
                 ODiskMessage::TorrentAdded(_) => {
@@ -44,7 +44,7 @@ fn positive_process_block() {
                     Loop::Continue(((blocking_send, None), recv))
                 },
                 ODiskMessage::BlockProcessed(_) => Loop::Break(()),
-                unexpected @ _ => panic!("Unexpected Message: {:?}", unexpected)
+                unexpected => panic!("Unexpected Message: {:?}", unexpected)
             }
         }
     );
@@ -57,6 +57,6 @@ fn positive_process_block() {
     assert_eq!(2000, filesystem.read_file(&mut received_file_b, 0, &mut recevied_file_b_data).unwrap());
 
     let mut expected_file_b_data = vec![0u8; 2000];
-    (&mut expected_file_b_data[1..(1 + 50)]).copy_from_slice(&data_b.0[1..(50 + 1)]);
+    (&mut expected_file_b_data[1..=50]).copy_from_slice(&data_b.0[1..=50]);
     assert_eq!(expected_file_b_data, recevied_file_b_data);
 }

@@ -16,21 +16,21 @@ mod memory;
 /// Both `Block` and `Torrent` error types.
 pub mod error;
 
-pub use disk::{IDiskMessage, ODiskMessage};
-pub use disk::fs::FileSystem;
-pub use disk::builder::DiskManagerBuilder;
-pub use disk::manager::{DiskManager, DiskManagerSink, DiskManagerStream};
+pub use crate::disk::{IDiskMessage, ODiskMessage};
+pub use crate::disk::fs::FileSystem;
+pub use crate::disk::builder::DiskManagerBuilder;
+pub use crate::disk::manager::{DiskManager, DiskManagerSink, DiskManagerStream};
 
-pub use memory::block::{Block, BlockMut, BlockMetadata};
+pub use crate::memory::block::{Block, BlockMut, BlockMetadata};
 
 /// Built in objects implementing `FileSystem`.
 pub mod fs {
-    pub use disk::fs::native::{NativeFile, NativeFileSystem};
+    pub use crate::disk::fs::native::{NativeFile, NativeFileSystem};
 }
 
 /// Built in objects implementing `FileSystem` for caching.
 pub mod fs_cache {
-    pub use disk::fs::cache::file_handle::FileHandleCache;
+    pub use crate::disk::fs::cache::file_handle::FileHandleCache;
 }
 
 pub use bip_util::bt::InfoHash;

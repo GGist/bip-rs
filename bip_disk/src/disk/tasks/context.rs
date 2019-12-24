@@ -1,8 +1,8 @@
 use std::sync::{Arc, RwLock, Mutex};
 use std::collections::HashMap;
 
-use disk::ODiskMessage;
-use disk::tasks::helpers::piece_checker::PieceCheckerState;
+use crate::disk::ODiskMessage;
+use crate::disk::tasks::helpers::piece_checker::PieceCheckerState;
 
 use bip_metainfo::Metainfo;
 use bip_util::bt::InfoHash;
@@ -23,13 +23,13 @@ pub struct MetainfoState {
 
 impl MetainfoState {
     pub fn new(file: Metainfo, state: PieceCheckerState) -> MetainfoState {
-        MetainfoState{ file: file, state: state }
+        MetainfoState{ file, state }
     }
 }
 
 impl<F> DiskManagerContext<F> {
     pub fn new(out: Sender<ODiskMessage>, fs: F) -> DiskManagerContext<F> {
-        DiskManagerContext{ torrents: Arc::new(RwLock::new(HashMap::new())), out: out, fs: Arc::new(fs) }
+        DiskManagerContext{ torrents: Arc::new(RwLock::new(HashMap::new())), out, fs: Arc::new(fs) }
     }
 
     pub fn blocking_sender(&self) -> Wait<Sender<ODiskMessage>> {

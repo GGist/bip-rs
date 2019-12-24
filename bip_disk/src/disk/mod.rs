@@ -1,5 +1,5 @@
-use error::{TorrentError, BlockError};
-use memory::block::{Block, BlockMut};
+use crate::error::{TorrentError, BlockError};
+use crate::memory::block::{Block, BlockMut};
 
 use bip_metainfo::Metainfo;
 use bip_util::bt::{InfoHash};
