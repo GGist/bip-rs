@@ -10,10 +10,10 @@ use futures::future::Either;
 use futures::sink::Sink;
 use umio::external::{Sender};
 
-use announce::{AnnounceResponse, ClientState};
-use client::dispatcher::DispatchMessage;
-use client::error::ClientResult;
-use scrape::ScrapeResponse;
+use crate::announce::{AnnounceResponse, ClientState};
+use crate::client::dispatcher::DispatchMessage;
+use crate::client::error::ClientResult;
+use crate::scrape::ScrapeResponse;
 
 mod dispatcher;
 pub mod error;
@@ -39,8 +39,8 @@ impl ClientMetadata {
     /// Create a new ClientMetadata container.
     pub fn new(token: ClientToken, result: ClientResult<ClientResponse>) -> ClientMetadata {
         ClientMetadata {
-            token: token,
-            result: result,
+            token,
+            result,
         }
     }
 
@@ -134,7 +134,7 @@ impl TrackerClient {
             .map(|chan| {
                 TrackerClient {
                     send: chan,
-                    limiter: limiter,
+                    limiter,
                     generator: TokenGenerator::new(),
                 }
             })
@@ -202,7 +202,7 @@ impl RequestLimiter {
     pub fn new(capacity: usize) -> RequestLimiter {
         RequestLimiter {
             active: Arc::new(AtomicUsize::new(0)),
-            capacity: capacity,
+            capacity,
         }
     }
 

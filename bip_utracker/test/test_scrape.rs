@@ -6,7 +6,7 @@ use bip_utracker::{TrackerClient, TrackerServer, ClientRequest};
 use futures::stream::Stream;
 use futures::future::Either;
 
-use {handshaker, MockTrackerHandler};
+use crate::{handshaker, MockTrackerHandler};
 
 #[test]
 #[allow(unused)]

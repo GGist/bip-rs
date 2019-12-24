@@ -12,6 +12,7 @@ documentation = "https://docs.rs/bip_utracker/"
 keywords      = ["tracker", "bittorrent", "udp"]
 
 license       = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
 bip_handshake = { version = "0.7" }

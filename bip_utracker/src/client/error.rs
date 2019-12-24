@@ -1,4 +1,4 @@
-use error::ErrorResponse;
+use crate::error::ErrorResponse;
 
 /// Result type for a ClientRequest.
 pub type ClientResult<T> = Result<T, ClientError>;

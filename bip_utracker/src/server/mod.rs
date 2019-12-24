@@ -3,8 +3,8 @@ use std::net::SocketAddr;
 
 use umio::external::Sender;
 
-use server::dispatcher::DispatchMessage;
-use server::handler::ServerHandler;
+use crate::server::dispatcher::DispatchMessage;
+use crate::server::handler::ServerHandler;
 
 mod dispatcher;
 pub mod handler;
@@ -21,7 +21,7 @@ impl TrackerServer {
     pub fn run<H>(bind: SocketAddr, handler: H) -> io::Result<TrackerServer>
         where H: ServerHandler + 'static
     {
-        dispatcher::create_dispatcher(bind, handler).map(|send| TrackerServer { send: send })
+        dispatcher::create_dispatcher(bind, handler).map(|send| TrackerServer { send })
     }
 }
 

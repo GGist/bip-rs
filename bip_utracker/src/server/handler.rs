@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use announce::{AnnounceRequest, AnnounceResponse};
-use scrape::{ScrapeRequest, ScrapeResponse};
+use crate::announce::{AnnounceRequest, AnnounceResponse};
+use crate::scrape::{ScrapeRequest, ScrapeResponse};
 
 /// Result type for a ServerHandler.
 ///
