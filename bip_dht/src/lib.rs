@@ -39,9 +39,9 @@ mod token;
 mod transaction;
 mod worker;
 
-pub use builder::{DhtBuilder, MainlineDht};
-pub use router::Router;
-pub use worker::{DhtEvent, ShutdownCause};
+pub use crate::builder::{DhtBuilder, MainlineDht};
+pub use crate::router::Router;
+pub use crate::worker::{DhtEvent, ShutdownCause};
 
 pub use bip_handshake::Handshaker;
 /// Test

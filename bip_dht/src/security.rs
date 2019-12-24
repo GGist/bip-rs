@@ -8,8 +8,8 @@ use bip_util::convert;
 use crc::crc32;
 use rand;
 
-const IPV4_MASK: u32 = 0x030F3FFF;
-const IPV6_MASK: u64 = 0x0103070F1F3F7FFF;
+const IPV4_MASK: u32 = 0x030F_3FFF;
+const IPV6_MASK: u64 = 0x0103_070F_1F3F_7FFF;
 
 const CRC32C_ARG_SLICE_SIZE: usize = 8;
 

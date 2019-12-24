@@ -24,7 +24,7 @@ impl<'a> CompactNodeInfo<'a> {
             Err(LengthError::new(LengthErrorKind::LengthMultipleExpected,
                                  BYTES_PER_COMPACT_NODE_INFO))
         } else {
-            Ok(CompactNodeInfo { nodes: nodes })
+            Ok(CompactNodeInfo { nodes })
         }
     }
 
@@ -92,7 +92,7 @@ impl<'a> CompactValueInfo<'a> {
             }
         }
 
-        Ok(CompactValueInfo { values: values })
+        Ok(CompactValueInfo { values })
     }
 
     pub fn values(&self) -> &'a [Bencode<'a>] {
@@ -173,7 +173,7 @@ mod tests {
     use bip_util::bt::NodeId;
     use bip_util::sha::ShaHash;
 
-    use message::compact_info::{CompactNodeInfo, CompactValueInfo};
+    use crate::message::compact_info::{CompactNodeInfo, CompactValueInfo};
 
     #[test]
     fn positive_compact_nodes_empty() {

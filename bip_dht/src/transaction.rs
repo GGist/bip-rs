@@ -73,14 +73,14 @@ impl AIDGenerator {
         bip_util::fisher_shuffle(&mut action_ids);
 
         AIDGenerator {
-            next_alloc: next_alloc,
+            next_alloc,
             curr_index: 0,
-            action_ids: action_ids,
+            action_ids,
         }
     }
 
     pub fn generate(&mut self) -> MIDGenerator {
-        let opt_action_id = self.action_ids.get(self.curr_index).map(|a| *a);
+        let opt_action_id = self.action_ids.get(self.curr_index).copied();
 
         if let Some(action_id) = opt_action_id {
             self.curr_index += 1;
@@ -136,7 +136,7 @@ impl MIDGenerator {
     fn new(action_id: u64) -> MIDGenerator {
         // In order to speed up tests, we will generate the first block lazily.
         MIDGenerator {
-            action_id: action_id,
+            action_id,
             next_alloc: 0,
             curr_index: MESSAGE_ID_PREALLOC_LEN,
             message_ids: [0u64; MESSAGE_ID_PREALLOC_LEN],
@@ -148,7 +148,7 @@ impl MIDGenerator {
     }
 
     pub fn generate(&mut self) -> TransactionID {
-        let opt_message_id = self.message_ids.get(self.curr_index).map(|m| *m);
+        let opt_message_id = self.message_ids.get(self.curr_index).copied();
 
         if let Some(message_id) = opt_message_id {
             self.curr_index += 1;
@@ -201,8 +201,8 @@ impl TransactionID {
         let trans_id_bytes = convert::eight_bytes_to_array(trans_id);
 
         TransactionID {
-            trans_id: trans_id,
-            trans_id_bytes: trans_id_bytes,
+            trans_id,
+            trans_id_bytes,
         }
     }
 

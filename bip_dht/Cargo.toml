@@ -22,7 +22,7 @@ log           = "0.3.0"
 mio           = "0.5.0"
 rand          = "0.3.0"
 chrono        = "0.2.0"
-error-chain   = "0.7.0"
+error-chain   = "0.12.1"
 
 [features]
 unstable      = []

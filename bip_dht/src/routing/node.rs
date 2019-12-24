@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 
 use bip_util::bt::NodeId;
 use bip_util::test;
-use chrono::{Duration, DateTime, UTC};
+use chrono::{DateTime, Duration, UTC};
 
 // TODO: Should remove as_* functions and replace them with from_requested, from_responded, etc to hide the logic
 // of the nodes initial status.
@@ -49,8 +49,8 @@ impl Node {
     /// Create a new node that has recently responded to us but never requested from us.
     pub fn as_good(id: NodeId, addr: SocketAddr) -> Node {
         Node {
-            id: id,
-            addr: addr,
+            id,
+            addr,
             last_response: Cell::new(Some(UTC::now())),
             last_request: Cell::new(None),
             refresh_requests: Cell::new(0),
@@ -64,8 +64,8 @@ impl Node {
         let last_response = test::travel_into_past(last_response_offset);
 
         Node {
-            id: id,
-            addr: addr,
+            id,
+            addr,
             last_response: Cell::new(Some(last_response)),
             last_request: Cell::new(None),
             refresh_requests: Cell::new(0),
@@ -75,8 +75,8 @@ impl Node {
     /// Create a new node that has never responded to us or requested from us.
     pub fn as_bad(id: NodeId, addr: SocketAddr) -> Node {
         Node {
-            id: id,
-            addr: addr,
+            id,
+            addr,
             last_response: Cell::new(None),
             last_request: Cell::new(None),
             refresh_requests: Cell::new(0),
@@ -129,7 +129,7 @@ impl Node {
                     for (src, dst) in v4.ip().octets().iter().zip(encoded_iter.by_ref()) {
                         *dst = *src;
                     }
-                }
+                },
                 _ => panic!("bip_dht: Cannot encode a SocketAddrV6..."),
             }
         }
@@ -166,7 +166,8 @@ impl PartialEq<Node> for Node {
 
 impl Hash for Node {
     fn hash<H>(&self, state: &mut H)
-        where H: Hasher
+    where
+        H: Hasher,
     {
         self.id.hash(state);
         self.addr.hash(state);
@@ -187,13 +188,15 @@ impl Clone for Node {
 
 impl Debug for Node {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        f.write_fmt(format_args!("Node{{ id: {:?}, addr: {:?}, last_request: {:?}, \
+        f.write_fmt(format_args!(
+            "Node{{ id: {:?}, addr: {:?}, last_request: {:?}, \
                                   last_response: {:?}, refresh_requests: {:?} }}",
-                                 self.id,
-                                 self.addr,
-                                 self.last_request.get(),
-                                 self.last_response.get(),
-                                 self.refresh_requests.get()))
+            self.id,
+            self.addr,
+            self.last_request.get(),
+            self.last_response.get(),
+            self.refresh_requests.get()
+        ))
     }
 }
 
@@ -250,13 +253,13 @@ fn recently_requested(node: &Node, curr_time: DateTime<UTC>) -> NodeStatus {
 #[cfg(test)]
 mod tests {
     use std::iter;
-    use std::net::{Ipv4Addr, SocketAddrV4, SocketAddr};
+    use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 
     use bip_util::bt::NodeId;
     use bip_util::test as bip_test;
     use chrono::Duration;
 
-    use routing::node::{Node, NodeStatus};
+    use crate::routing::node::{Node, NodeStatus};
 
     #[test]
     fn positive_encode_node() {
@@ -272,10 +275,7 @@ mod tests {
         let encoded_node = node.encode();
 
         let port_bytes = [(port >> 8) as u8, port as u8];
-        for (expected, actual) in node_id.iter()
-            .chain(ip_addr.iter())
-            .chain(port_bytes.iter())
-            .zip(encoded_node.iter()) {
+        for (expected, actual) in node_id.iter().chain(ip_addr.iter()).chain(port_bytes.iter()).zip(encoded_node.iter()) {
             assert_eq!(expected, actual);
         }
     }
@@ -289,8 +289,7 @@ mod tests {
 
     #[test]
     fn positive_as_questionable() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(),
-                                         bip_test::dummy_socket_addr_v4());
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         assert_eq!(node.status(), NodeStatus::Questionable);
     }
@@ -304,8 +303,7 @@ mod tests {
 
     #[test]
     fn positive_response_renewal() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(),
-                                         bip_test::dummy_socket_addr_v4());
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         node.remote_response();
 
@@ -314,8 +312,7 @@ mod tests {
 
     #[test]
     fn positive_request_renewal() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(),
-                                         bip_test::dummy_socket_addr_v4());
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         node.remote_request();
 
@@ -336,8 +333,7 @@ mod tests {
 
     #[test]
     fn positive_node_idle_reqeusts() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(),
-                                         bip_test::dummy_socket_addr_v4());
+        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         for _ in 0..super::MAX_REFRESH_REQUESTS {
             node.local_request();

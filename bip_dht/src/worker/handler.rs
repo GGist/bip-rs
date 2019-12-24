@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::convert::AsRef;
 use std::io;
-use std::net::{SocketAddr, UdpSocket, SocketAddrV4, SocketAddrV6};
 use std::mem;
+use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, UdpSocket};
 use std::sync::mpsc::{self, SyncSender};
 use std::thread;
 
@@ -14,28 +14,28 @@ use bip_util::net::IpAddr;
 use log::LogLevel;
 use mio::{self, EventLoop, Handler};
 
-use message::MessageType;
-use message::ping::PingResponse;
-use message::find_node::FindNodeResponse;
-use message::get_peers::{GetPeersResponse, CompactInfoType};
-use message::announce_peer::{AnnouncePeerResponse, ConnectPort};
-use message::error::{ErrorCode, ErrorMessage};
-use message::request::RequestType;
-use message::response::{ResponseType, ExpectedResponse};
-use message::compact_info::{CompactNodeInfo, CompactValueInfo};
-use router::Router;
-use routing::node::Node;
-use routing::table::RoutingTable;
-use storage::AnnounceStorage;
-use token::{TokenStore, Token};
-use transaction::{AIDGenerator, TransactionID, ActionID};
-use worker::{OneshotTask, ScheduledTask, DhtEvent, ShutdownCause};
-use worker::bootstrap::{TableBootstrap, BootstrapStatus};
-use worker::lookup::{TableLookup, LookupStatus};
-use worker::refresh::{TableRefresh, RefreshStatus};
+use crate::message::announce_peer::{AnnouncePeerResponse, ConnectPort};
+use crate::message::compact_info::{CompactNodeInfo, CompactValueInfo};
+use crate::message::error::{ErrorCode, ErrorMessage};
+use crate::message::find_node::FindNodeResponse;
+use crate::message::get_peers::{CompactInfoType, GetPeersResponse};
+use crate::message::ping::PingResponse;
+use crate::message::request::RequestType;
+use crate::message::response::{ExpectedResponse, ResponseType};
+use crate::message::MessageType;
+use crate::router::Router;
+use crate::routing::node::Node;
+use crate::routing::table::RoutingTable;
+use crate::storage::AnnounceStorage;
+use crate::token::{Token, TokenStore};
+use crate::transaction::{AIDGenerator, ActionID, TransactionID};
+use crate::worker::bootstrap::{BootstrapStatus, TableBootstrap};
+use crate::worker::lookup::{LookupStatus, TableLookup};
+use crate::worker::refresh::{RefreshStatus, TableRefresh};
+use crate::worker::{DhtEvent, OneshotTask, ScheduledTask, ShutdownCause};
 
-use routing::table::BucketContents;
-use routing::node::NodeStatus;
+use crate::routing::node::NodeStatus;
+use crate::routing::table::BucketContents;
 
 // TODO: Update modules to use find_node on the routing table to update the status of a given node.
 
@@ -43,17 +43,19 @@ const MAX_BOOTSTRAP_ATTEMPTS: usize = 3;
 const BOOTSTRAP_GOOD_NODE_THRESHOLD: usize = 10;
 
 /// Spawns a DHT handler that maintains our routing table and executes our actions on the DHT.
-pub fn create_dht_handler<H>(table: RoutingTable,
-                             out: SyncSender<(Vec<u8>, SocketAddr)>,
-                             read_only: bool,
-                             handshaker: H,
-                             kill_sock: UdpSocket,
-                             kill_addr: SocketAddr)
-                             -> io::Result<mio::Sender<OneshotTask>>
-    where H: Handshaker + 'static
+pub fn create_dht_handler<H>(
+    table: RoutingTable,
+    out: SyncSender<(Vec<u8>, SocketAddr)>,
+    read_only: bool,
+    handshaker: H,
+    kill_sock: UdpSocket,
+    kill_addr: SocketAddr,
+) -> io::Result<mio::Sender<OneshotTask>>
+where
+    H: Handshaker + 'static,
 {
     let mut handler = DhtHandler::new(table, out, read_only, handshaker);
-    let mut event_loop = try!(EventLoop::new());
+    let mut event_loop = EventLoop::new()?;
 
     let loop_channel = event_loop.channel();
 
@@ -128,13 +130,10 @@ struct DetachedDhtHandler<H> {
 }
 
 impl<H> DhtHandler<H>
-    where H: Handshaker
+where
+    H: Handshaker,
 {
-    fn new(table: RoutingTable,
-           out: SyncSender<(Vec<u8>, SocketAddr)>,
-           read_only: bool,
-           handshaker: H)
-           -> DhtHandler<H> {
+    fn new(table: RoutingTable, out: SyncSender<(Vec<u8>, SocketAddr)>, read_only: bool, handshaker: H) -> DhtHandler<H> {
         let mut aid_generator = AIDGenerator::new();
 
         // Insert the refresh task to execute after the bootstrap
@@ -144,27 +143,28 @@ impl<H> DhtHandler<H>
         let future_actions = vec![PostBootstrapAction::Refresh(table_refresh, refresh_trans_id)];
 
         let detached = DetachedDhtHandler {
-            read_only: read_only,
-            handshaker: handshaker,
+            read_only,
+            handshaker,
             out_channel: out,
             token_store: TokenStore::new(),
-            aid_generator: aid_generator,
+            aid_generator,
             bootstrapping: false,
             routing_table: table,
             active_stores: AnnounceStorage::new(),
-            future_actions: future_actions,
+            future_actions,
             event_notifiers: Vec::new(),
         };
 
         DhtHandler {
-            detached: detached,
+            detached,
             table_actions: HashMap::new(),
         }
     }
 }
 
 impl<H> Handler for DhtHandler<H>
-    where H: Handshaker
+where
+    H: Handshaker,
 {
     type Timeout = (u64, ScheduledTask);
     type Message = OneshotTask;
@@ -173,23 +173,19 @@ impl<H> Handler for DhtHandler<H>
         match task {
             OneshotTask::Incoming(buffer, addr) => {
                 handle_incoming(self, event_loop, &buffer[..], addr);
-            }
+            },
             OneshotTask::RegisterSender(send) => {
                 handle_register_sender(self, send);
-            }
+            },
             OneshotTask::StartBootstrap(routers, nodes) => {
                 handle_start_bootstrap(self, event_loop, routers, nodes);
-            }
+            },
             OneshotTask::StartLookup(info_hash, should_announce) => {
-                handle_start_lookup(&mut self.table_actions,
-                                    &mut self.detached,
-                                    event_loop,
-                                    info_hash,
-                                    should_announce);
-            }
+                handle_start_lookup(&mut self.table_actions, &mut self.detached, event_loop, info_hash, should_announce);
+            },
             OneshotTask::Shutdown(cause) => {
                 handle_shutdown(self, event_loop, cause);
-            }
+            },
         }
     }
 
@@ -198,20 +194,17 @@ impl<H> Handler for DhtHandler<H>
 
         match task {
             ScheduledTask::CheckTableRefresh(trans_id) => {
-                handle_check_table_refresh(&mut self.table_actions,
-                                           &mut self.detached,
-                                           event_loop,
-                                           trans_id);
-            }
+                handle_check_table_refresh(&mut self.table_actions, &mut self.detached, event_loop, trans_id);
+            },
             ScheduledTask::CheckBootstrapTimeout(trans_id) => {
                 handle_check_bootstrap_timeout(self, event_loop, trans_id);
-            }
+            },
             ScheduledTask::CheckLookupTimeout(trans_id) => {
                 handle_check_lookup_timeout(self, event_loop, trans_id);
-            }
+            },
             ScheduledTask::CheckLookupEndGame(trans_id) => {
                 handle_check_lookup_endgame(self, event_loop, trans_id);
-            }
+            },
         }
     }
 }
@@ -220,7 +213,8 @@ impl<H> Handler for DhtHandler<H>
 
 /// Shut down the event loop by sending it a shutdown message with the given cause.
 fn shutdown_event_loop<H>(event_loop: &mut EventLoop<DhtHandler<H>>, cause: ShutdownCause)
-    where H: Handshaker
+where
+    H: Handshaker,
 {
     if event_loop.channel().send(OneshotTask::Shutdown(cause)).is_err() {
         error!("bip_dht: Failed to sent a shutdown message to the EventLoop...");
@@ -244,15 +238,16 @@ fn should_rebootstrap(table: &RoutingTable) -> bool {
 
 /// Broadcast that the bootstrap has completed.
 /// IMPORTANT: Should call this instead of broadcast_dht_event()!
-fn broadcast_bootstrap_completed<H>(action_id: ActionID,
-                                    table_actions: &mut HashMap<ActionID, TableAction>,
-                                    work_storage: &mut DetachedDhtHandler<H>,
-                                    event_loop: &mut EventLoop<DhtHandler<H>>)
-    where H: Handshaker
+fn broadcast_bootstrap_completed<H>(
+    action_id: ActionID,
+    table_actions: &mut HashMap<ActionID, TableAction>,
+    work_storage: &mut DetachedDhtHandler<H>,
+    event_loop: &mut EventLoop<DhtHandler<H>>,
+) where
+    H: Handshaker,
 {
     // Send notification that the bootstrap has completed.
-    broadcast_dht_event(&mut work_storage.event_notifiers,
-                        DhtEvent::BootstrapCompleted);
+    broadcast_dht_event(&mut work_storage.event_notifiers, DhtEvent::BootstrapCompleted);
 
     // Indicates we are out of the bootstrapping phase
     work_storage.bootstrapping = false;
@@ -265,35 +260,32 @@ fn broadcast_bootstrap_completed<H>(action_id: ActionID,
     for table_action in future_actions.drain(..) {
         match table_action {
             PostBootstrapAction::Lookup(info_hash, should_announce) => {
-                handle_start_lookup(table_actions,
-                                    work_storage,
-                                    event_loop,
-                                    info_hash,
-                                    should_announce);
-            }
+                handle_start_lookup(table_actions, work_storage, event_loop, info_hash, should_announce);
+            },
             PostBootstrapAction::Refresh(refresh, trans_id) => {
                 table_actions.insert(trans_id.action_id(), TableAction::Refresh(refresh));
 
                 handle_check_table_refresh(table_actions, work_storage, event_loop, trans_id);
-            }
+            },
         }
     }
 }
 
 /// Attempt to rebootstrap or shutdown the dht if we have no nodes after rebootstrapping multiple time.
 /// Returns None if the DHT is shutting down, Some(true) if the rebootstrap process started, Some(false) if a rebootstrap is not necessary.
-fn attempt_rebootstrap<H>(bootstrap: &mut TableBootstrap,
-                          attempts: &mut usize,
-                          work_storage: &mut DetachedDhtHandler<H>,
-                          event_loop: &mut EventLoop<DhtHandler<H>>)
-                          -> Option<bool>
-    where H: Handshaker
+fn attempt_rebootstrap<H>(
+    bootstrap: &mut TableBootstrap,
+    attempts: &mut usize,
+    work_storage: &mut DetachedDhtHandler<H>,
+    event_loop: &mut EventLoop<DhtHandler<H>>,
+) -> Option<bool>
+where
+    H: Handshaker,
 {
     // Increment the bootstrap counter
     *attempts += 1;
 
-    warn!("bip_dht: Bootstrap attempt {} failed, attempting a rebootstrap...",
-          *attempts);
+    warn!("bip_dht: Bootstrap attempt {} failed, attempting a rebootstrap...", *attempts);
 
     // Check if we reached the maximum bootstrap attempts
     if *attempts >= MAX_BOOTSTRAP_ATTEMPTS {
@@ -313,25 +305,23 @@ fn attempt_rebootstrap<H>(bootstrap: &mut TableBootstrap,
             BootstrapStatus::Failed => {
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
                 None
-            }
+            },
             BootstrapStatus::Completed => {
                 if should_rebootstrap(&work_storage.routing_table) {
                     attempt_rebootstrap(bootstrap, attempts, work_storage, event_loop)
                 } else {
                     Some(false)
                 }
-            }
+            },
         }
     }
 }
 
 // ----------------------------------------------------------------------------//
 
-fn handle_incoming<H>(handler: &mut DhtHandler<H>,
-                      event_loop: &mut EventLoop<DhtHandler<H>>,
-                      buffer: &[u8],
-                      addr: SocketAddr)
-    where H: Handshaker
+fn handle_incoming<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, buffer: &[u8], addr: SocketAddr)
+where
+    H: Handshaker,
 {
     let (work_storage, table_actions) = (&mut handler.detached, &mut handler.table_actions);
 
@@ -380,23 +370,26 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
             let node = Node::as_good(p.node_id(), addr);
 
             // Node requested from us, mark it in the Routingtable
-            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
+            if let Some(n) = work_storage.routing_table.find_node(&node) {
+                n.remote_request()
+            }
 
-            let ping_rsp = PingResponse::new(p.transaction_id(),
-                                             work_storage.routing_table.node_id());
+            let ping_rsp = PingResponse::new(p.transaction_id(), work_storage.routing_table.node_id());
             let ping_msg = ping_rsp.encode();
 
             if work_storage.out_channel.send((ping_msg, addr)).is_err() {
                 error!("bip_dht: Failed to send a ping response on the out channel...");
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
             }
-        }
+        },
         Ok(MessageType::Request(RequestType::FindNode(f))) => {
             info!("bip_dht: Received a FindNodeRequest...");
             let node = Node::as_good(f.node_id(), addr);
 
             // Node requested from us, mark it in the Routingtable
-            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
+            if let Some(n) = work_storage.routing_table.find_node(&node) {
+                n.remote_request()
+            }
 
             // Grab the closest nodes
             let mut closest_nodes_bytes = Vec::with_capacity(26 * 8);
@@ -404,23 +397,22 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
                 closest_nodes_bytes.extend_from_slice(&node.encode());
             }
 
-            let find_node_rsp = FindNodeResponse::new(f.transaction_id(),
-                                                      work_storage.routing_table.node_id(),
-                                                      &closest_nodes_bytes)
-                .unwrap();
+            let find_node_rsp = FindNodeResponse::new(f.transaction_id(), work_storage.routing_table.node_id(), &closest_nodes_bytes).unwrap();
             let find_node_msg = find_node_rsp.encode();
 
             if work_storage.out_channel.send((find_node_msg, addr)).is_err() {
                 error!("bip_dht: Failed to send a find node response on the out channel...");
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
             }
-        }
+        },
         Ok(MessageType::Request(RequestType::GetPeers(g))) => {
             info!("bip_dht: Received a GetPeersRequest...");
             let node = Node::as_good(g.node_id(), addr);
 
             // Node requested from us, mark it in the Routingtable
-            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
+            if let Some(n) = work_storage.routing_table.find_node(&node) {
+                n.remote_request()
+            }
 
             // TODO: Move socket address serialization code into bip_util
             // TODO: Check what the maximum number of values we can give without overflowing a udp packet
@@ -432,16 +424,14 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
 
                 match addr {
                     SocketAddr::V4(v4_addr) => {
-                        for (src, dst) in convert::ipv4_to_bytes_be(*v4_addr.ip())
-                            .iter()
-                            .zip(bytes.iter_mut()) {
+                        for (src, dst) in convert::ipv4_to_bytes_be(*v4_addr.ip()).iter().zip(bytes.iter_mut()) {
                             *dst = *src;
                         }
-                    }
+                    },
                     SocketAddr::V6(_) => {
                         error!("AnnounceStorage contained an IPv6 Address...");
                         return;
-                    }
+                    },
                 };
 
                 bytes[4] = (port >> 8) as u8;
@@ -466,29 +456,35 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
             // Wrap up the nodes/values we are going to be giving them
             let token = work_storage.token_store.checkout(IpAddr::from_socket_addr(addr));
             let comapct_info_type = if !contact_info_bencode.is_empty() {
-                CompactInfoType::Both(CompactNodeInfo::new(&closest_nodes_bytes).unwrap(),
-                                      CompactValueInfo::new(&contact_info_bencode).unwrap())
+                CompactInfoType::Both(
+                    CompactNodeInfo::new(&closest_nodes_bytes).unwrap(),
+                    CompactValueInfo::new(&contact_info_bencode).unwrap(),
+                )
             } else {
                 CompactInfoType::Nodes(CompactNodeInfo::new(&closest_nodes_bytes).unwrap())
             };
 
-            let get_peers_rsp = GetPeersResponse::new(g.transaction_id(),
-                                                      work_storage.routing_table.node_id(),
-                                                      Some(token.as_ref()),
-                                                      comapct_info_type);
+            let get_peers_rsp = GetPeersResponse::new(
+                g.transaction_id(),
+                work_storage.routing_table.node_id(),
+                Some(token.as_ref()),
+                comapct_info_type,
+            );
             let get_peers_msg = get_peers_rsp.encode();
 
             if work_storage.out_channel.send((get_peers_msg, addr)).is_err() {
                 error!("bip_dht: Failed to send a get peers response on the out channel...");
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
             }
-        }
+        },
         Ok(MessageType::Request(RequestType::AnnouncePeer(a))) => {
             info!("bip_dht: Received an AnnouncePeerRequest...");
             let node = Node::as_good(a.node_id(), addr);
 
             // Node requested from us, mark it in the Routingtable
-            work_storage.routing_table.find_node(&node).map(|n| n.remote_request());
+            if let Some(n) = work_storage.routing_table.find_node(&node) {
+                n.remote_request()
+            }
 
             // Validate the token
             let is_valid = match Token::new(a.token()) {
@@ -499,50 +495,40 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
             // Create a socket address based on the implied/explicit port number
             let connect_addr = match a.connect_port() {
                 ConnectPort::Implied => addr,
-                ConnectPort::Explicit(port) => {
-                    match addr {
-                        SocketAddr::V4(v4_addr) => {
-                            SocketAddr::V4(SocketAddrV4::new(*v4_addr.ip(), port))
-                        }
-                        SocketAddr::V6(v6_addr) => {
-                            SocketAddr::V6(SocketAddrV6::new(*v6_addr.ip(),
-                                                             port,
-                                                             v6_addr.flowinfo(),
-                                                             v6_addr.scope_id()))
-                        }
-                    }
-                }
+                ConnectPort::Explicit(port) => match addr {
+                    SocketAddr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(*v4_addr.ip(), port)),
+                    SocketAddr::V6(v6_addr) => SocketAddr::V6(SocketAddrV6::new(*v6_addr.ip(), port, v6_addr.flowinfo(), v6_addr.scope_id())),
+                },
             };
 
             // Resolve type of response we are going to send
             let response_msg = if !is_valid {
                 // Node gave us an invalid token
                 warn!("bip_dht: Remote node sent us an invalid token for an AnnounceRequest...");
-                ErrorMessage::new(a.transaction_id().to_vec(),
-                                  ErrorCode::ProtocolError,
-                                  "Received An Invalid Token".to_owned())
-                    .encode()
-            } else if work_storage.active_stores
-                .add_item(a.info_hash(), connect_addr) {
+                ErrorMessage::new(
+                    a.transaction_id().to_vec(),
+                    ErrorCode::ProtocolError,
+                    "Received An Invalid Token".to_owned(),
+                )
+                .encode()
+            } else if work_storage.active_stores.add_item(a.info_hash(), connect_addr) {
                 // Node successfully stored the value with us, send an announce response
-                AnnouncePeerResponse::new(a.transaction_id(), work_storage.routing_table.node_id())
-                    .encode()
+                AnnouncePeerResponse::new(a.transaction_id(), work_storage.routing_table.node_id()).encode()
             } else {
                 // Node unsuccessfully stored the value with us, send them an error message
                 // TODO: Spec doesnt actually say what error message to send, or even if we should send one...
-                warn!("bip_dht: AnnounceStorage failed to store contact information because it \
-                       is full...");
-                ErrorMessage::new(a.transaction_id().to_vec(),
-                                  ErrorCode::ServerError,
-                                  "Announce Storage Is Full".to_owned())
-                    .encode()
+                warn!(
+                    "bip_dht: AnnounceStorage failed to store contact information because it \
+                       is full..."
+                );
+                ErrorMessage::new(a.transaction_id().to_vec(), ErrorCode::ServerError, "Announce Storage Is Full".to_owned()).encode()
             };
 
             if work_storage.out_channel.send((response_msg, addr)).is_err() {
                 error!("bip_dht: Failed to send an announce peer response on the out channel...");
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
             }
-        }
+        },
         Ok(MessageType::Response(ResponseType::FindNode(f))) => {
             info!("bip_dht: Received a FindNodeResponse...");
             let trans_id = TransactionID::from_bytes(f.transaction_id()).unwrap();
@@ -560,46 +546,41 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
                     Some(&mut TableAction::Refresh(_)) => {
                         work_storage.routing_table.add_node(node);
                         None
-                    }
+                    },
                     Some(&mut TableAction::Bootstrap(ref mut bootstrap, ref mut attempts)) => {
                         if !bootstrap.is_router(&node.addr()) {
                             work_storage.routing_table.add_node(node);
                         }
                         Some((bootstrap, attempts))
-                    }
+                    },
                     Some(&mut TableAction::Lookup(_)) => {
                         error!("bip_dht: Resolved a FindNodeResponse ActionID to a TableLookup...");
                         None
-                    }
+                    },
                     None => {
-                        error!("bip_dht: Resolved a TransactionID to a FindNodeResponse but no \
-                                action found...");
+                        error!(
+                            "bip_dht: Resolved a TransactionID to a FindNodeResponse but no \
+                                action found..."
+                        );
                         None
-                    }
+                    },
                 };
 
                 if let Some((bootstrap, attempts)) = opt_bootstrap {
-                    match bootstrap.recv_response(&trans_id,
-                                                  &work_storage.routing_table,
-                                                  &work_storage.out_channel,
-                                                  event_loop) {
+                    match bootstrap.recv_response(&trans_id, &work_storage.routing_table, &work_storage.out_channel, event_loop) {
                         BootstrapStatus::Idle => true,
                         BootstrapStatus::Bootstrapping => false,
                         BootstrapStatus::Failed => {
                             shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
                             false
-                        }
+                        },
                         BootstrapStatus::Completed => {
                             if should_rebootstrap(&work_storage.routing_table) {
-                                attempt_rebootstrap(bootstrap,
-                                                    attempts,
-                                                    work_storage,
-                                                    event_loop) ==
-                                Some(false)
+                                attempt_rebootstrap(bootstrap, attempts, work_storage, event_loop) == Some(false)
                             } else {
                                 true
                             }
-                        }
+                        },
                     }
                 } else {
                     false
@@ -607,10 +588,7 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
             };
 
             if bootstrap_complete {
-                broadcast_bootstrap_completed(trans_id.action_id(),
-                                              table_actions,
-                                              work_storage,
-                                              event_loop);
+                broadcast_bootstrap_completed(trans_id.action_id(), table_actions, work_storage, event_loop);
             }
 
             if log_enabled!(LogLevel::Info) {
@@ -619,12 +597,8 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
                 for (index, bucket) in work_storage.routing_table.buckets().enumerate() {
                     let num_nodes = match bucket {
                         BucketContents::Empty => 0,
-                        BucketContents::Sorted(b) => {
-                            b.iter().filter(|n| n.status() == NodeStatus::Good).count()
-                        }
-                        BucketContents::Assorted(b) => {
-                            b.iter().filter(|n| n.status() == NodeStatus::Good).count()
-                        }
+                        BucketContents::Sorted(b) => b.iter().filter(|n| n.status() == NodeStatus::Good).count(),
+                        BucketContents::Assorted(b) => b.iter().filter(|n| n.status() == NodeStatus::Good).count(),
                     };
                     total += num_nodes;
 
@@ -635,7 +609,7 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
 
                 print!("\nTotal: {}\n\n\n", total);
             }
-        }
+        },
         Ok(MessageType::Response(ResponseType::GetPeers(g))) => {
             // info!("bip_dht: Received a GetPeersResponse...");
             let trans_id = TransactionID::from_bytes(g.transaction_id()).unwrap();
@@ -647,63 +621,59 @@ fn handle_incoming<H>(handler: &mut DhtHandler<H>,
                 match table_actions.get_mut(&trans_id.action_id()) {
                     Some(&mut TableAction::Lookup(ref mut lookup)) => Some(lookup),
                     Some(&mut TableAction::Refresh(_)) => {
-                        error!("bip_dht: Resolved a GetPeersResponse ActionID to a \
-                                TableRefresh...");
+                        error!(
+                            "bip_dht: Resolved a GetPeersResponse ActionID to a \
+                                TableRefresh..."
+                        );
                         None
-                    }
+                    },
                     Some(&mut TableAction::Bootstrap(_, _)) => {
-                        error!("bip_dht: Resolved a GetPeersResponse ActionID to a \
-                                TableBootstrap...");
+                        error!(
+                            "bip_dht: Resolved a GetPeersResponse ActionID to a \
+                                TableBootstrap..."
+                        );
                         None
-                    }
+                    },
                     None => {
-                        error!("bip_dht: Resolved a TransactionID to a GetPeersResponse but no \
-                                action found...");
+                        error!(
+                            "bip_dht: Resolved a TransactionID to a GetPeersResponse but no \
+                                action found..."
+                        );
                         None
-                    }
+                    },
                 }
             };
 
             if let Some(lookup) = opt_lookup {
-                match lookup.recv_response(node,
-                                           &trans_id,
-                                           g,
-                                           &work_storage.routing_table,
-                                           &work_storage.out_channel,
-                                           event_loop) {
+                match lookup.recv_response(node, &trans_id, g, &work_storage.routing_table, &work_storage.out_channel, event_loop) {
                     LookupStatus::Searching => (),
-                    LookupStatus::Completed => {
-                        broadcast_dht_event(&mut work_storage.event_notifiers,
-                                            DhtEvent::LookupCompleted(lookup.info_hash()))
-                    }
-                    LookupStatus::Failed => {
-                        shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
-                    }
+                    LookupStatus::Completed => broadcast_dht_event(&mut work_storage.event_notifiers, DhtEvent::LookupCompleted(lookup.info_hash())),
+                    LookupStatus::Failed => shutdown_event_loop(event_loop, ShutdownCause::Unspecified),
                     LookupStatus::Values(values) => {
                         for v4_addr in values {
                             let sock_addr = SocketAddr::V4(v4_addr);
                             work_storage.handshaker.connect(None, lookup.info_hash(), sock_addr);
                         }
-                    }
+                    },
                 }
             }
-        }
+        },
         Ok(MessageType::Response(ResponseType::Ping(_))) => {
             info!("bip_dht: Received a PingResponse...");
 
             // Yeah...we should never be getting this type of response (we never use this message)
-        }
+        },
         Ok(MessageType::Response(ResponseType::AnnouncePeer(_))) => {
             info!("bip_dht: Received an AnnouncePeerResponse...");
-        }
+        },
         Ok(MessageType::Error(e)) => {
             info!("bip_dht: Received an ErrorMessage...");
 
             warn!("bip_dht: KRPC error message from {:?}: {:?}", addr, e);
-        }
+        },
         Err(e) => {
             warn!("bip_dht: Error parsing KRPC message: {:?}", e);
-        }
+        },
     }
 }
 
@@ -711,23 +681,17 @@ fn handle_register_sender<H>(handler: &mut DhtHandler<H>, sender: mpsc::Sender<D
     handler.detached.event_notifiers.push(sender);
 }
 
-fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>,
-                             event_loop: &mut EventLoop<DhtHandler<H>>,
-                             routers: Vec<Router>,
-                             nodes: Vec<SocketAddr>)
-    where H: Handshaker
+fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, routers: Vec<Router>, nodes: Vec<SocketAddr>)
+where
+    H: Handshaker,
 {
     let (work_storage, table_actions) = (&mut handler.detached, &mut handler.table_actions);
 
-    let router_iter = routers.into_iter()
-        .filter_map(|r| r.ipv4_addr().ok().map(|v4| SocketAddr::V4(v4)));
+    let router_iter = routers.into_iter().filter_map(|r| r.ipv4_addr().ok().map(SocketAddr::V4));
 
     let mid_generator = work_storage.aid_generator.generate();
     let action_id = mid_generator.action_id();
-    let mut table_bootstrap = TableBootstrap::new(work_storage.routing_table.node_id(),
-                                                  mid_generator,
-                                                  nodes,
-                                                  router_iter);
+    let mut table_bootstrap = TableBootstrap::new(work_storage.routing_table.node_id(), mid_generator, nodes, router_iter);
 
     // Begin the bootstrap operation
     let bootstrap_status = table_bootstrap.start_bootstrap(&work_storage.out_channel, event_loop);
@@ -741,14 +705,12 @@ fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>,
         BootstrapStatus::Failed => {
             shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
             false
-        }
+        },
         BootstrapStatus::Completed => {
             // Check if our bootstrap was actually good
             if should_rebootstrap(&work_storage.routing_table) {
-                let (mut bootstrap, mut attempts) = match table_actions.get_mut(&action_id) {
-                    Some(&mut TableAction::Bootstrap(ref mut bootstrap, ref mut attempts)) => {
-                        (bootstrap, attempts)
-                    }
+                let (bootstrap, attempts) = match table_actions.get_mut(&action_id) {
+                    Some(&mut TableAction::Bootstrap(ref mut bootstrap, ref mut attempts)) => (bootstrap, attempts),
                     _ => panic!("bip_dht: Bug, in DhtHandler..."),
                 };
 
@@ -756,7 +718,7 @@ fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>,
             } else {
                 true
             }
-        }
+        },
     };
 
     if bootstrap_complete {
@@ -764,12 +726,14 @@ fn handle_start_bootstrap<H>(handler: &mut DhtHandler<H>,
     }
 }
 
-fn handle_start_lookup<H>(table_actions: &mut HashMap<ActionID, TableAction>,
-                          work_storage: &mut DetachedDhtHandler<H>,
-                          event_loop: &mut EventLoop<DhtHandler<H>>,
-                          info_hash: InfoHash,
-                          should_announce: bool)
-    where H: Handshaker
+fn handle_start_lookup<H>(
+    table_actions: &mut HashMap<ActionID, TableAction>,
+    work_storage: &mut DetachedDhtHandler<H>,
+    event_loop: &mut EventLoop<DhtHandler<H>>,
+    info_hash: InfoHash,
+    should_announce: bool,
+) where
+    H: Handshaker,
 {
     let mid_generator = work_storage.aid_generator.generate();
     let action_id = mid_generator.action_id();
@@ -779,61 +743,67 @@ fn handle_start_lookup<H>(table_actions: &mut HashMap<ActionID, TableAction>,
         work_storage.future_actions.push(PostBootstrapAction::Lookup(info_hash, should_announce));
     } else {
         // Start the lookup right now if not bootstrapping
-        match TableLookup::new(work_storage.routing_table.node_id(),
-                               info_hash,
-                               mid_generator,
-                               should_announce,
-                               &work_storage.routing_table,
-                               &work_storage.out_channel,
-                               event_loop) {
+        match TableLookup::new(
+            work_storage.routing_table.node_id(),
+            info_hash,
+            mid_generator,
+            should_announce,
+            &work_storage.routing_table,
+            &work_storage.out_channel,
+            event_loop,
+        ) {
             Some(lookup) => {
                 table_actions.insert(action_id, TableAction::Lookup(lookup));
-            }
+            },
             None => shutdown_event_loop(event_loop, ShutdownCause::Unspecified),
         }
     }
 }
 
-fn handle_shutdown<H>(handler: &mut DhtHandler<H>,
-                      event_loop: &mut EventLoop<DhtHandler<H>>,
-                      cause: ShutdownCause)
-    where H: Handshaker
+fn handle_shutdown<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, cause: ShutdownCause)
+where
+    H: Handshaker,
 {
     let (work_storage, _) = (&mut handler.detached, &mut handler.table_actions);
 
-    broadcast_dht_event(&mut work_storage.event_notifiers,
-                        DhtEvent::ShuttingDown(cause));
+    broadcast_dht_event(&mut work_storage.event_notifiers, DhtEvent::ShuttingDown(cause));
 
     event_loop.shutdown();
 }
 
-fn handle_check_table_refresh<H>(table_actions: &mut HashMap<ActionID, TableAction>,
-                                 work_storage: &mut DetachedDhtHandler<H>,
-                                 event_loop: &mut EventLoop<DhtHandler<H>>,
-                                 trans_id: TransactionID)
-    where H: Handshaker
+fn handle_check_table_refresh<H>(
+    table_actions: &mut HashMap<ActionID, TableAction>,
+    work_storage: &mut DetachedDhtHandler<H>,
+    event_loop: &mut EventLoop<DhtHandler<H>>,
+    trans_id: TransactionID,
+) where
+    H: Handshaker,
 {
     let opt_refresh_status = match table_actions.get_mut(&trans_id.action_id()) {
         Some(&mut TableAction::Refresh(ref mut refresh)) => {
-            Some(refresh.continue_refresh(&work_storage.routing_table,
-                                          &work_storage.out_channel,
-                                          event_loop))
-        }
+            Some(refresh.continue_refresh(&work_storage.routing_table, &work_storage.out_channel, event_loop))
+        },
         Some(&mut TableAction::Lookup(_)) => {
-            error!("bip_dht: Resolved a TransactionID to a check table refresh but TableLookup \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table refresh but TableLookup \
+                    found..."
+            );
             None
-        }
+        },
         Some(&mut TableAction::Bootstrap(_, _)) => {
-            error!("bip_dht: Resolved a TransactionID to a check table refresh but \
-                    TableBootstrap found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table refresh but \
+                    TableBootstrap found..."
+            );
             None
-        }
+        },
         None => {
-            error!("bip_dht: Resolved a TransactionID to a check table refresh but no action \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table refresh but no action \
+                    found..."
+            );
             None
-        }
+        },
     };
 
     match opt_refresh_status {
@@ -843,38 +813,40 @@ fn handle_check_table_refresh<H>(table_actions: &mut HashMap<ActionID, TableActi
     }
 }
 
-fn handle_check_bootstrap_timeout<H>(handler: &mut DhtHandler<H>,
-                                     event_loop: &mut EventLoop<DhtHandler<H>>,
-                                     trans_id: TransactionID)
-    where H: Handshaker
+fn handle_check_bootstrap_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID)
+where
+    H: Handshaker,
 {
     let (work_storage, table_actions) = (&mut handler.detached, &mut handler.table_actions);
 
     let bootstrap_complete = {
         let opt_bootstrap_info = match table_actions.get_mut(&trans_id.action_id()) {
-            Some(&mut TableAction::Bootstrap(ref mut bootstrap, ref mut attempts)) => {
-                Some((bootstrap.recv_timeout(&trans_id,
-                                             &work_storage.routing_table,
-                                             &work_storage.out_channel,
-                                             event_loop),
-                      bootstrap,
-                      attempts))
-            }
+            Some(&mut TableAction::Bootstrap(ref mut bootstrap, ref mut attempts)) => Some((
+                bootstrap.recv_timeout(&trans_id, &work_storage.routing_table, &work_storage.out_channel, event_loop),
+                bootstrap,
+                attempts,
+            )),
             Some(&mut TableAction::Lookup(_)) => {
-                error!("bip_dht: Resolved a TransactionID to a check table bootstrap but \
-                        TableLookup found...");
+                error!(
+                    "bip_dht: Resolved a TransactionID to a check table bootstrap but \
+                        TableLookup found..."
+                );
                 None
-            }
+            },
             Some(&mut TableAction::Refresh(_)) => {
-                error!("bip_dht: Resolved a TransactionID to a check table bootstrap but \
-                        TableRefresh found...");
+                error!(
+                    "bip_dht: Resolved a TransactionID to a check table bootstrap but \
+                        TableRefresh found..."
+                );
                 None
-            }
+            },
             None => {
-                error!("bip_dht: Resolved a TransactionID to a check table bootstrap but no \
-                        action found...");
+                error!(
+                    "bip_dht: Resolved a TransactionID to a check table bootstrap but no \
+                        action found..."
+                );
                 None
-            }
+            },
         };
 
         match opt_bootstrap_info {
@@ -884,69 +856,62 @@ fn handle_check_bootstrap_timeout<H>(handler: &mut DhtHandler<H>,
             Some((BootstrapStatus::Failed, _, _)) => {
                 shutdown_event_loop(event_loop, ShutdownCause::Unspecified);
                 false
-            }
+            },
             Some((BootstrapStatus::Completed, bootstrap, attempts)) => {
                 // Check if our bootstrap was actually good
                 if should_rebootstrap(&work_storage.routing_table) {
-                    attempt_rebootstrap(bootstrap, attempts, work_storage, event_loop) ==
-                    Some(false)
+                    attempt_rebootstrap(bootstrap, attempts, work_storage, event_loop) == Some(false)
                 } else {
                     true
                 }
-            }
+            },
         }
     };
 
     if bootstrap_complete {
-        broadcast_bootstrap_completed(trans_id.action_id(),
-                                      table_actions,
-                                      work_storage,
-                                      event_loop);
+        broadcast_bootstrap_completed(trans_id.action_id(), table_actions, work_storage, event_loop);
     }
 }
 
-fn handle_check_lookup_timeout<H>(handler: &mut DhtHandler<H>,
-                                  event_loop: &mut EventLoop<DhtHandler<H>>,
-                                  trans_id: TransactionID)
-    where H: Handshaker
+fn handle_check_lookup_timeout<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID)
+where
+    H: Handshaker,
 {
     let (work_storage, table_actions) = (&mut handler.detached, &mut handler.table_actions);
 
     let opt_lookup_info = match table_actions.get_mut(&trans_id.action_id()) {
-        Some(&mut TableAction::Lookup(ref mut lookup)) => {
-            Some((lookup.recv_timeout(&trans_id,
-                                      &work_storage.routing_table,
-                                      &work_storage.out_channel,
-                                      event_loop),
-                  lookup.info_hash()))
-        }
+        Some(&mut TableAction::Lookup(ref mut lookup)) => Some((
+            lookup.recv_timeout(&trans_id, &work_storage.routing_table, &work_storage.out_channel, event_loop),
+            lookup.info_hash(),
+        )),
         Some(&mut TableAction::Bootstrap(_, _)) => {
-            error!("bip_dht: Resolved a TransactionID to a check table lookup but TableBootstrap \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table lookup but TableBootstrap \
+                    found..."
+            );
             None
-        }
+        },
         Some(&mut TableAction::Refresh(_)) => {
-            error!("bip_dht: Resolved a TransactionID to a check table lookup but TableRefresh \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table lookup but TableRefresh \
+                    found..."
+            );
             None
-        }
+        },
         None => {
-            error!("bip_dht: Resolved a TransactionID to a check table lookup but no action \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table lookup but no action \
+                    found..."
+            );
             None
-        }
+        },
     };
 
     match opt_lookup_info {
         None => (),
         Some((LookupStatus::Searching, _)) => (),
-        Some((LookupStatus::Completed, info_hash)) => {
-            broadcast_dht_event(&mut work_storage.event_notifiers,
-                                DhtEvent::LookupCompleted(info_hash))
-        }
-        Some((LookupStatus::Failed, _)) => {
-            shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
-        }
+        Some((LookupStatus::Completed, info_hash)) => broadcast_dht_event(&mut work_storage.event_notifiers, DhtEvent::LookupCompleted(info_hash)),
+        Some((LookupStatus::Failed, _)) => shutdown_event_loop(event_loop, ShutdownCause::Unspecified),
         Some((LookupStatus::Values(v), info_hash)) => {
             // Add values to handshaker
             for v4_addr in v {
@@ -954,51 +919,49 @@ fn handle_check_lookup_timeout<H>(handler: &mut DhtHandler<H>,
 
                 work_storage.handshaker.connect(None, info_hash, sock_addr);
             }
-        }
+        },
     }
 }
 
-fn handle_check_lookup_endgame<H>(handler: &mut DhtHandler<H>,
-                                  event_loop: &mut EventLoop<DhtHandler<H>>,
-                                  trans_id: TransactionID)
-    where H: Handshaker
+fn handle_check_lookup_endgame<H>(handler: &mut DhtHandler<H>, event_loop: &mut EventLoop<DhtHandler<H>>, trans_id: TransactionID)
+where
+    H: Handshaker,
 {
     let (work_storage, table_actions) = (&mut handler.detached, &mut handler.table_actions);
 
     let opt_lookup_info = match table_actions.remove(&trans_id.action_id()) {
-        Some(TableAction::Lookup(mut lookup)) => {
-            Some((lookup.recv_finished(work_storage.handshaker.port(),
-                                       &work_storage.routing_table,
-                                       &work_storage.out_channel),
-                  lookup.info_hash()))
-        }
+        Some(TableAction::Lookup(mut lookup)) => Some((
+            lookup.recv_finished(work_storage.handshaker.port(), &work_storage.routing_table, &work_storage.out_channel),
+            lookup.info_hash(),
+        )),
         Some(TableAction::Bootstrap(_, _)) => {
-            error!("bip_dht: Resolved a TransactionID to a check table lookup but TableBootstrap \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table lookup but TableBootstrap \
+                    found..."
+            );
             None
-        }
+        },
         Some(TableAction::Refresh(_)) => {
-            error!("bip_dht: Resolved a TransactionID to a check table lookup but TableRefresh \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table lookup but TableRefresh \
+                    found..."
+            );
             None
-        }
+        },
         None => {
-            error!("bip_dht: Resolved a TransactionID to a check table lookup but no action \
-                    found...");
+            error!(
+                "bip_dht: Resolved a TransactionID to a check table lookup but no action \
+                    found..."
+            );
             None
-        }
+        },
     };
 
     match opt_lookup_info {
         None => (),
         Some((LookupStatus::Searching, _)) => (),
-        Some((LookupStatus::Completed, info_hash)) => {
-            broadcast_dht_event(&mut work_storage.event_notifiers,
-                                DhtEvent::LookupCompleted(info_hash))
-        }
-        Some((LookupStatus::Failed, _)) => {
-            shutdown_event_loop(event_loop, ShutdownCause::Unspecified)
-        }
+        Some((LookupStatus::Completed, info_hash)) => broadcast_dht_event(&mut work_storage.event_notifiers, DhtEvent::LookupCompleted(info_hash)),
+        Some((LookupStatus::Failed, _)) => shutdown_event_loop(event_loop, ShutdownCause::Unspecified),
         Some((LookupStatus::Values(v), info_hash)) => {
             // Add values to handshaker
             for v4_addr in v {
@@ -1006,6 +969,6 @@ fn handle_check_lookup_endgame<H>(handler: &mut DhtHandler<H>,
 
                 work_storage.handshaker.connect(None, info_hash, sock_addr);
             }
-        }
+        },
     }
 }

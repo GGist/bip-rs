@@ -3,12 +3,12 @@
 
 use std::borrow::Cow;
 
-use bip_bencode::{Bencode, BencodeConvert, Dictionary, BencodeConvertError};
+use bip_bencode::{Bencode, BencodeConvert, BencodeConvertError, Dictionary};
 
-use message;
-use error::{DhtError, DhtErrorKind, DhtResult};
+use crate::error::{DhtError, DhtErrorKind, DhtResult};
+use crate::message;
 
-const ERROR_ARGS_KEY: &'static str = "e";
+const ERROR_ARGS_KEY: &str = "e";
 const NUM_ERROR_ARGS: usize = 2;
 
 const GENERIC_ERROR_CODE: u8 = 201;
@@ -31,11 +31,9 @@ impl ErrorCode {
             SERVER_ERROR_CODE => Ok(ErrorCode::ServerError),
             PROTOCOL_ERROR_CODE => Ok(ErrorCode::ProtocolError),
             METHOD_UNKNOWN_CODE => Ok(ErrorCode::MethodUnknown),
-            unknown => {
-                Err(DhtError::from_kind(DhtErrorKind::InvalidResponse {
-                    details: format!("Error Message Invalid Error Code {:?}", unknown),
-                }))
-            }
+            unknown => Err(DhtError::from_kind(DhtErrorKind::InvalidResponse {
+                details: format!("Error Message Invalid Error Code {:?}", unknown),
+            })),
         }
     }
 }
@@ -64,8 +62,8 @@ impl ErrorValidate {
             }));
         }
 
-        let code = try!(self.convert_int(&args[0], &format!("{}[0]", ERROR_ARGS_KEY)));
-        let message = try!(self.convert_str(&args[1], &format!("{}[1]", ERROR_ARGS_KEY)));
+        let code = self.convert_int(&args[0], &format!("{}[0]", ERROR_ARGS_KEY))?;
+        let message = self.convert_str(&args[1], &format!("{}[1]", ERROR_ARGS_KEY))?;
 
         Ok((code as u8, message))
     }
@@ -98,19 +96,17 @@ impl<'a> ErrorMessage<'a> {
 
         ErrorMessage {
             trans_id: trans_id_cow,
-            code: code,
+            code,
             message: message_cow,
         }
     }
 
-    pub fn from_parts(root: &Dictionary<'a, Bencode<'a>>,
-                      trans_id: &'a [u8])
-                      -> DhtResult<ErrorMessage<'a>> {
+    pub fn from_parts(root: &dyn Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8]) -> DhtResult<ErrorMessage<'a>> {
         let validate = ErrorValidate;
-        let error_args = try!(validate.lookup_and_convert_list(root, ERROR_ARGS_KEY));
+        let error_args = validate.lookup_and_convert_list(root, ERROR_ARGS_KEY)?;
 
-        let (code, message) = try!(validate.extract_error_args(error_args));
-        let error_code = try!(ErrorCode::new(code));
+        let (code, message) = validate.extract_error_args(error_args)?;
+        let error_code = ErrorCode::new(code)?;
 
         let trans_id_cow = Cow::Borrowed(trans_id);
         let message_cow = Cow::Borrowed(message);
@@ -137,7 +133,7 @@ impl<'a> ErrorMessage<'a> {
     pub fn encode(&self) -> Vec<u8> {
         let error_code = Into::<u8>::into(self.code) as i64;
 
-        (ben_map!{
+        (ben_map! {
             //message::CLIENT_TYPE_KEY => ben_bytes!(dht::CLIENT_IDENTIFICATION),
             message::TRANSACTION_ID_KEY => ben_bytes!(&self.trans_id),
             message::MESSAGE_TYPE_KEY => ben_bytes!(message::ERROR_TYPE_KEY),
@@ -146,6 +142,6 @@ impl<'a> ErrorMessage<'a> {
                 ben_bytes!(self.message.as_bytes())
             )
         })
-            .encode()
+        .encode()
     }
 }
