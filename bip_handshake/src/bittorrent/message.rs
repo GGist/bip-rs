@@ -25,7 +25,7 @@ impl HandshakeMessage {
                     "bip_handshake: Handshake Message With Protocol Length Greater Than {} Found",
                     u8::max_value()
                 )
-            }
+            }   
         }
 
         HandshakeMessage { prot, ext, hash, pid }
