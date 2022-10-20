@@ -75,7 +75,7 @@ fn main() {
     let hash = InfoHash::from_bytes(b"My Unique Info Hash");
     
     let handshaker = SimpleHandshaker{ filter: HashSet::new(), count: 0 };
-    let dht = DhtBuilder::with_router(Router::uTorrent).set_source_addr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 6889)))
+    let dht = DhtBuilder::with_router(Router::BitTorrent).set_source_addr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 6889)))
     .set_read_only(false).start_mainline(handshaker).unwrap();
     
     // Spawn a thread to listen to and report events
