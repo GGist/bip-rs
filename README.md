@@ -44,7 +44,7 @@ Chat: irc.mozilla.org <a href="http://mibbit.com/?server=irc.mozilla.org&channel
 * Official Specifications:
     * http://www.bittorrent.org/beps/bep_0000.html
 * Readable Specifications:
-    * https://wiki.theory.org/index.php/BitTorrentSpecification
+    * https://wiki.theory.org/BitTorrentSpecification
 * Unofficial Specifications:
     * ut_holepunch: https://gist.github.com/GGist/714f4f6efd7523bfb28d79e5de145c34
 * Other Interesting Papers
