@@ -22,33 +22,33 @@ mod manager;
 mod message;
 mod protocol;
 
-pub use codec::PeerProtocolCodec;
-pub use protocol::{PeerProtocol, NestedPeerProtocol};
-pub use manager::{ManagedMessage, PeerManager, PeerManagerSink, PeerManagerStream, IPeerManagerMessage, OPeerManagerMessage, MessageId};
-pub use manager::builder::PeerManagerBuilder;
-pub use manager::peer_info::PeerInfo;
+pub use crate::codec::PeerProtocolCodec;
+pub use crate::protocol::{PeerProtocol, NestedPeerProtocol};
+pub use crate::manager::{ManagedMessage, PeerManager, PeerManagerSink, PeerManagerStream, IPeerManagerMessage, OPeerManagerMessage, MessageId};
+pub use crate::manager::builder::PeerManagerBuilder;
+pub use crate::manager::peer_info::PeerInfo;
 
 /// Serializable and deserializable protocol messages.
 pub mod messages {
     /// Builder types for protocol messages.
     pub mod builders {
-        pub use message::{ExtendedMessageBuilder};
+        pub use crate::message::{ExtendedMessageBuilder};
     }
 
-    pub use message::{BitFieldIter, BitFieldMessage, CancelMessage, ExtendedMessage, HaveMessage, PieceMessage, PortMessage,
+    pub use crate::message::{BitFieldIter, BitFieldMessage, CancelMessage, ExtendedMessage, HaveMessage, PieceMessage, PortMessage,
         RequestMessage, UtMetadataRequestMessage, UtMetadataDataMessage, UtMetadataRejectMessage, BitsExtensionMessage, ExtendedType,
         NullProtocolMessage, PeerExtensionProtocolMessage, PeerWireProtocolMessage, UtMetadataMessage};
 }
 
 /// `PeerManager` error types.
 pub mod error {
-    pub use manager::error::{PeerManagerError, PeerManagerErrorKind, PeerManagerResultExt, PeerManagerResult};
+    pub use crate::manager::error::{PeerManagerError, PeerManagerErrorKind, PeerManagerResultExt, PeerManagerResult};
 }
 
 /// Implementations of `PeerProtocol`.
 pub mod protocols {
-    pub use protocol::unit::UnitProtocol;
-    pub use protocol::null::NullProtocol;
-    pub use protocol::wire::PeerWireProtocol;
-    pub use protocol::extension::PeerExtensionProtocol;
+    pub use crate::protocol::unit::UnitProtocol;
+    pub use crate::protocol::null::NullProtocol;
+    pub use crate::protocol::wire::PeerWireProtocol;
+    pub use crate::protocol::extension::PeerExtensionProtocol;
 }

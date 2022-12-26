@@ -1,4 +1,4 @@
-use sha;
+use crate::sha;
 
 /// Bittorrent `NodeId`.
 pub type NodeId = sha::ShaHash;

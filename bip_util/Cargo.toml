@@ -12,6 +12,7 @@ documentation = "http://ggist.github.io/bip-rs/bip_util/index.html"
 keywords      = ["utility"]
 
 license       = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
 chrono        = "0.2.0"

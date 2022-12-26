@@ -1,12 +1,12 @@
 //! Messaging primitives for announce options.
 
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::io::{self, Write};
 
 use byteorder::WriteBytesExt;
-use nom::{IResult, be_u8};
+use nom::{be_u8, IResult};
 
 const END_OF_OPTIONS_BYTE: u8 = 0x00;
 const NO_OPERATION_BYTE: u8 = 0x01;
@@ -46,22 +46,23 @@ impl<'a> AnnounceOptions<'a> {
         let mut raw_options = HashMap::new();
 
         map!(bytes, call!(parse_options, &mut raw_options), |_| {
-            AnnounceOptions{ raw_options: raw_options }
+            AnnounceOptions { raw_options: raw_options }
         })
     }
 
     /// Write the AnnounceOptions to the given writer.
     #[allow(unused)]
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         for (byte, content) in self.raw_options.iter() {
             for content_chunk in content.chunks(u8::max_value() as usize) {
                 let content_chunk_len = content_chunk.len() as u8;
 
-                try!(writer.write_u8(*byte));
-                try!(writer.write_u8(content_chunk_len));
-                try!(writer.write_all(content_chunk));
+                writer.write_u8(*byte)?;
+                writer.write_u8(content_chunk_len)?;
+                writer.write_all(content_chunk)?;
             }
         }
 
@@ -77,7 +78,8 @@ impl<'a> AnnounceOptions<'a> {
     ///
     /// Returns None if the option is not found or it failed to read from the given bytes.
     pub fn get<O>(&'a self) -> Option<O>
-        where O: AnnounceOption<'a>
+    where
+        O: AnnounceOption<'a>,
     {
         self.raw_options.get(&O::option_byte()).and_then(|bytes| O::read_option(&*bytes))
     }
@@ -86,7 +88,8 @@ impl<'a> AnnounceOptions<'a> {
     ///
     /// Any existing option with a matching option byte will be replaced.
     pub fn insert<O>(&mut self, option: &O)
-        where O: AnnounceOption<'a>
+    where
+        O: AnnounceOption<'a>,
     {
         let mut bytes = vec![0u8; option.option_length()];
         option.write_option(&mut bytes[..]);
@@ -115,27 +118,27 @@ impl<'a> AnnounceOptions<'a> {
 }
 
 /// Parse the options in the byte slice and store them in the option map.
-fn parse_options<'a>(bytes: &'a [u8],
-                     option_map: &mut HashMap<u8, Cow<'a, [u8]>>)
-                     -> IResult<&'a [u8], bool> {
+fn parse_options<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], bool> {
     let mut curr_bytes = bytes;
     let mut eof = false;
 
     // Iteratively try all parsers until one succeeds and check whether the eof has been reached.
     // Return early on incomplete or error.
     while !eof {
-        let parse_result = alt!(curr_bytes, parse_end_option | call!(parse_no_option) |
-            call!(parse_user_option, option_map));
+        let parse_result = alt!(
+            curr_bytes,
+            parse_end_option | call!(parse_no_option) | call!(parse_user_option, option_map)
+        );
 
         match parse_result {
             IResult::Done(new_bytes, found_eof) => {
                 eof = found_eof;
 
                 curr_bytes = new_bytes;
-            }
+            },
             some_error => {
                 return some_error;
-            }
+            },
         };
     }
 
@@ -153,20 +156,23 @@ fn parse_no_option<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], bool> {
 }
 
 /// Parse a user defined option.
-fn parse_user_option<'a>(bytes: &'a [u8],
-                         option_map: &mut HashMap<u8, Cow<'a, [u8]>>)
-                         -> IResult<&'a [u8], bool> {
-    do_parse!(bytes,
-        option_byte:     be_u8 >>
-        option_contents: length_bytes!(byte_usize) >>
-        ({
-            match option_map.entry(option_byte) {
-                Entry::Occupied(mut occ) => { occ.get_mut().to_mut().extend_from_slice(option_contents); },
-                Entry::Vacant(vac)       => { vac.insert(Cow::Borrowed(option_contents)); }
-            };
+fn parse_user_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], bool> {
+    do_parse!(
+        bytes,
+        option_byte: be_u8
+            >> option_contents: length_bytes!(byte_usize)
+            >> ({
+                match option_map.entry(option_byte) {
+                    Entry::Occupied(mut occ) => {
+                        occ.get_mut().to_mut().extend_from_slice(option_contents);
+                    },
+                    Entry::Vacant(vac) => {
+                        vac.insert(Cow::Borrowed(option_contents));
+                    },
+                };
 
-            false
-        })
+                false
+            })
     )
 }
 
@@ -186,7 +192,7 @@ pub struct URLDataOption<'a> {
 impl<'a> URLDataOption<'a> {
     /// Create a new URLDataOption from the given bytes.
     pub fn new(url_data: &'a [u8]) -> URLDataOption<'a> {
-        URLDataOption { url_data: url_data }
+        URLDataOption { url_data }
     }
 }
 
@@ -251,7 +257,7 @@ mod tests {
         options.insert(&option);
         options.write_bytes(&mut received).unwrap();
 
-        let expected = [super::URL_DATA_BYTE, 2, 'A' as u8, 'A' as u8, super::END_OF_OPTIONS_BYTE];
+        let expected = [super::URL_DATA_BYTE, 2, b'A', b'A', super::END_OF_OPTIONS_BYTE];
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -352,15 +358,17 @@ mod tests {
 
     #[test]
     fn positive_parse_url_data_noop_end_of_options() {
-        let bytes = [super::URL_DATA_BYTE,
-                     5,
-                     0,
-                     0,
-                     0,
-                     0,
-                     0,
-                     super::NO_OPERATION_BYTE,
-                     super::END_OF_OPTIONS_BYTE];
+        let bytes = [
+            super::URL_DATA_BYTE,
+            5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            super::NO_OPERATION_BYTE,
+            super::END_OF_OPTIONS_BYTE,
+        ];
         let url_data_bytes = [0, 0, 0, 0, 0];
 
         let received = AnnounceOptions::from_bytes(&bytes);
@@ -421,7 +429,6 @@ mod tests {
 
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
-
 
     #[test]
     fn positive_parse_url_data_undivisible_chunks() {

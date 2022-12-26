@@ -1,14 +1,14 @@
 use std::net::SocketAddr;
 
-use bittorrent::message::HandshakeMessage;
-use bittorrent::framed::FramedHandshake;
-use message::extensions::Extensions;
-use handshake::handler::HandshakeType;
-use message::initiate::InitiateMessage;
-use message::complete::CompleteMessage;
-use filter::filters::Filters;
-use handshake::handler;
-use handshake::handler::timer::HandshakeTimer;
+use crate::bittorrent::message::HandshakeMessage;
+use crate::bittorrent::framed::FramedHandshake;
+use crate::message::extensions::Extensions;
+use crate::handshake::handler::HandshakeType;
+use crate::message::initiate::InitiateMessage;
+use crate::message::complete::CompleteMessage;
+use crate::filter::filters::Filters;
+use crate::handshake::handler;
+use crate::handshake::handler::timer::HandshakeTimer;
 
 use bip_util::bt::{PeerId};
 use futures::future::Future;
@@ -17,7 +17,7 @@ use futures::sink::Sink;
 use tokio_io::{AsyncRead, AsyncWrite};
 
 pub fn execute_handshake<S>(item: HandshakeType<S>, context: &(Extensions, PeerId, Filters, HandshakeTimer))
-    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
+    -> Box<dyn Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let &(ref ext, ref pid, ref filters, ref timer) = context;
 
     match item {
@@ -27,7 +27,7 @@ pub fn execute_handshake<S>(item: HandshakeType<S>, context: &(Extensions, PeerI
 }
 
 fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pid: PeerId, filters: Filters, timer: HandshakeTimer)
-    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
+    -> Box<dyn Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let framed = FramedHandshake::new(sock);
     
     let (prot, hash, addr) = init_msg.into_parts();
@@ -64,7 +64,7 @@ fn initiate_handshake<S>(sock: S, init_msg: InitiateMessage, ext: Extensions, pi
 }
 
 fn complete_handshake<S>(sock: S, addr: SocketAddr, ext: Extensions, pid: PeerId, filters: Filters, timer: HandshakeTimer)
-    -> Box<Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
+    -> Box<dyn Future<Item=Option<CompleteMessage<S>>, Error=()>> where S: AsyncRead + AsyncWrite + 'static {
     let framed = FramedHandshake::new(sock);
 
     let composed_future = timer.timeout(
@@ -106,11 +106,11 @@ mod tests {
     use std::time::Duration;
 
     use super::{HandshakeMessage};
-    use message::extensions::{self, Extensions};
-    use message::protocol::Protocol;
-    use message::initiate::InitiateMessage;
-    use filter::filters::Filters;
-    use handshake::handler::timer::HandshakeTimer;
+    use crate::message::extensions::{self, Extensions};
+    use crate::message::protocol::Protocol;
+    use crate::message::initiate::InitiateMessage;
+    use crate::filter::filters::Filters;
+    use crate::handshake::handler::timer::HandshakeTimer;
 
     use bip_util::bt::{self, PeerId, InfoHash};
     use tokio_timer;

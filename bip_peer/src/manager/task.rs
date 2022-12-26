@@ -2,10 +2,10 @@
 
 use std::io;
 
-use manager::builder::PeerManagerBuilder;
-use manager::peer_info::PeerInfo;
-use manager::future::{PersistentError, PersistentStream, RecurringTimeoutStream, RecurringTimeoutError};
-use manager::{IPeerManagerMessage, OPeerManagerMessage, ManagedMessage};
+use crate::manager::builder::PeerManagerBuilder;
+use crate::manager::peer_info::PeerInfo;
+use crate::manager::future::{PersistentError, PersistentStream, RecurringTimeoutStream, RecurringTimeoutError};
+use crate::manager::{IPeerManagerMessage, OPeerManagerMessage, ManagedMessage};
 
 use tokio_core::reactor::Handle;
 use tokio_timer::{Timer};

@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::path::{PathBuf, Path};
 use std::io;
 
-use disk::fs::FileSystem;
+use crate::disk::fs::FileSystem;
 
 use lru_cache::LruCache;
 
@@ -20,7 +20,7 @@ impl<F> FileHandleCache<F> where F: FileSystem {
     /// Create a new `FileHandleCache` with the given handle capacity and an
     /// inner `FileSystem` which will be called for handles not in the cache.
     pub fn new(inner: F, capacity: usize) -> FileHandleCache<F> {
-        FileHandleCache{ cache: Mutex::new(LruCache::new(capacity)), inner: inner }
+        FileHandleCache{ cache: Mutex::new(LruCache::new(capacity)), inner }
     }
 
     fn run_with_lock<C, R>(&self, call: C) -> R
@@ -44,7 +44,7 @@ impl<F> FileSystem for FileHandleCache<F> where F: FileSystem {
                 }
             }
             let path_buf = path.as_ref().to_path_buf();
-            let file = Arc::new(Mutex::new(try!(fs.open_file(path))));
+            let file = Arc::new(Mutex::new(fs.open_file(path)?));
 
             cache.insert(path_buf, file.clone());
 

@@ -1,15 +1,15 @@
-use handshake::handler::HandshakeType;
-use transport::Transport;
-use message::initiate::InitiateMessage;
-use filter::filters::Filters;
-use handshake::handler;
-use handshake::handler::timer::HandshakeTimer;
+use crate::handshake::handler::HandshakeType;
+use crate::transport::Transport;
+use crate::message::initiate::InitiateMessage;
+use crate::filter::filters::Filters;
+use crate::handshake::handler;
+use crate::handshake::handler::timer::HandshakeTimer;
 
 use futures::future::{self, Future};
 use tokio_core::reactor::Handle;
 
 /// Handle the initiation of connections, which are returned as a HandshakeType.
-pub fn initiator_handler<T>(item: InitiateMessage, context: &(T, Filters, Handle, HandshakeTimer)) -> Box<Future<Item=Option<HandshakeType<T::Socket>>,Error=()>>
+pub fn initiator_handler<T>(item: InitiateMessage, context: &(T, Filters, Handle, HandshakeTimer)) -> Box<dyn Future<Item=Option<HandshakeType<T::Socket>>,Error=()>>
     where T: Transport {
     let &(ref transport, ref filters, ref handle, ref timer) = context;
 
@@ -31,13 +31,13 @@ pub fn initiator_handler<T>(item: InitiateMessage, context: &(T, Filters, Handle
 
 #[cfg(test)]
 mod tests {
-    use filter::filters::Filters;
-    use handshake::handler::HandshakeType;
-    use filter::filters::test_filters::{BlockAddrFilter, BlockProtocolFilter, BlockPeerIdFilter};
-    use message::protocol::Protocol;
-    use message::initiate::InitiateMessage;
-    use transport::test_transports::MockTransport;
-    use handshake::handler::timer::HandshakeTimer;
+    use crate::filter::filters::Filters;
+    use crate::handshake::handler::HandshakeType;
+    use crate::filter::filters::test_filters::{BlockAddrFilter, BlockProtocolFilter, BlockPeerIdFilter};
+    use crate::message::protocol::Protocol;
+    use crate::message::initiate::InitiateMessage;
+    use crate::transport::test_transports::MockTransport;
+    use crate::handshake::handler::timer::HandshakeTimer;
     use std::time::Duration;
 
     use bip_util::bt::{self, InfoHash, PeerId};
@@ -119,7 +119,7 @@ mod tests {
 
         let exp_message = InitiateMessage::new(Protocol::Custom(vec![1, 2, 3, 4]), any_info_hash(), "1.2.3.4:5".parse().unwrap());
 
-        let recv_enum_item = super::initiator_handler(exp_message.clone(), &(MockTransport, filters, core.handle(), timer)).wait().unwrap();
+        let recv_enum_item = super::initiator_handler(exp_message, &(MockTransport, filters, core.handle(), timer)).wait().unwrap();
         match recv_enum_item {
             None                                => (),
             Some(HandshakeType::Initiate(_, _)) |

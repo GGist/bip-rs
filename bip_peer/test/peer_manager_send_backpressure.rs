@@ -1,4 +1,4 @@
-use {ConnectedChannel};
+use crate::{ConnectedChannel};
 
 use bip_peer::{PeerManagerBuilder, PeerInfo, IPeerManagerMessage, OPeerManagerMessage};
 use bip_peer::protocols::{NullProtocol};
@@ -19,7 +19,7 @@ fn positive_peer_manager_send_backpressure() {
 
     // Create two peers
     let (peer_one, peer_two): (ConnectedChannel<PeerWireProtocolMessage<NullProtocol>, PeerWireProtocolMessage<NullProtocol>>,
-                               ConnectedChannel<PeerWireProtocolMessage<NullProtocol>, PeerWireProtocolMessage<NullProtocol>>) = ::connected_channel(5);
+                               ConnectedChannel<PeerWireProtocolMessage<NullProtocol>, PeerWireProtocolMessage<NullProtocol>>) = crate::connected_channel(5);
     let peer_one_info = PeerInfo::new("127.0.0.1:0".parse().unwrap(), [0u8; bt::PEER_ID_LEN].into(), [0u8; bt::INFO_HASH_LEN].into(), Extensions::new());
     let peer_two_info = PeerInfo::new("127.0.0.1:1".parse().unwrap(), [1u8; bt::PEER_ID_LEN].into(), [1u8; bt::INFO_HASH_LEN].into(), Extensions::new());
 

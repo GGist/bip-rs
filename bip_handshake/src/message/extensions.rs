@@ -1,7 +1,8 @@
+use nom::count;
+use nom::number::streaming::be_u8;
+use nom::{do_parse, IResult};
 use std::io;
 use std::io::Write;
-
-use nom::{IResult, be_u8};
 
 /// Number of bytes that the extension protocol takes.
 pub const NUM_EXTENSION_BYTES: usize = 8;
@@ -9,13 +10,13 @@ pub const NUM_EXTENSION_BYTES: usize = 8;
 /// Enumeration of all extensions that can be activated.
 pub enum Extension {
     /// Support for the extension protocol `http://www.bittorrent.org/beps/bep_0010.html`.
-    ExtensionProtocol = 43
+    ExtensionProtocol = 43,
 }
 
 /// `Extensions` supported by either end of a handshake.
 #[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
 pub struct Extensions {
-    bytes: [u8; NUM_EXTENSION_BYTES]
+    bytes: [u8; NUM_EXTENSION_BYTES],
 }
 
 impl Extensions {
@@ -60,7 +61,9 @@ impl Extensions {
 
     /// Write the `Extensions` to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write {
+    where
+        W: Write,
+    {
         writer.write_all(&self.bytes[..])
     }
 
@@ -79,27 +82,33 @@ impl Extensions {
 
     /// Create a new `Extensions` using the given bytes directly.
     fn with_bytes(bytes: [u8; NUM_EXTENSION_BYTES]) -> Extensions {
-        Extensions{ bytes: bytes }
+        Extensions { bytes }
     }
 }
 
 impl From<[u8; NUM_EXTENSION_BYTES]> for Extensions {
     fn from(bytes: [u8; NUM_EXTENSION_BYTES]) -> Extensions {
-        Extensions{ bytes: bytes }
+        Extensions { bytes }
+    }
+}
+
+impl From<Vec<u8>> for Extensions {
+    fn from(v: Vec<u8>) -> Extensions {
+        assert_eq!(v.len(), NUM_EXTENSION_BYTES);
+        let mut bytes = [0; NUM_EXTENSION_BYTES];
+        bytes.copy_from_slice(&v);
+        Extensions { bytes }
     }
 }
 
 /// Parse the given bytes for extension bits.
 fn parse_extension_bits(bytes: &[u8]) -> IResult<&[u8], Extensions> {
-    do_parse!(bytes,
-        bytes: count_fixed!(u8, be_u8, NUM_EXTENSION_BYTES) >>
-        (Extensions::with_bytes(bytes))
-    )
+    do_parse!(bytes, bytes: count!(be_u8, NUM_EXTENSION_BYTES) >> (bytes.into()))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Extensions, Extension};
+    use super::{Extension, Extensions};
 
     #[test]
     fn positive_add_extension_protocol() {

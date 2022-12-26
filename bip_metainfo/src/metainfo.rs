@@ -1,16 +1,16 @@
 //! Accessing the fields of a Metainfo file.
-use std::path::{Path, PathBuf};
 use std::io;
+use std::path::{Path, PathBuf};
 
-use bip_bencode::{BencodeRef, BDictAccess, BDecodeOpt, BRefAccess};
+use bip_bencode::{BDecodeOpt, BDictAccess, BRefAccess, BencodeRef};
 use bip_util::bt::InfoHash;
 use bip_util::sha::{self, ShaHash};
 
-use accessor::{Accessor, PieceAccess, IntoAccessor};
-use builder::{MetainfoBuilder, InfoBuilder, PieceLength};
-use parse;
-use error::{ParseError, ParseErrorKind, ParseResult};
-use iter::{Files, Pieces};
+use crate::accessor::{Accessor, IntoAccessor, PieceAccess};
+use crate::builder::{InfoBuilder, MetainfoBuilder, PieceLength};
+use crate::error::{ParseError, ParseErrorKind, ParseResult};
+use crate::iter::{Files, Pieces};
+use crate::parse;
 
 /// Contains optional metadata for a torrent file.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -27,7 +27,8 @@ pub struct Metainfo {
 impl Metainfo {
     /// Read a `Metainfo` from metainfo file bytes.
     pub fn from_bytes<B>(bytes: B) -> ParseResult<Metainfo>
-        where B: AsRef<[u8]>
+    where
+        B: AsRef<[u8]>,
     {
         let bytes_slice = bytes.as_ref();
 
@@ -87,28 +88,28 @@ impl Metainfo {
 
 impl From<Info> for Metainfo {
     fn from(info: Info) -> Metainfo {
-        Metainfo{
+        Metainfo {
             comment: None,
             announce: None,
             announce_list: None,
             encoding: None,
             created_by: None,
             creation_date: None,
-            info: info
+            info,
         }
     }
 }
 
 /// Parses the given metainfo bytes and builds a Metainfo from them.
 fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
-    let root_bencode = try!(BencodeRef::decode(bytes, BDecodeOpt::default()));
-    let root_dict = try!(parse::parse_root_dict(&root_bencode));
+    let root_bencode = BencodeRef::decode(bytes, BDecodeOpt::default())?;
+    let root_dict = parse::parse_root_dict(&root_bencode)?;
 
     let announce = parse::parse_announce_url(root_dict).map(|e| e.to_owned());
 
     let opt_announce_list = {
         parse::parse_announce_list(root_dict)
-            .and_then(|list| Some(parse::convert_announce_list(list)))
+            .map(|list| parse::convert_announce_list(list))
             .or(None)
     };
 
@@ -117,17 +118,17 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
     let opt_created_by = parse::parse_created_by(root_dict).map(|e| e.to_owned());
     let opt_creation_date = parse::parse_creation_date(root_dict);
 
-    let info_bencode = try!(parse::parse_info_bencode(root_dict));
-    let info = try!(parse_info_dictionary(info_bencode));
+    let info_bencode = parse::parse_info_bencode(root_dict)?;
+    let info = parse_info_dictionary(info_bencode)?;
 
     Ok(Metainfo {
         comment: opt_comment,
-        announce: announce,
+        announce,
         announce_list: opt_announce_list,
         encoding: opt_encoding,
         created_by: opt_created_by,
         creation_date: opt_creation_date,
-        info: info
+        info,
     })
 }
 
@@ -136,11 +137,11 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
 /// Contains directory and checksum data for a torrent file.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Info {
-    info_hash:      InfoHash,
-    files:          Vec<File>,
-    pieces:         Vec<[u8; sha::SHA_HASH_LEN]>,
-    piece_len:      u64,
-    is_private:     Option<bool>,
+    info_hash: InfoHash,
+    files: Vec<File>,
+    pieces: Vec<[u8; sha::SHA_HASH_LEN]>,
+    piece_len: u64,
+    is_private: Option<bool>,
     // Present only for multi file torrents.
     file_directory: Option<PathBuf>,
 }
@@ -148,7 +149,8 @@ pub struct Info {
 impl Info {
     /// Read an `Info` from info dictionary bytes.
     pub fn from_bytes<B>(bytes: B) -> ParseResult<Info>
-        where B: AsRef<[u8]>
+    where
+        B: AsRef<[u8]>,
     {
         let bytes_slice = bytes.as_ref();
 
@@ -231,7 +233,9 @@ impl Accessor for Info {
     }
 
     fn access_metadata<C>(&self, mut callback: C) -> io::Result<()>
-        where C: FnMut(u64, &Path) {
+    where
+        C: FnMut(u64, &Path),
+    {
         for file in self.files() {
             callback(file.length(), file.path());
         }
@@ -240,18 +244,20 @@ impl Accessor for Info {
     }
 
     fn access_pieces<C>(&self, mut callback: C) -> io::Result<()>
-        where C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()> {
+    where
+        C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()>,
+    {
         for piece in self.pieces() {
-            try!(callback(PieceAccess::PreComputed(ShaHash::from_hash(piece).unwrap())));
+            callback(PieceAccess::PreComputed(ShaHash::from_hash(piece).unwrap()))?;
         }
-        
+
         Ok(())
     }
 }
 
 /// Parses the given info dictionary bytes and builds a Metainfo from them.
 fn parse_info_bytes(bytes: &[u8]) -> ParseResult<Info> {
-    let info_bencode = try!(BencodeRef::decode(bytes, BDecodeOpt::default()));
+    let info_bencode = BencodeRef::decode(bytes, BDecodeOpt::default())?;
 
     parse_info_dictionary(&info_bencode)
 }
@@ -260,53 +266,55 @@ fn parse_info_bytes(bytes: &[u8]) -> ParseResult<Info> {
 fn parse_info_dictionary<'a>(info_bencode: &BencodeRef<'a>) -> ParseResult<Info> {
     let info_hash = InfoHash::from_bytes(info_bencode.buffer());
 
-    let info_dict = try!(parse::parse_root_dict(info_bencode));
-    let piece_len = try!(parse::parse_piece_length(info_dict));
+    let info_dict = parse::parse_root_dict(info_bencode)?;
+    let piece_len = parse::parse_piece_length(info_dict)?;
     let is_private = parse::parse_private(info_dict);
 
-    let pieces = try!(parse::parse_pieces(info_dict));
-    let piece_buffers = try!(allocate_pieces(pieces));
+    let pieces = parse::parse_pieces(info_dict)?;
+    let piece_buffers = allocate_pieces(pieces)?;
 
     if is_multi_file_torrent(info_dict) {
-        let file_directory = try!(parse::parse_name(info_dict));
+        let file_directory = parse::parse_name(info_dict)?;
         let mut file_directory_path = PathBuf::new();
         file_directory_path.push(file_directory);
 
-        let files_bencode = try!(parse::parse_files_list(info_dict));
+        let files_bencode = parse::parse_files_list(info_dict)?;
 
         let mut files_list = Vec::with_capacity(files_bencode.len());
         for file_bencode in files_bencode {
-            let file_dict = try!(parse::parse_file_dict(file_bencode));
-            let file = try!(File::as_multi_file(file_dict));
+            let file_dict = parse::parse_file_dict(file_bencode)?;
+            let file = File::as_multi_file(file_dict)?;
 
             files_list.push(file);
         }
 
         Ok(Info {
-            info_hash: info_hash,
+            info_hash,
             files: files_list,
             pieces: piece_buffers,
-            piece_len: piece_len,
-            is_private: is_private,
+            piece_len,
+            is_private,
             file_directory: Some(file_directory_path),
         })
     } else {
-        let file = try!(File::as_single_file(info_dict));
+        let file = File::as_single_file(info_dict)?;
 
         Ok(Info {
-            info_hash: info_hash,
+            info_hash,
             files: vec![file],
             pieces: piece_buffers,
-            piece_len: piece_len,
-            is_private: is_private,
+            piece_len,
+            is_private,
             file_directory: None,
         })
     }
 }
 
 /// Returns whether or not this is a multi file torrent.
-fn is_multi_file_torrent<B>(info_dict: &BDictAccess<B::BKey, B>) -> bool
-    where B: BRefAccess {
+fn is_multi_file_torrent<B>(info_dict: &dyn BDictAccess<B::BKey, B>) -> bool
+where
+    B: BRefAccess,
+{
     parse::parse_length(info_dict).is_err()
 }
 
@@ -336,37 +344,41 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
 /// Contains information for a single file.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct File {
-    len:    u64,
-    path:   PathBuf,
+    len: u64,
+    path: PathBuf,
     md5sum: Option<Vec<u8>>,
 }
 
 impl File {
     /// Parse the info dictionary and generate a single file File.
-    fn as_single_file<B>(info_dict: &BDictAccess<B::BKey, B>) -> ParseResult<File>
-        where B: BRefAccess {
-        let length = try!(parse::parse_length(info_dict));
+    fn as_single_file<B>(info_dict: &dyn BDictAccess<B::BKey, B>) -> ParseResult<File>
+    where
+        B: BRefAccess,
+    {
+        let length = parse::parse_length(info_dict)?;
         let md5sum = parse::parse_md5sum(info_dict).map(|m| m.to_owned());
-        let name = try!(parse::parse_name(info_dict));
+        let name = parse::parse_name(info_dict)?;
 
         Ok(File {
             len: length,
             path: name.to_owned().into(),
-            md5sum: md5sum,
+            md5sum,
         })
     }
 
     /// Parse the file dictionary and generate a multi file File.
-    fn as_multi_file<B>(file_dict: &BDictAccess<B::BKey, B>) -> ParseResult<File>
-        where B: BRefAccess<BType=B> {
-        let length = try!(parse::parse_length(file_dict));
+    fn as_multi_file<B>(file_dict: &dyn BDictAccess<B::BKey, B>) -> ParseResult<File>
+    where
+        B: BRefAccess<BType = B>,
+    {
+        let length = parse::parse_length(file_dict)?;
         let md5sum = parse::parse_md5sum(file_dict).map(|m| m.to_owned());
 
-        let path_list_bencode = try!(parse::parse_path_list(file_dict));
+        let path_list_bencode = parse::parse_path_list(file_dict)?;
 
         let mut path_buf = PathBuf::new();
         for path_bencode in path_list_bencode {
-            let path = try!(parse::parse_path_str(path_bencode));
+            let path = parse::parse_path_str(path_bencode)?;
 
             path_buf.push(path);
         }
@@ -374,7 +386,7 @@ impl File {
         Ok(File {
             len: length,
             path: path_buf,
-            md5sum: md5sum,
+            md5sum,
         })
     }
 
@@ -400,35 +412,37 @@ impl File {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use bip_bencode::{BencodeMut, BMutAccess};
-    use bip_util::sha;
+    use bip_bencode::{BMutAccess, BencodeMut};
     use bip_util::bt::InfoHash;
+    use bip_util::sha;
 
-    use metainfo::Metainfo;
-    use parse;
+    use crate::metainfo::Metainfo;
+    use crate::parse;
 
     /// Helper function for manually constructing a metainfo file based on the parameters given.
     ///
     /// If the metainfo file builds successfully, assertions will be made about the contents of it based
     /// on the parameters given.
-    fn validate_parse_from_params(tracker: Option<&str>,
-                                  create_date: Option<i64>,
-                                  comment: Option<&str>,
-                                  create_by: Option<&str>,
-                                  encoding: Option<&str>,
-                                  piece_length: Option<i64>,
-                                  pieces: Option<&[u8]>,
-                                  private: Option<i64>,
-                                  directory: Option<&str>,
-                                  files: Option<Vec<(Option<i64>,
-                                                     Option<&[u8]>,
-                                                     Option<Vec<String>>)>>) {
+    fn validate_parse_from_params(
+        tracker: Option<&str>,
+        create_date: Option<i64>,
+        comment: Option<&str>,
+        create_by: Option<&str>,
+        encoding: Option<&str>,
+        piece_length: Option<i64>,
+        pieces: Option<&[u8]>,
+        private: Option<i64>,
+        directory: Option<&str>,
+        files: Option<Vec<(Option<i64>, Option<&[u8]>, Option<Vec<String>>)>>,
+    ) {
         let mut root_dict = BencodeMut::new_dict();
         let info_hash = {
             let root_dict_access = root_dict.dict_mut().unwrap();
-            
+
             tracker.map(|t| root_dict_access.insert(parse::ANNOUNCE_URL_KEY.into(), ben_bytes!(t)));
-            create_date.as_ref().map(|&c| root_dict_access.insert(parse::CREATION_DATE_KEY.into(), ben_int!(c)));
+            create_date
+                .as_ref()
+                .map(|&c| root_dict_access.insert(parse::CREATION_DATE_KEY.into(), ben_int!(c)));
             comment.map(|c| root_dict_access.insert(parse::COMMENT_KEY.into(), ben_bytes!(c)));
             create_by.map(|c| root_dict_access.insert(parse::CREATED_BY_KEY.into(), ben_bytes!(c)));
             encoding.map(|e| root_dict_access.insert(parse::ENCODING_KEY.into(), ben_bytes!(e)));
@@ -437,7 +451,9 @@ mod tests {
             {
                 let info_dict_access = info_dict.dict_mut().unwrap();
 
-                piece_length.as_ref().map(|&p| info_dict_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(p)));
+                piece_length
+                    .as_ref()
+                    .map(|&p| info_dict_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(p)));
                 pieces.map(|p| info_dict_access.insert(parse::PIECES_KEY.into(), ben_bytes!(p)));
                 private.as_ref().map(|&p| info_dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(p)));
 
@@ -489,7 +505,9 @@ mod tests {
                         files.as_ref().map(|files| {
                             let (ref opt_len, ref opt_md5, ref opt_path) = files[0];
 
-                            opt_path.as_ref().map(|p| info_dict_access.insert(parse::NAME_KEY.into(), ben_bytes!(&p[0][..])));
+                            opt_path
+                                .as_ref()
+                                .map(|p| info_dict_access.insert(parse::NAME_KEY.into(), ben_bytes!(&p[0][..])));
                             opt_len.map(|l| info_dict_access.insert(parse::LENGTH_KEY.into(), ben_int!(l)));
                             opt_md5.map(|m| info_dict_access.insert(parse::MD5SUM_KEY.into(), ben_bytes!(m)));
                         });
@@ -517,10 +535,8 @@ mod tests {
         assert_eq!(metainfo_file.info().is_private(), private.map(|private| private == 1));
 
         let pieces = pieces.unwrap();
-        assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(),
-                   metainfo_file.info().pieces().count());
-        for (piece_chunk, piece_elem) in pieces.chunks(sha::SHA_HASH_LEN)
-            .zip(metainfo_file.info().pieces()) {
+        assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(), metainfo_file.info().pieces().count());
+        for (piece_chunk, piece_elem) in pieces.chunks(sha::SHA_HASH_LEN).zip(metainfo_file.info().pieces()) {
             assert_eq!(piece_chunk, piece_elem);
         }
 
@@ -555,16 +571,18 @@ mod tests {
         let file_len = 0;
         let file_paths = vec!["dummy_file_name".to_owned()];
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -574,21 +592,20 @@ mod tests {
         let pieces = [0u8; sha::SHA_HASH_LEN];
 
         let directory = "dummy_file_directory";
-        let files = vec![(Some(0),
-                          None,
-                          Some(vec!["dummy_sub_directory".to_owned(),
-                                    "dummy_file_name".to_owned()]))];
+        let files = vec![(Some(0), None, Some(vec!["dummy_sub_directory".to_owned(), "dummy_file_name".to_owned()]))];
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   Some(directory),
-                                   Some(files));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            Some(directory),
+            Some(files),
+        );
     }
 
     #[test]
@@ -598,22 +615,23 @@ mod tests {
         let pieces = [0u8; sha::SHA_HASH_LEN];
 
         let directory = "dummy_file_directory";
-        let files = vec![(Some(0),
-                          None,
-                          Some(vec!["dummy_sub_directory".to_owned(),
-                                    "dummy_file_name".to_owned()])),
-                         (Some(5), None, Some(vec!["other_dummy_file_name".to_owned()]))];
+        let files = vec![
+            (Some(0), None, Some(vec!["dummy_sub_directory".to_owned(), "dummy_file_name".to_owned()])),
+            (Some(5), None, Some(vec!["other_dummy_file_name".to_owned()])),
+        ];
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   Some(directory),
-                                   Some(files));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            Some(directory),
+            Some(files),
+        );
     }
 
     #[test]
@@ -625,16 +643,18 @@ mod tests {
         let file_len = 0;
         let file_paths = vec!["dummy_file_name".to_owned()];
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -646,18 +666,20 @@ mod tests {
         let file_len = 0;
         let file_paths = vec!["dummy_file_name".to_owned()];
 
-        let creation_date = 5050505050;
+        let creation_date = 5_050_505_050;
 
-        validate_parse_from_params(Some(tracker),
-                                   Some(creation_date),
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            Some(creation_date),
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -671,16 +693,18 @@ mod tests {
 
         let comment = "This is my boring test comment...";
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   Some(comment),
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            Some(comment),
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -694,16 +718,18 @@ mod tests {
 
         let created_by = "Me";
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   Some(created_by),
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            Some(created_by),
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -717,16 +743,18 @@ mod tests {
 
         let encoding = "UTF-8";
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   Some(encoding),
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            Some(encoding),
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -740,16 +768,18 @@ mod tests {
 
         let private = 0;
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   Some(private),
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            Some(private),
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -763,16 +793,18 @@ mod tests {
 
         let private = 1;
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   Some(private),
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            Some(private),
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -786,16 +818,18 @@ mod tests {
 
         let private = -1;
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   Some(private),
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            Some(private),
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -806,16 +840,18 @@ mod tests {
         let file_len = 0;
         let file_paths = vec!["dummy_file_name".to_owned()];
 
-        validate_parse_from_params(None,
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -835,16 +871,18 @@ mod tests {
 
         let private = -1;
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(&pieces),
-                                   Some(private),
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&pieces),
+            Some(private),
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -856,16 +894,18 @@ mod tests {
         let file_len = 0;
         let file_paths = vec!["dummy_file_name".to_owned()];
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   None,
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            None,
+            None,
+            None,
+            Some(vec![(Some(file_len), None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -877,16 +917,18 @@ mod tests {
 
         let file_paths = vec!["dummy_file_name".to_owned()];
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(None, None, Some(file_paths))]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(None, None, Some(file_paths))]),
+        );
     }
 
     #[test]
@@ -898,15 +940,17 @@ mod tests {
 
         let file_len = 0;
 
-        validate_parse_from_params(Some(tracker),
-                                   None,
-                                   None,
-                                   None,
-                                   None,
-                                   Some(piece_len),
-                                   Some(&pieces),
-                                   None,
-                                   None,
-                                   Some(vec![(Some(file_len), None, None)]));
+        validate_parse_from_params(
+            Some(tracker),
+            None,
+            None,
+            None,
+            None,
+            Some(piece_len),
+            Some(&pieces),
+            None,
+            None,
+            Some(vec![(Some(file_len), None, None)]),
+        );
     }
 }

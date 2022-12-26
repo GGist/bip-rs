@@ -1,6 +1,6 @@
-use access::bencode::{BencodeRefKind, BRefAccess};
-use access::dict::BDictAccess;
-use access::list::BListAccess;
+use crate::access::bencode::{BencodeRefKind, BRefAccess};
+use crate::access::dict::BDictAccess;
+use crate::access::list::BListAccess;
 
 use std::iter::Extend;
 
@@ -15,43 +15,43 @@ pub fn encode<T>(val: T, bytes: &mut Vec<u8>)
 }
 
 fn encode_int(val: i64, bytes: &mut Vec<u8>) {
-    bytes.push(::INT_START);
+    bytes.push(crate::INT_START);
 
     bytes.extend(val.to_string().into_bytes());
 
-    bytes.push(::BEN_END);
+    bytes.push(crate::BEN_END);
 }
 
 fn encode_bytes(list: &[u8], bytes: &mut Vec<u8>) {
     bytes.extend(list.len().to_string().into_bytes());
 
-    bytes.push(::BYTE_LEN_END);
+    bytes.push(crate::BYTE_LEN_END);
 
-    bytes.extend(list.iter().map(|n| *n));
+    bytes.extend(list.iter().copied());
 }
 
-fn encode_list<T>(list: &BListAccess<T>, bytes: &mut Vec<u8>)
+fn encode_list<T>(list: &dyn BListAccess<T>, bytes: &mut Vec<u8>)
     where T: BRefAccess, T::BKey: AsRef<[u8]> {
-    bytes.push(::LIST_START);
+    bytes.push(crate::LIST_START);
 
     for i in list {
         encode(i, bytes);
     }
 
-    bytes.push(::BEN_END);
+    bytes.push(crate::BEN_END);
 }
 
-fn encode_dict<'a, K, V>(dict: &BDictAccess<K, V>, bytes: &mut Vec<u8>)
+fn encode_dict<'a, K, V>(dict: &dyn BDictAccess<K, V>, bytes: &mut Vec<u8>)
     where K: AsRef<[u8]>, V: BRefAccess, V::BKey: AsRef<[u8]> {
     // Need To Sort The Keys In The Map Before Encoding
     let mut sort_dict = dict.to_list();
     sort_dict.sort_by(|&(a, _), &(b, _)| a.as_ref().cmp(b.as_ref()));
 
-    bytes.push(::DICT_START);
+    bytes.push(crate::DICT_START);
     // Iterate And Dictionary Encode The (String, Bencode) Pairs
     for &(ref key, ref value) in sort_dict.iter() {
         encode_bytes(key.as_ref(), bytes);
         encode(*value, bytes);
     }
-    bytes.push(::BEN_END);
+    bytes.push(crate::BEN_END);
 }

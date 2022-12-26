@@ -12,13 +12,14 @@ documentation    = "https://docs.rs/bip_metainfo/"
 keywords         = ["metainfo", "torrent", "file", "bittorrent"]
 
 license          = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
-bip_bencode      = { version = "0.4" }
-bip_util         = { version = "0.5" }
+bip_bencode      = { path = "../bip_bencode" }
+bip_util         = { path = "../bip_util" }
 crossbeam        = "0.3"
 walkdir          = "2.0"
-error-chain      = "0.11"
+error-chain      = "0.12.1"
 
 [dev-dependencies]
 chrono           = "0.4"
@@ -27,12 +28,3 @@ pbr              = "1.0"
 
 [features]
 unstable         = []
-
-[profile.bench]
-opt-level        = 3
-debug            = false
-rpath            = false
-lto              = false
-debug-assertions = false
-codegen-units    = 1
-panic            = 'unwind'

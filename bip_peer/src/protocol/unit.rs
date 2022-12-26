@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use protocol::{PeerProtocol, NestedPeerProtocol};
+use crate::protocol::{PeerProtocol, NestedPeerProtocol};
 
 use bytes::Bytes;
 

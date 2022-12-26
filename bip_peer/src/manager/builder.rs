@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::io;
 
-use manager::{PeerManager, ManagedMessage};
+use crate::manager::{PeerManager, ManagedMessage};
 
 use futures::sink::Sink;
 use futures::stream::Stream;

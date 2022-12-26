@@ -1,6 +1,6 @@
+extern crate base32;
 extern crate bip_util;
 extern crate url;
-extern crate base32;
 
 use bip_util::bt::InfoHash;
 use bip_util::sha::ShaHash;
@@ -30,11 +30,10 @@ impl Topic {
             }
         } else if s.starts_with("urn:btih:") && s.len() == 9 + 32 {
             // BitTorrent Info Hash, base-32
-            base32::decode(base32::Alphabet::RFC4648 { padding: true }, &s[9..])
-                .and_then(|hash| match ShaHash::from_hash(&hash[..]) {
-                    Ok(sha_hash) => Some(Topic::BitTorrentInfoHash(sha_hash)),
-                    Err(_) => None,
-                })
+            base32::decode(base32::Alphabet::RFC4648 { padding: true }, &s[9..]).and_then(|hash| match ShaHash::from_hash(&hash[..]) {
+                Ok(sha_hash) => Some(Topic::BitTorrentInfoHash(sha_hash)),
+                Err(_) => None,
+            })
         } else {
             None
         }
@@ -101,18 +100,14 @@ impl MagnetLink {
         for (k, v) in pairs {
             match &k[..] {
                 "dn" => result.display_name = Some(v),
-                "xl" => {
-                    match usize::from_str_radix(&v[..], 10) {
-                        Ok(exact_length) => result.exact_length = Some(exact_length),
-                        Err(_) => (),
-                    }
-                }
-                "xt" => {
-                    match Topic::parse(&v[..]) {
-                        Some(topic) => result.exact_topic = Some(topic),
-                        None => (),
-                    }
-                }
+                "xl" => match usize::from_str_radix(&v[..], 10) {
+                    Ok(exact_length) => result.exact_length = Some(exact_length),
+                    Err(_) => (),
+                },
+                "xt" => match Topic::parse(&v[..]) {
+                    Some(topic) => result.exact_topic = Some(topic),
+                    None => (),
+                },
                 "as" => result.acceptable_source.push(v),
                 "xs" => result.exact_source.push(v),
                 "kt" => result.keyword_topic.push(v),
@@ -133,7 +128,6 @@ impl MagnetLink {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use bip_util::sha::ShaHash;
@@ -148,23 +142,22 @@ mod tests {
 &as=http%3A%2F%2Fdownload.wikimedia.org%2Fmediawiki%2F1.15%2Fmediawiki-1.15.1.tar.gz
 &xs=http%3A%2F%2Fcache.example.org%2FXRX2PEFXOOEJFRVUCX6HMZMKS5TWG4K5
 &xs=dchub://example.org";
-        let link = ::MagnetLink::parse(url).unwrap();
+        let link = crate::MagnetLink::parse(url).unwrap();
 
-        let expected_info_hash = [129, 225, 119, 226, 204, 0, 148, 59, 41, 252, 252, 99, 84, 87,
-                                  245, 117, 35, 114, 147, 176];
-        assert_eq!(link.get_info_hash(),
-                   Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap()));
+        let expected_info_hash = [129, 225, 119, 226, 204, 0, 148, 59, 41, 252, 252, 99, 84, 87, 245, 117, 35, 114, 147, 176];
+        assert_eq!(link.get_info_hash(), Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap()));
 
-        assert_eq!(link.exact_length, Some(10826029));
-        assert_eq!(link.display_name,
-                   Some("mediawiki-1.15.1.tar.gz".to_string()));
-        assert_eq!(link.address_tracker,
-                   vec!["udp://tracker.openbittorrent.com:80/announce"]);
-        assert_eq!(link.acceptable_source,
-                   vec!["http://download.wikimedia.org/mediawiki/1.15/mediawiki-1.15.1.tar.gz"]);
-        assert_eq!(link.exact_source,
-                   vec!["http://cache.example.org/XRX2PEFXOOEJFRVUCX6HMZMKS5TWG4K5",
-                        "dchub://example.org"]);
+        assert_eq!(link.exact_length, Some(10_826_029));
+        assert_eq!(link.display_name, Some("mediawiki-1.15.1.tar.gz".to_string()));
+        assert_eq!(link.address_tracker, vec!["udp://tracker.openbittorrent.com:80/announce"]);
+        assert_eq!(
+            link.acceptable_source,
+            vec!["http://download.wikimedia.org/mediawiki/1.15/mediawiki-1.15.1.tar.gz"]
+        );
+        assert_eq!(
+            link.exact_source,
+            vec!["http://cache.example.org/XRX2PEFXOOEJFRVUCX6HMZMKS5TWG4K5", "dchub://example.org"]
+        );
     }
 
     #[test]
@@ -174,21 +167,22 @@ mod tests {
                    openbittorrent.com%3A80&tr=udp%3A%2F%2Fopen.demonii.\
                    com%3A1337&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Fexodus.\
                    desync.com%3A6969";
-        let link = ::MagnetLink::parse(url).unwrap();
+        let link = crate::MagnetLink::parse(url).unwrap();
 
-        let expected_info_hash = [0xd9, 0xbe, 0x69, 0x09, 0x32, 0x5d, 0x28, 0x91, 0x2f, 0x40,
-                                  0x0f, 0xcb, 0x32, 0x40, 0x05, 0xdd, 0x58, 0x61, 0xe4, 0x9f];
-        assert_eq!(link.get_info_hash(),
-                   Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap()));
+        let expected_info_hash = [
+            0xd9, 0xbe, 0x69, 0x09, 0x32, 0x5d, 0x28, 0x91, 0x2f, 0x40, 0x0f, 0xcb, 0x32, 0x40, 0x05, 0xdd, 0x58, 0x61, 0xe4, 0x9f,
+        ];
+        assert_eq!(link.get_info_hash(), Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap()));
 
-        assert_eq!(link.display_name,
-                   Some("Crunchbang GNU/Linux - AMD64 ISO".to_string()));
-        assert_eq!(link.address_tracker,
-                   vec![
-            "udp://tracker.openbittorrent.com:80",
-            "udp://open.demonii.com:1337",
-            "udp://tracker.coppersurfer.tk:6969",
-            "udp://exodus.desync.com:6969",
-        ]);
+        assert_eq!(link.display_name, Some("Crunchbang GNU/Linux - AMD64 ISO".to_string()));
+        assert_eq!(
+            link.address_tracker,
+            vec![
+                "udp://tracker.openbittorrent.com:80",
+                "udp://open.demonii.com:1337",
+                "udp://tracker.coppersurfer.tk:6969",
+                "udp://exodus.desync.com:6969",
+            ]
+        );
     }
 }

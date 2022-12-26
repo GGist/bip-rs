@@ -1,8 +1,8 @@
-use ControlMessage;
+use crate::ControlMessage;
 use bip_peer::PeerInfo;
 use bip_peer::messages::ExtendedMessage;
 use bip_peer::messages::builders::ExtendedMessageBuilder;
-use error::UberError;
+use crate::error::UberError;
 use futures::Async;
 use futures::Poll;
 use futures::Stream;
@@ -45,8 +45,8 @@ pub struct ExtendedPeerInfo {
 impl ExtendedPeerInfo {
     pub fn new(ours: Option<ExtendedMessage>, theirs: Option<ExtendedMessage>) -> ExtendedPeerInfo {
         ExtendedPeerInfo {
-            ours: ours,
-            theirs: theirs,
+            ours,
+            theirs,
         }
     }
 
@@ -79,7 +79,7 @@ pub struct ExtendedModule {
 impl ExtendedModule {
     pub fn new(builder: ExtendedMessageBuilder) -> ExtendedModule {
         ExtendedModule {
-            builder: builder,
+            builder,
             peers: HashMap::new(),
             out_queue: VecDeque::new(),
             opt_task: None,
@@ -122,7 +122,7 @@ impl ExtendedModule {
                 }
             },
             _ => {
-                ()
+                
             },
         }
 

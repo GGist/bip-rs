@@ -1,27 +1,27 @@
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::io::{self, Cursor};
 use std::net::SocketAddr;
 use std::thread;
 
 use bip_handshake::{DiscoveryInfo, InitiateMessage, Protocol};
 use bip_util::bt::PeerId;
-use chrono::{DateTime, Duration};
 use chrono::offset::Utc;
+use chrono::{DateTime, Duration};
 use futures::future::Either;
-use futures::sink::{Wait, Sink};
+use futures::sink::{Sink, Wait};
 use nom::IResult;
 use rand;
-use umio::{ELoopBuilder, Dispatcher, Provider};
 use umio::external::{self, Timeout};
+use umio::{Dispatcher, ELoopBuilder, Provider};
 
-use announce::{AnnounceRequest, SourceIP, DesiredPeers};
-use client::{ClientToken, ClientRequest, RequestLimiter, ClientMetadata, ClientResponse};
-use client::error::{ClientResult, ClientError};
-use option::AnnounceOptions;
-use request::{self, TrackerRequest, RequestType};
-use response::{TrackerResponse, ResponseType};
-use scrape::ScrapeRequest;
+use crate::announce::{AnnounceRequest, DesiredPeers, SourceIP};
+use crate::client::error::{ClientError, ClientResult};
+use crate::client::{ClientMetadata, ClientRequest, ClientResponse, ClientToken, RequestLimiter};
+use crate::option::AnnounceOptions;
+use crate::request::{self, RequestType, TrackerRequest};
+use crate::response::{ResponseType, TrackerResponse};
+use crate::scrape::ScrapeRequest;
 
 const EXPECTED_PACKET_LENGTH: usize = 1500;
 
@@ -44,13 +44,15 @@ pub enum DispatchMessage {
 /// Create a new background dispatcher to execute request and send responses back.
 ///
 /// Assumes msg_capacity is less than usize::max_value().
-pub fn create_dispatcher<H>(bind: SocketAddr,
-                            handshaker: H,
-                            msg_capacity: usize,
-                            limiter: RequestLimiter)
-                            -> io::Result<external::Sender<DispatchMessage>>
-    where H: Sink + DiscoveryInfo + 'static + Send,
-          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
+pub fn create_dispatcher<H>(
+    bind: SocketAddr,
+    handshaker: H,
+    msg_capacity: usize,
+    limiter: RequestLimiter,
+) -> io::Result<external::Sender<DispatchMessage>>
+where
+    H: Sink + DiscoveryInfo + 'static + Send,
+    H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>,
 {
     // Timer capacity is plus one for the cache cleanup timer
     let builder = ELoopBuilder::new()
@@ -59,7 +61,7 @@ pub fn create_dispatcher<H>(bind: SocketAddr,
         .bind_address(bind)
         .buffer_length(EXPECTED_PACKET_LENGTH);
 
-    let mut eloop = try!(builder.build());
+    let mut eloop = builder.build()?;
     let channel = eloop.channel();
 
     let dispatch = ClientDispatcher::new(handshaker, bind, limiter);
@@ -68,7 +70,8 @@ pub fn create_dispatcher<H>(bind: SocketAddr,
         eloop.run(dispatch).expect("bip_utracker: ELoop Shutdown Unexpectedly...");
     });
 
-    channel.send(DispatchMessage::StartTimer)
+    channel
+        .send(DispatchMessage::StartTimer)
         .expect("bip_utracker: ELoop Failed To Start Connect ID Timer...");
 
     Ok(channel)
@@ -78,18 +81,19 @@ pub fn create_dispatcher<H>(bind: SocketAddr,
 
 /// Dispatcher that executes requests asynchronously.
 struct ClientDispatcher<H> {
-    handshaker:      Wait<H>,
-    pid:             PeerId,
-    port:            u16,
-    bound_addr:      SocketAddr,
+    handshaker: Wait<H>,
+    pid: PeerId,
+    port: u16,
+    bound_addr: SocketAddr,
     active_requests: HashMap<ClientToken, ConnectTimer>,
-    id_cache:        ConnectIdCache,
-    limiter:         RequestLimiter,
+    id_cache: ConnectIdCache,
+    limiter: RequestLimiter,
 }
 
 impl<H> ClientDispatcher<H>
-    where H: Sink + DiscoveryInfo,
-          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
+where
+    H: Sink + DiscoveryInfo,
+    H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>,
 {
     /// Create a new ClientDispatcher.
     pub fn new(handshaker: H, bind: SocketAddr, limiter: RequestLimiter) -> ClientDispatcher<H> {
@@ -99,11 +103,11 @@ impl<H> ClientDispatcher<H>
         ClientDispatcher {
             handshaker: handshaker.wait(),
             pid: peer_id,
-            port: port,
+            port,
             bound_addr: bind,
             active_requests: HashMap::new(),
             id_cache: ConnectIdCache::new(),
-            limiter: limiter,
+            limiter,
         }
     }
 
@@ -123,26 +127,28 @@ impl<H> ClientDispatcher<H>
 
     /// Finish a request by sending the result back to the client.
     pub fn notify_client(&mut self, token: ClientToken, result: ClientResult<ClientResponse>) {
-        self.handshaker.send(Either::B(ClientMetadata::new(token, result)).into())
+        self.handshaker
+            .send(Either::B(ClientMetadata::new(token, result)).into())
             .unwrap_or_else(|_| panic!("NEED TO FIX"));
 
         self.limiter.acknowledge();
     }
 
     /// Process a request to be sent to the given address and associated with the given token.
-    pub fn send_request<'a>(&mut self,
-                            provider: &mut Provider<'a, ClientDispatcher<H>>,
-                            addr: SocketAddr,
-                            token: ClientToken,
-                            request: ClientRequest) {
+    pub fn send_request<'a>(
+        &mut self,
+        provider: &mut Provider<'a, ClientDispatcher<H>>,
+        addr: SocketAddr,
+        token: ClientToken,
+        request: ClientRequest,
+    ) {
         // Check for IP version mismatch between source addr and dest addr
         match (self.bound_addr, addr) {
-            (SocketAddr::V4(_), SocketAddr::V6(_)) |
-            (SocketAddr::V6(_), SocketAddr::V4(_)) => {
+            (SocketAddr::V4(_), SocketAddr::V6(_)) | (SocketAddr::V6(_), SocketAddr::V4(_)) => {
                 self.notify_client(token, Err(ClientError::IPVersionMismatch));
 
                 return;
-            }
+            },
             _ => (),
         };
         self.active_requests.insert(token, ConnectTimer::new(addr, request));
@@ -151,10 +157,7 @@ impl<H> ClientDispatcher<H>
     }
 
     /// Process a response received from some tracker and match it up against our sent requests.
-    pub fn recv_response<'a, 'b>(&mut self,
-                                 provider: &mut Provider<'a, ClientDispatcher<H>>,
-                                 addr: SocketAddr,
-                                 response: TrackerResponse<'b>) {
+    pub fn recv_response<'a, 'b>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>, addr: SocketAddr, response: TrackerResponse<'b>) {
         let token = ClientToken(response.transaction_id());
 
         let conn_timer = if let Some(conn_timer) = self.active_requests.remove(&token) {
@@ -167,8 +170,7 @@ impl<H> ClientDispatcher<H>
             return;
         }; // TODO: Add Logging (Server Gave Us Invalid Transaction Id)
 
-        provider.clear_timeout(conn_timer.timeout_id()
-            .expect("bip_utracker: Failed To Clear Request Timeout"));
+        provider.clear_timeout(conn_timer.timeout_id().expect("bip_utracker: Failed To Clear Request Timeout"));
 
         // Check if the response requires us to update the connection timer
         if let &ResponseType::Connect(id) = response.response_type() {
@@ -182,21 +184,22 @@ impl<H> ClientDispatcher<H>
                 (&ClientRequest::Announce(hash, _), &ResponseType::Announce(ref res)) => {
                     // Forward contact information on to the handshaker
                     for addr in res.peers().iter() {
-                        self.handshaker.send(Either::A(InitiateMessage::new(Protocol::BitTorrent, hash, addr)).into())
+                        self.handshaker
+                            .send(Either::A(InitiateMessage::new(Protocol::BitTorrent, hash, addr)).into())
                             .unwrap_or_else(|_| panic!("NEED TO FIX"));
                     }
 
                     self.notify_client(token, Ok(ClientResponse::Announce(res.to_owned())));
-                }
+                },
                 (&ClientRequest::Scrape(..), &ResponseType::Scrape(ref res)) => {
                     self.notify_client(token, Ok(ClientResponse::Scrape(res.to_owned())));
-                }
+                },
                 (_, &ResponseType::Error(ref res)) => {
                     self.notify_client(token, Err(ClientError::ServerMessage(res.to_owned())));
-                }
+                },
                 _ => {
                     self.notify_client(token, Err(ClientError::ServerError));
-                }
+                },
             }
         }
     }
@@ -204,10 +207,7 @@ impl<H> ClientDispatcher<H>
     /// Process an existing request, either re requesting a connection id or sending the actual request again.
     ///
     /// If this call is the result of a timeout, that will decide whether to cancel the request or not.
-    fn process_request<'a>(&mut self,
-                           provider: &mut Provider<'a, ClientDispatcher<H>>,
-                           token: ClientToken,
-                           timed_out: bool) {
+    fn process_request<'a>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>, token: ClientToken, timed_out: bool) {
         let mut conn_timer = if let Some(conn_timer) = self.active_requests.remove(&token) {
             conn_timer
         } else {
@@ -221,7 +221,7 @@ impl<H> ClientDispatcher<H>
                 self.notify_client(token, Err(ClientError::MaxTimeout));
 
                 return;
-            }
+            },
         };
 
         let addr = conn_timer.message_params().0;
@@ -236,22 +236,26 @@ impl<H> ClientDispatcher<H>
                 };
                 let key = rand::random::<u32>();
 
-                (id,
-                 RequestType::Announce(AnnounceRequest::new(hash,
-                                                            self.pid,
-                                                            state,
-                                                            source_ip,
-                                                            key,
-                                                            DesiredPeers::Default,
-                                                            self.port,
-                                                            AnnounceOptions::new())))
-            }
+                (
+                    id,
+                    RequestType::Announce(AnnounceRequest::new(
+                        hash,
+                        self.pid,
+                        state,
+                        source_ip,
+                        key,
+                        DesiredPeers::Default,
+                        self.port,
+                        AnnounceOptions::new(),
+                    )),
+                )
+            },
             (Some(id), &ClientRequest::Scrape(hash)) => {
                 let mut scrape_request = ScrapeRequest::new();
                 scrape_request.insert(hash);
 
                 (id, RequestType::Scrape(scrape_request))
-            }
+            },
             (None, _) => (request::CONNECT_ID_PROTOCOL_ID, RequestType::Connect),
         };
         let tracker_request = TrackerRequest::new(conn_id, token.0, request_type);
@@ -274,8 +278,10 @@ impl<H> ClientDispatcher<H>
             self.notify_client(token, Err(ClientError::MaxLength));
         } else {
             conn_timer.set_timeout_id(
-                provider.set_timeout(DispatchTimeout::Connect(token), next_timeout)
-                    .expect("bip_utracker: Failed To Set Timeout For Request"));
+                provider
+                    .set_timeout(DispatchTimeout::Connect(token), next_timeout)
+                    .expect("bip_utracker: Failed To Set Timeout For Request"),
+            );
 
             self.active_requests.insert(token, conn_timer);
         }
@@ -283,16 +289,14 @@ impl<H> ClientDispatcher<H>
 }
 
 impl<H> Dispatcher for ClientDispatcher<H>
-    where H: Sink + DiscoveryInfo,
-          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
+where
+    H: Sink + DiscoveryInfo,
+    H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>,
 {
     type Timeout = DispatchTimeout;
     type Message = DispatchMessage;
 
-    fn incoming<'a>(&mut self,
-                    mut provider: Provider<'a, Self>,
-                    message: &[u8],
-                    addr: SocketAddr) {
+    fn incoming<'a>(&mut self, mut provider: Provider<'a, Self>, message: &[u8], addr: SocketAddr) {
         let response = match TrackerResponse::from_bytes(message) {
             IResult::Done(_, rsp) => rsp,
             _ => return, // TODO: Add Logging
@@ -305,7 +309,7 @@ impl<H> Dispatcher for ClientDispatcher<H>
         match message {
             DispatchMessage::Request(addr, token, req_type) => {
                 self.send_request(&mut provider, addr, token, req_type);
-            }
+            },
             DispatchMessage::StartTimer => self.timeout(provider, DispatchTimeout::CleanUp),
             DispatchMessage::Shutdown => self.shutdown(&mut provider),
         }
@@ -317,10 +321,10 @@ impl<H> Dispatcher for ClientDispatcher<H>
             DispatchTimeout::CleanUp => {
                 self.id_cache.clean_expired();
 
-                provider.set_timeout(DispatchTimeout::CleanUp,
-                                 CONNECTION_ID_VALID_DURATION_MILLIS as u64)
+                provider
+                    .set_timeout(DispatchTimeout::CleanUp, CONNECTION_ID_VALID_DURATION_MILLIS as u64)
                     .expect("bip_utracker: Failed To Restart Connect Id Cleanup Timer");
-            }
+            },
         };
     }
 }
@@ -340,9 +344,9 @@ impl ConnectTimer {
     /// Create a new ConnectTimer.
     pub fn new(addr: SocketAddr, request: ClientRequest) -> ConnectTimer {
         ConnectTimer {
-            addr: addr,
+            addr,
             attempt: 0,
-            request: request,
+            request,
             timeout_id: None,
         }
     }
@@ -409,7 +413,7 @@ impl ConnectIdCache {
                 } else {
                     Some(occ.get().0)
                 }
-            }
+            },
         }
     }
 

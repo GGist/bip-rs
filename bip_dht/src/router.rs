@@ -1,14 +1,14 @@
 use std::fmt::{self, Display, Formatter};
-use std::io::{self, ErrorKind, Error};
+use std::io::{self, Error, ErrorKind};
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6, ToSocketAddrs};
 use std::vec::IntoIter;
 
-const UTORRENT_DHT: (&'static str, u16) = ("router.utorrent.com", 6881);
+const UTORRENT_DHT: (&str, u16) = ("router.utorrent.com", 6881);
 // As of recent, this looks to be no longer a CNAME to router.utorrent.com,
 // if this is not the case, we should remove it in the future.
-const BITTORRENT_DHT: (&'static str, u16) = ("router.bittorrent.com", 6881);
-const BITCOMET_DHT: (&'static str, u16) = ("router.bitcomet.com", 6881);
-const TRANSMISSION_DHT: (&'static str, u16) = ("dht.transmissionbt.com", 6881);
+const BITTORRENT_DHT: (&str, u16) = ("router.bittorrent.com", 6881);
+const BITCOMET_DHT: (&str, u16) = ("router.bitcomet.com", 6881);
+const TRANSMISSION_DHT: (&str, u16) = ("dht.transmissionbt.com", 6881);
 
 /// Enumerates different routers that can be used to bootstrap a dht.
 #[allow(non_camel_case_types)]
@@ -40,23 +40,25 @@ impl Router {
     // }
 
     pub fn ipv4_addr(&self) -> io::Result<SocketAddrV4> {
-        let addrs = try!(self.socket_addrs());
+        let addrs = self.socket_addrs()?;
 
-        addrs.filter_map(map_ipv4)
+        addrs
+            .filter_map(map_ipv4)
             .next()
             .ok_or(Error::new(ErrorKind::Other, "No IPv4 Addresses Found For Host"))
     }
 
     pub fn ipv6_addr(&self) -> io::Result<SocketAddrV6> {
-        let addrs = try!(self.socket_addrs());
+        let addrs = self.socket_addrs()?;
 
-        addrs.filter_map(map_ipv6)
+        addrs
+            .filter_map(map_ipv6)
             .next()
             .ok_or(Error::new(ErrorKind::Other, "No IPv6 Addresses Found For Host"))
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {
-        let mut addrs = try!(self.socket_addrs());
+        let mut addrs = self.socket_addrs()?;
 
         addrs.next().ok_or(Error::new(ErrorKind::Other, "No SocketAddresses Found For Host"))
     }
@@ -70,7 +72,7 @@ impl Router {
             &Router::Custom(addr) => {
                 // TODO: Wasteful, should check for Custom before calling function
                 Ok(vec![addr].into_iter())
-            }
+            },
         }
     }
 }
@@ -93,13 +95,9 @@ impl Display for Router {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         match *self {
             Router::uTorrent => f.write_fmt(format_args!("{}:{}", UTORRENT_DHT.0, UTORRENT_DHT.1)),
-            Router::BitTorrent => {
-                f.write_fmt(format_args!("{}:{}", BITTORRENT_DHT.0, BITTORRENT_DHT.1))
-            }
+            Router::BitTorrent => f.write_fmt(format_args!("{}:{}", BITTORRENT_DHT.0, BITTORRENT_DHT.1)),
             Router::BitComet => f.write_fmt(format_args!("{}:{}", BITCOMET_DHT.0, BITCOMET_DHT.1)),
-            Router::Transmission => {
-                f.write_fmt(format_args!("{}:{}", TRANSMISSION_DHT.0, TRANSMISSION_DHT.1))
-            }
+            Router::Transmission => f.write_fmt(format_args!("{}:{}", TRANSMISSION_DHT.0, TRANSMISSION_DHT.1)),
             Router::Custom(n) => Display::fmt(&n, f),
         }
     }

@@ -1,37 +1,46 @@
-use std::net::IpAddr;
-use std::io::{self, Write};
-use nom::{IResult, Needed};
+use crate::message;
+use crate::message::bencode;
+use crate::message::bits_ext;
 use bip_bencode::BencodeMut;
-use std::net::Ipv4Addr;
-use bytes::{Bytes, BytesMut};
-use std::net::Ipv6Addr;
-use std::collections::HashMap;
+use bip_bencode::{BConvert, BDecodeOpt, BMutAccess, BencodeRef};
 use bip_util::convert;
-use message::bencode;
-use bip_bencode::{BencodeRef, BMutAccess, BDecodeOpt, BConvert};
+use bytes::{Bytes, BytesMut};
+use nom::{IResult, Needed};
+use std::collections::HashMap;
+use std::io::{self, Write};
 use std::mem;
-use message;
-use message::bits_ext;
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 
 /// Builder type for an `ExtendedMessage`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtendedMessageBuilder {
-    id_map:           HashMap<ExtendedType, u8>,
-    our_id:           Option<String>,
-    our_tcp_port:     Option<u16>,
-    their_ip:         Option<IpAddr>,
-    our_ipv6_addr:    Option<Ipv6Addr>,
-    our_ipv4_addr:    Option<Ipv4Addr>,
+    id_map: HashMap<ExtendedType, u8>,
+    our_id: Option<String>,
+    our_tcp_port: Option<u16>,
+    their_ip: Option<IpAddr>,
+    our_ipv6_addr: Option<Ipv6Addr>,
+    our_ipv4_addr: Option<Ipv4Addr>,
     our_max_requests: Option<i64>,
-    metadata_size:    Option<i64>,
-    custom_entries:   HashMap<String, BencodeMut<'static>>
+    metadata_size: Option<i64>,
+    custom_entries: HashMap<String, BencodeMut<'static>>,
 }
 
 impl ExtendedMessageBuilder {
     /// Create a new `ExtendedMessageBuilder`.
     pub fn new() -> ExtendedMessageBuilder {
-        ExtendedMessageBuilder{ id_map: HashMap::new(), our_id: None, our_tcp_port: None, their_ip: None, our_ipv6_addr: None,
-            our_ipv4_addr: None, our_max_requests: None, metadata_size: None, custom_entries: HashMap::new() }
+        ExtendedMessageBuilder {
+            id_map: HashMap::new(),
+            our_id: None,
+            our_tcp_port: None,
+            their_ip: None,
+            our_ipv6_addr: None,
+            our_ipv4_addr: None,
+            our_max_requests: None,
+            metadata_size: None,
+            custom_entries: HashMap::new(),
+        }
     }
 
     /// Set our client identification in the message.
@@ -103,17 +112,12 @@ impl ExtendedMessageBuilder {
 }
 
 fn bencode_from_builder(builder: &ExtendedMessageBuilder, mut custom_entries: HashMap<String, BencodeMut<'static>>) -> Vec<u8> {
-    let opt_our_ip = builder.their_ip
-        .map(|their_ip| {
-            match their_ip {
-                IpAddr::V4(ipv4_addr) => convert::ipv4_to_bytes_be(ipv4_addr).to_vec(),
-                IpAddr::V6(ipv6_addr) => convert::ipv6_to_bytes_be(ipv6_addr).to_vec()
-            }
-        });
-    let opt_client_ipv6_addr = builder.our_ipv6_addr
-        .map(|client_ipv6_addr| convert::ipv6_to_bytes_be(client_ipv6_addr));
-    let opt_client_ipv4_addr = builder.our_ipv4_addr
-        .map(|client_ipv4_addr| convert::ipv4_to_bytes_be(client_ipv4_addr));
+    let opt_our_ip = builder.their_ip.map(|their_ip| match their_ip {
+        IpAddr::V4(ipv4_addr) => convert::ipv4_to_bytes_be(ipv4_addr).to_vec(),
+        IpAddr::V6(ipv6_addr) => convert::ipv6_to_bytes_be(ipv6_addr).to_vec(),
+    });
+    let opt_client_ipv6_addr = builder.our_ipv6_addr.map(convert::ipv6_to_bytes_be);
+    let opt_client_ipv4_addr = builder.our_ipv4_addr.map(convert::ipv4_to_bytes_be);
 
     let mut root_map = BencodeMut::new_dict();
     let mut ben_id_map = BencodeMut::new_dict();
@@ -133,26 +137,29 @@ fn bencode_from_builder(builder: &ExtendedMessageBuilder, mut custom_entries: Ha
         for (key, value) in custom_entries.drain() {
             root_map_access.insert(key.into_bytes().into(), value);
         }
-        
-        builder.our_id
+
+        builder
+            .our_id
             .as_ref()
             .map(|client_id| root_map_access.insert(bencode::CLIENT_ID_KEY.into(), ben_bytes!(&client_id[..])));
-        builder.our_tcp_port
+        builder
+            .our_tcp_port
             .map(|tcp_port| root_map_access.insert(bencode::CLIENT_TCP_PORT_KEY.into(), ben_int!(tcp_port as i64)));
-        opt_our_ip
-            .map(|our_ip| root_map_access.insert(bencode::OUR_IP_KEY.into(), ben_bytes!(our_ip)));
+        opt_our_ip.map(|our_ip| root_map_access.insert(bencode::OUR_IP_KEY.into(), ben_bytes!(our_ip)));
         opt_client_ipv6_addr
             .as_ref()
             .map(|client_ipv6_addr| root_map_access.insert(bencode::CLIENT_IPV6_ADDR_KEY.into(), ben_bytes!(&client_ipv6_addr[..])));
         opt_client_ipv4_addr
             .as_ref()
             .map(|client_ipv4_addr| root_map_access.insert(bencode::CLIENT_IPV4_ADDR_KEY.into(), ben_bytes!(&client_ipv4_addr[..])));
-        builder.our_max_requests
+        builder
+            .our_max_requests
             .map(|client_max_requests| root_map_access.insert(bencode::CLIENT_MAX_REQUESTS_KEY.into(), ben_int!(client_max_requests)));
-        builder.metadata_size
+        builder
+            .metadata_size
             .map(|metadata_size| root_map_access.insert(bencode::METADATA_SIZE_KEY.into(), ben_int!(metadata_size)));
     }
-    
+
     root_map.encode()
 }
 
@@ -162,17 +169,17 @@ fn bencode_from_builder(builder: &ExtendedMessageBuilder, mut custom_entries: Ha
 // the ip that the sender sees us as. So if were sending this message, it would be
 // the ip we see the client as.
 
-const ROOT_ERROR_KEY: &'static str = "ExtendedMessage";
+const ROOT_ERROR_KEY: &str = "ExtendedMessage";
 
-const UT_METADATA_ID: &'static str = "ut_metadata";
-const UT_PEX_ID:      &'static str = "ut_pex";
+const UT_METADATA_ID: &str = "ut_metadata";
+const UT_PEX_ID: &str = "ut_pex";
 
 /// Enumeration of extended types activated via `ExtendedMessage`.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum ExtendedType {
     UtMetadata,
     UtPex,
-    Custom(String)
+    Custom(String),
 }
 
 impl ExtendedType {
@@ -180,17 +187,17 @@ impl ExtendedType {
     pub fn from_id(id: &str) -> ExtendedType {
         match id {
             UT_METADATA_ID => ExtendedType::UtMetadata,
-            UT_PEX_ID      => ExtendedType::UtPex,
-            custom         => ExtendedType::Custom(custom.to_string())
+            UT_PEX_ID => ExtendedType::UtPex,
+            custom => ExtendedType::Custom(custom.to_string()),
         }
     }
 
     /// Retrieve the message id corresponding to the given `ExtendedType`.
     pub fn id(&self) -> &str {
         match self {
-            &ExtendedType::UtMetadata     => UT_METADATA_ID,
-            &ExtendedType::UtPex          => UT_PEX_ID,
-            &ExtendedType::Custom(ref id) => &**id
+            &ExtendedType::UtMetadata => UT_METADATA_ID,
+            &ExtendedType::UtPex => UT_PEX_ID,
+            &ExtendedType::Custom(ref id) => &**id,
         }
     }
 }
@@ -200,15 +207,15 @@ impl ExtendedType {
 /// See `http://www.bittorrent.org/beps/bep_0010.html`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtendedMessage {
-    id_map:           HashMap<ExtendedType, u8>,
-    our_id:           Option<String>,
-    our_tcp_port:     Option<u16>,
-    their_ip:         Option<IpAddr>,
-    our_ipv6_addr:    Option<Ipv6Addr>,
-    our_ipv4_addr:    Option<Ipv4Addr>,
+    id_map: HashMap<ExtendedType, u8>,
+    our_id: Option<String>,
+    our_tcp_port: Option<u16>,
+    their_ip: Option<IpAddr>,
+    our_ipv6_addr: Option<Ipv6Addr>,
+    our_ipv4_addr: Option<Ipv4Addr>,
     our_max_requests: Option<i64>,
-    metadata_size:    Option<i64>,
-    raw_bencode:      Bytes
+    metadata_size: Option<i64>,
+    raw_bencode: Bytes,
 }
 
 impl ExtendedMessage {
@@ -221,15 +228,23 @@ impl ExtendedMessage {
         let mut raw_bencode = BytesMut::with_capacity(encoded_bytes.len());
         raw_bencode.extend_from_slice(&encoded_bytes);
 
-        ExtendedMessage{ id_map: builder.id_map, our_id: builder.our_id, our_tcp_port: builder.our_tcp_port, their_ip: builder.their_ip,
-            our_ipv6_addr: builder.our_ipv6_addr, our_ipv4_addr: builder.our_ipv4_addr, our_max_requests: builder.our_max_requests,
-            metadata_size: builder.metadata_size, raw_bencode: raw_bencode.freeze() }
+        ExtendedMessage {
+            id_map: builder.id_map,
+            our_id: builder.our_id,
+            our_tcp_port: builder.our_tcp_port,
+            their_ip: builder.their_ip,
+            our_ipv6_addr: builder.our_ipv6_addr,
+            our_ipv4_addr: builder.our_ipv4_addr,
+            our_max_requests: builder.our_max_requests,
+            metadata_size: builder.metadata_size,
+            raw_bencode: raw_bencode.freeze(),
+        }
     }
-    
+
     /// Parse an `ExtendedMessage` from some raw bencode of the given length.
     pub fn parse_bytes(_input: (), mut bytes: Bytes, len: u32) -> IResult<(), io::Result<ExtendedMessage>> {
         let cast_len = message::u32_to_usize(len);
-        
+
         if bytes.len() >= cast_len {
             let raw_bencode = bytes.split_to(cast_len);
             let clone_raw_bencode = raw_bencode.clone();
@@ -237,8 +252,8 @@ impl ExtendedMessage {
             let res_extended_message = BencodeRef::decode(&*raw_bencode, BDecodeOpt::default())
                 .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))
                 .and_then(|bencode| {
-                    let ben_dict = try!(bencode::CONVERT.convert_dict(&bencode, ROOT_ERROR_KEY));
-                    
+                    let ben_dict = bencode::CONVERT.convert_dict(&bencode, ROOT_ERROR_KEY)?;
+
                     let id_map = bencode::parse_id_map(ben_dict);
                     let our_id = bencode::parse_client_id(ben_dict);
                     let our_tcp_port = bencode::parse_client_tcp_port(ben_dict);
@@ -248,11 +263,19 @@ impl ExtendedMessage {
                     let our_max_requests = bencode::parse_client_max_requests(ben_dict);
                     let metadata_size = bencode::parse_metadata_size(ben_dict);
 
-                    Ok(ExtendedMessage{ id_map: id_map, our_id: our_id, our_tcp_port: our_tcp_port, their_ip: their_ip,
-                        our_ipv6_addr: our_ipv6_addr, our_ipv4_addr: our_ipv4_addr, our_max_requests: our_max_requests,
-                        metadata_size: metadata_size, raw_bencode: clone_raw_bencode })
+                    Ok(ExtendedMessage {
+                        id_map,
+                        our_id,
+                        our_tcp_port,
+                        their_ip,
+                        our_ipv6_addr,
+                        our_ipv4_addr,
+                        our_max_requests,
+                        metadata_size,
+                        raw_bencode: clone_raw_bencode,
+                    })
                 });
-                
+
             IResult::Done((), res_extended_message)
         } else {
             IResult::Incomplete(Needed::Size(cast_len - bytes.len()))
@@ -261,9 +284,11 @@ impl ExtendedMessage {
 
     /// Write the `ExtendedMessage` out to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write {
+    where
+        W: Write,
+    {
         let real_length = 2 + self.bencode_size();
-        try!(message::write_length_id_pair(&mut writer, real_length as u32, Some(bits_ext::EXTENDED_MESSAGE_ID)));
+        message::write_length_id_pair(&mut writer, real_length as u32, Some(bits_ext::EXTENDED_MESSAGE_ID));
 
         writer.write_all(&[bits_ext::EXTENDED_MESSAGE_HANDSHAKE_ID]);
 
@@ -277,7 +302,7 @@ impl ExtendedMessage {
 
     /// Query for the id corresponding to the given `ExtendedType`.
     pub fn query_id(&self, ext_type: &ExtendedType) -> Option<u8> {
-        self.id_map.get(ext_type).map(|id| *id)
+        self.id_map.get(ext_type).copied()
     }
 
     /// Retrieve our id from the message.

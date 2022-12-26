@@ -2,7 +2,7 @@
 
 use std::io;
 
-use protocol::PeerProtocol;
+use crate::protocol::PeerProtocol;
 
 use bytes::{BytesMut, BufMut};
 use tokio_io::codec::{Decoder, Encoder};
@@ -20,13 +20,13 @@ impl<P> PeerProtocolCodec<P> {
     /// instead of this function, as this function will not enforce a limit on
     /// received payload length.
     pub fn new(protocol: P) -> PeerProtocolCodec<P> {
-        PeerProtocolCodec{ protocol: protocol, max_payload: None }
+        PeerProtocolCodec{ protocol, max_payload: None }
     }
 
     /// Create a new `PeerProtocolCodec` which will yield an error if 
     /// receiving a payload larger than the specified `max_payload`.
     pub fn with_max_payload(protocol: P, max_payload: usize) -> PeerProtocolCodec<P> {
-        PeerProtocolCodec{ protocol: protocol, max_payload: Some(max_payload) }
+        PeerProtocolCodec{ protocol, max_payload: Some(max_payload) }
     }
 }
 
@@ -37,7 +37,7 @@ impl<P> Decoder for PeerProtocolCodec<P> where P: PeerProtocol {
     fn decode(&mut self, src: &mut BytesMut) -> io::Result<Option<Self::Item>> {
         let src_len = src.len();
         
-        let bytes = match try!(self.protocol.bytes_needed(src.as_ref())) {
+        let bytes = match self.protocol.bytes_needed(src.as_ref())? {
             Some(needed) if self.max_payload
                                 .map(|max_payload| needed > max_payload)
                                 .unwrap_or(false) => {
@@ -47,7 +47,7 @@ impl<P> Decoder for PeerProtocolCodec<P> where P: PeerProtocol {
             Some(_) | None                    => { return Ok(None) }
         };
 
-        self.protocol.parse_bytes(bytes).map(|message| Some(message))
+        self.protocol.parse_bytes(bytes).map(Some)
     }
 }
 
@@ -67,7 +67,7 @@ mod tests {
     use std::io::{self, Write};
 
     use super::PeerProtocolCodec;
-    use protocol::PeerProtocol;
+    use crate::protocol::PeerProtocol;
 
     use bytes::{Bytes, BytesMut};
     use tokio_io::codec::{Decoder};

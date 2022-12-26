@@ -1,11 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use disk::fs::FileSystem;
-use disk::{IDiskMessage, ODiskMessage};
-use disk::tasks;
-use disk::tasks::context::DiskManagerContext;
-use disk::builder::DiskManagerBuilder;
+use crate::disk::fs::FileSystem;
+use crate::disk::{IDiskMessage, ODiskMessage};
+use crate::disk::tasks;
+use crate::disk::tasks::context::DiskManagerContext;
+use crate::disk::builder::DiskManagerBuilder;
 
 use crossbeam::sync::MsQueue;
 use futures::task::{self, Task};
@@ -33,9 +33,9 @@ impl<F> DiskManager<F> {
 
         let sink = DiskManagerSink::new(pool_builder.create(), context, sink_capacity, cur_sink_capacity.clone(),
             task_queue.clone());
-        let stream = DiskManagerStream::new(out_recv, cur_sink_capacity, task_queue.clone());
+        let stream = DiskManagerStream::new(out_recv, cur_sink_capacity, task_queue);
 
-        DiskManager{ sink: sink, stream: stream }
+        DiskManager{ sink, stream }
     }
 
     /// Break the `DiskManager` into a sink and stream.
@@ -89,8 +89,8 @@ impl<F> Clone for DiskManagerSink<F> {
 impl<F> DiskManagerSink<F> {
     fn new(pool: CpuPool, context: DiskManagerContext<F>, max_capacity: usize,
            cur_capacity: Arc<AtomicUsize>, task_queue: Arc<MsQueue<Task>>) -> DiskManagerSink<F> {
-        DiskManagerSink{ pool: pool, context: context, max_capacity: max_capacity,
-                         cur_capacity: cur_capacity, task_queue: task_queue }
+        DiskManagerSink{ pool, context, max_capacity,
+                         cur_capacity, task_queue }
     }
 
     fn try_submit_work(&self) -> bool {
@@ -131,7 +131,7 @@ impl<F> Sink for DiskManagerSink<F> where F: FileSystem + Send + Sync + 'static 
             info!("DiskManagerSink Submitted Work On Second Attempt");
             tasks::execute_on_pool(item, &self.pool, self.context.clone());
 
-            return Ok(AsyncSink::Ready)
+            Ok(AsyncSink::Ready)
         } else {
             // Receiver will look at the queue eventually...
             Ok(AsyncSink::NotReady(item))
@@ -154,7 +154,7 @@ pub struct DiskManagerStream {
 
 impl DiskManagerStream {
     fn new(recv: Receiver<ODiskMessage>, cur_capacity: Arc<AtomicUsize>, task_queue: Arc<MsQueue<Task>>) -> DiskManagerStream {
-        DiskManagerStream{ recv: recv, cur_capacity: cur_capacity, task_queue: task_queue }
+        DiskManagerStream{ recv, cur_capacity, task_queue }
     }
 
     fn complete_work(&self) {

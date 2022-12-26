@@ -12,13 +12,14 @@ documentation = "https://docs.rs/bip_handshake/"
 keywords      = ["handshake", "bittorrent"]
 
 license       = "MIT/Apache-2.0"
+edition = "2018"
 
 [dependencies]
-bip_util      = { version = "0.5" }
-bytes         = "0.4"
+bip_util      = { path = "../bip_util" }
+bytes         = "0.5.3"
 futures       = "0.1"
-nom           = "3.1"
-rand          = "0.3"
+nom           = "5.0.1"
+rand          = "0.7.2"
 tokio-core    = "0.1"
 tokio-io      = "0.1"
 tokio-timer   = "0.1"

@@ -8,8 +8,8 @@ use bip_util::bt::NodeId;
 use bip_util::sha::{self, ShaHash, XorRep};
 use rand;
 
-use routing::bucket::{self, Bucket};
-use routing::node::{Node, NodeStatus};
+use crate::routing::bucket::{self, Bucket};
+use crate::routing::node::{Node, NodeStatus};
 
 pub const MAX_BUCKETS: usize = sha::SHA_HASH_LEN * 8;
 
@@ -28,8 +28,8 @@ impl RoutingTable {
         let buckets = vec![Bucket::new()];
 
         RoutingTable {
-            buckets: buckets,
-            node_id: node_id,
+            buckets,
+            node_id,
         }
     }
 
@@ -102,7 +102,7 @@ impl RoutingTable {
             // Bucket was full, try to split it
             if self.split_bucket(bucket_index) {
                 // Bucket split successfully, try to add again
-                self.bucket_node(node.clone(), num_same_bits);
+                self.bucket_node(node, num_same_bits);
             }
         }
     }
@@ -223,7 +223,7 @@ pub struct Buckets<'a> {
 impl<'a> Buckets<'a> {
     fn new(buckets: &'a [Bucket]) -> Buckets<'a> {
         Buckets {
-            buckets: buckets,
+            buckets,
             index: 0,
         }
     }
@@ -289,11 +289,11 @@ impl<'a> ClosestNodes<'a> {
         let assorted_nodes = precompute_assorted_nodes(buckets, self_node_id);
 
         ClosestNodes {
-            buckets: buckets,
-            current_iter: current_iter,
+            buckets,
+            current_iter,
             current_index: start_index,
-            start_index: start_index,
-            assorted_nodes: assorted_nodes,
+            start_index,
+            assorted_nodes,
         }
     }
 }
@@ -453,9 +453,9 @@ mod tests {
     use bip_util::bt::{self, NodeId};
     use bip_util::test as bip_test;
 
-    use routing::table::{self, RoutingTable, BucketContents};
-    use routing::bucket;
-    use routing::node::Node;
+    use crate::routing::table::{self, RoutingTable, BucketContents};
+    use crate::routing::bucket;
+    use crate::routing::node::Node;
 
     // TODO: Move into bip_util crate
     fn flip_id_bit_at_index(node_id: NodeId, index: usize) -> NodeId {
@@ -480,7 +480,7 @@ mod tests {
         // Trigger a bucket overflow and since the ids are placed in the last bucket, all of
         // the buckets will be recursively created and inserted into the list of all buckets.
         let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
-        for index in 0..(bucket::MAX_BUCKET_SIZE + 1) {
+        for index in 0..=bucket::MAX_BUCKET_SIZE {
             let node = Node::as_good(node_id.into(), block_addrs[index]);
 
             table.add_node(node);
@@ -497,7 +497,7 @@ mod tests {
                    table::MAX_BUCKETS);
         assert!(table.buckets()
             .take(table::MAX_BUCKETS)
-            .fold(true, |prev, contents| prev && contents.is_empty()));
+            .all(|contents| contents.is_empty()));
 
         // Last assorted bucket should show up
         assert_eq!(table.buckets().skip(table::MAX_BUCKETS).count(), 1);
@@ -519,7 +519,7 @@ mod tests {
         node_id[0] |= 128;
 
         let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
-        for index in 0..(bucket::MAX_BUCKET_SIZE + 1) {
+        for index in 0..=bucket::MAX_BUCKET_SIZE {
             let node = Node::as_good(node_id.into(), block_addrs[index]);
 
             table.add_node(node);
@@ -542,7 +542,7 @@ mod tests {
         assert!(table.buckets()
             .skip(1)
             .take(table::MAX_BUCKETS - 1)
-            .fold(true, |prev, contents| prev && contents.is_empty()));
+            .all(|contents| contents.is_empty()));
 
         // Last assorted bucket should show up
         assert_eq!(table.buckets().skip(table::MAX_BUCKETS).count(), 1);
@@ -564,7 +564,7 @@ mod tests {
         node_id[bt::NODE_ID_LEN - 1] = 0;
 
         let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
-        for index in 0..(bucket::MAX_BUCKET_SIZE + 1) {
+        for index in 0..=bucket::MAX_BUCKET_SIZE {
             let node = Node::as_good(node_id.into(), block_addrs[index]);
 
             table.add_node(node);

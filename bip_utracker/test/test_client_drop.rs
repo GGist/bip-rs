@@ -4,7 +4,7 @@ use bip_utracker::announce::{ClientState, AnnounceEvent};
 use futures::stream::Stream;
 use futures::future::Either;
 
-use {handshaker};
+use crate::{handshaker};
 
 #[test]
 #[allow(unused)]

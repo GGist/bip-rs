@@ -1,4 +1,4 @@
-use manager::peer_info::PeerInfo;
+use crate::manager::peer_info::PeerInfo;
 
 error_chain! {
     types {

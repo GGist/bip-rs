@@ -35,10 +35,10 @@ pub mod scrape;
 mod client;
 mod server;
 
-pub use client::{TrackerClient, ClientRequest, ClientResponse, ClientToken, ClientMetadata};
-pub use client::error::{ClientResult, ClientError};
+pub use crate::client::{TrackerClient, ClientRequest, ClientResponse, ClientToken, ClientMetadata};
+pub use crate::client::error::{ClientResult, ClientError};
 
-pub use server::TrackerServer;
-pub use server::handler::{ServerResult, ServerHandler};
+pub use crate::server::TrackerServer;
+pub use crate::server::handler::{ServerResult, ServerHandler};
 
 pub use bip_util::bt::{InfoHash, PeerId};

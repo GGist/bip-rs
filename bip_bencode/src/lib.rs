@@ -46,24 +46,24 @@ mod error;
 
 /// Traits for implementation functionality.
 pub mod inner {
-    pub use cow::BCowConvert;
+    pub use crate::cow::BCowConvert;
 }
 
 /// Traits for extended functionality.
 pub mod ext {
-    pub use access::convert::{BConvertExt};
-    pub use access::bencode::{BRefAccessExt};
+    pub use crate::access::convert::{BConvertExt};
+    pub use crate::access::bencode::{BRefAccessExt};
 }
 
-pub use reference::bencode_ref::{BencodeRef};
-pub use mutable::bencode_mut::{BencodeMut};
-pub use access::bencode::{BRefAccess, BencodeRefKind, BMutAccess, BencodeMutKind};
-pub use access::convert::{BConvert};
-pub use access::dict::BDictAccess;
-pub use access::list::BListAccess;
-pub use reference::decode_opt::BDecodeOpt;
-pub use error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
-pub use error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
+pub use crate::reference::bencode_ref::{BencodeRef};
+pub use crate::mutable::bencode_mut::{BencodeMut};
+pub use crate::access::bencode::{BRefAccess, BencodeRefKind, BMutAccess, BencodeMutKind};
+pub use crate::access::convert::{BConvert};
+pub use crate::access::dict::BDictAccess;
+pub use crate::access::list::BListAccess;
+pub use crate::reference::decode_opt::BDecodeOpt;
+pub use crate::error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
+pub use crate::error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
 
 const BEN_END: u8 = b'e';
 const DICT_START: u8 = b'd';

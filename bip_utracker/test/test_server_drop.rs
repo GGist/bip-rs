@@ -4,7 +4,7 @@ use std::time::{Duration};
 use bip_utracker::{TrackerServer};
 use bip_utracker::request::{self, TrackerRequest, RequestType};
 
-use {MockTrackerHandler};
+use crate::{MockTrackerHandler};
 
 #[test]
 #[allow(unused)]

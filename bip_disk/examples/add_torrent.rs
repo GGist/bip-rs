@@ -48,7 +48,7 @@ fn main() {
                 break;
             }
             ODiskMessage::FoundGoodPiece(_, _) => { good_pieces += 1},
-            unexpected @ _ => panic!("Unexpected ODiskMessage {:?}", unexpected)
+            unexpected => panic!("Unexpected ODiskMessage {:?}", unexpected)
         }
     }
 }

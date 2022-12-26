@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
-use message::NullProtocolMessage;
-use protocol::{PeerProtocol, NestedPeerProtocol};
+use crate::message::NullProtocolMessage;
+use crate::protocol::{PeerProtocol, NestedPeerProtocol};
 
 use bytes::Bytes;
 

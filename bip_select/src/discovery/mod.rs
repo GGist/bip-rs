@@ -1,6 +1,6 @@
 //! Module for peer discovery.
 
-use ControlMessage;
+use crate::ControlMessage;
 use bip_handshake::InfoHash;
 use bip_metainfo::Metainfo;
 use bip_peer::PeerInfo;

@@ -1,17 +1,17 @@
 use std::io;
-use std::u8;
 use std::io::Write;
+use std::u8;
 
-use nom::{IResult, be_u8};
+use nom::number::streaming::be_u8;
+use nom::{do_parse, switch, take, value, IResult};
 
-const BT_PROTOCOL:     &'static [u8] = b"BitTorrent protocol";
-const BT_PROTOCOL_LEN: u8            = 19;
+const BT_PROTOCOL: &[u8] = b"BitTorrent protocol";
 
 /// `Protocol` information transmitted as part of the handshake.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Protocol {
     BitTorrent,
-    Custom(Vec<u8>)
+    Custom(Vec<u8>),
 }
 
 impl Protocol {
@@ -22,14 +22,16 @@ impl Protocol {
 
     /// Write the `Protocol` out to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write {
+    where
+        W: Write,
+    {
         let (len, bytes) = match self {
-            &Protocol::BitTorrent       => (BT_PROTOCOL_LEN as usize, &BT_PROTOCOL[..]),
-            &Protocol::Custom(ref prot) => (prot.len(), &prot[..])
+            &Protocol::BitTorrent => (BT_PROTOCOL.len(), &BT_PROTOCOL[..]),
+            &Protocol::Custom(ref prot) => (prot.len(), &prot[..]),
         };
 
-        try!(writer.write_all(&[len as u8][..]));
-        try!(writer.write_all(bytes));
+        writer.write_all(&[len as u8][..])?;
+        writer.write_all(bytes)?;
 
         Ok(())
     }
@@ -37,8 +39,8 @@ impl Protocol {
     /// Get the legth of the given protocol (does not include the length byte).
     pub fn write_len(&self) -> usize {
         match self {
-            &Protocol::BitTorrent         => BT_PROTOCOL_LEN as usize,
-            &Protocol::Custom(ref custom) => custom.len()
+            &Protocol::BitTorrent => BT_PROTOCOL.len(),
+            &Protocol::Custom(ref custom) => custom.len(),
         }
     }
 }
@@ -57,9 +59,5 @@ fn parse_real_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
 }
 
 fn parse_raw_protocol(bytes: &[u8]) -> IResult<&[u8], &[u8]> {
-    do_parse!(bytes,
-        length:       be_u8         >>
-        raw_protocol: take!(length) >>
-        (raw_protocol)
-    )
+    do_parse!(bytes, length: be_u8 >> raw_protocol: take!(length) >> (raw_protocol))
 }

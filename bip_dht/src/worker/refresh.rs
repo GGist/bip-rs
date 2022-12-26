@@ -5,12 +5,12 @@ use bip_handshake::Handshaker;
 use bip_util::bt::{self, NodeId};
 use mio::EventLoop;
 
-use message::find_node::FindNodeRequest;
-use routing::node::NodeStatus;
-use routing::table::{self, RoutingTable};
-use transaction::MIDGenerator;
-use worker::ScheduledTask;
-use worker::handler::DhtHandler;
+use crate::message::find_node::FindNodeRequest;
+use crate::routing::node::NodeStatus;
+use crate::routing::table::{self, RoutingTable};
+use crate::transaction::MIDGenerator;
+use crate::worker::ScheduledTask;
+use crate::worker::handler::DhtHandler;
 
 const REFRESH_INTERVAL_TIMEOUT: u64 = 6000;
 
@@ -29,7 +29,7 @@ pub struct TableRefresh {
 impl TableRefresh {
     pub fn new(id_generator: MIDGenerator) -> TableRefresh {
         TableRefresh {
-            id_generator: id_generator,
+            id_generator,
             curr_refresh_bucket: 0,
         }
     }

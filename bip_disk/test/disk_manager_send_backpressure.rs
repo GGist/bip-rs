@@ -1,4 +1,4 @@
-use {MultiFileDirectAccessor, InMemoryFileSystem};
+use crate::{MultiFileDirectAccessor, InMemoryFileSystem};
 use bip_disk::{DiskManagerBuilder, IDiskMessage};
 use bip_metainfo::{MetainfoBuilder, PieceLength, Metainfo};
 use tokio_core::reactor::{Core};
@@ -10,13 +10,13 @@ use futures::{future, AsyncSink};
 #[test]
 fn positive_disk_manager_send_backpressure() {
     // Create some "files" as random bytes
-    let data_a = (::random_buffer(50), "/path/to/file/a".into());
-    let data_b = (::random_buffer(2000), "/path/to/file/b".into());
-    let data_c = (::random_buffer(0), "/path/to/file/c".into());
+    let data_a = (crate::random_buffer(50), "/path/to/file/a".into());
+    let data_b = (crate::random_buffer(2000), "/path/to/file/b".into());
+    let data_c = (crate::random_buffer(0), "/path/to/file/c".into());
 
     // Create our accessor for our in memory files and create a torrent file for them
     let files_accessor = MultiFileDirectAccessor::new("/my/downloads/".into(),
-        vec![data_a.clone(), data_b.clone(), data_c.clone()]);
+        vec![data_a, data_b, data_c]);
     let metainfo_bytes = MetainfoBuilder::new()
         .set_piece_length(PieceLength::Custom(1024))
         .build(1, files_accessor, |_| ()).unwrap();
@@ -27,7 +27,7 @@ fn positive_disk_manager_send_backpressure() {
     let filesystem = InMemoryFileSystem::new();
     let (m_send, m_recv) = DiskManagerBuilder::new()
         .with_sink_buffer_capacity(1)
-        .build(filesystem.clone())
+        .build(filesystem)
         .split();
 
     let mut core = Core::new().unwrap();

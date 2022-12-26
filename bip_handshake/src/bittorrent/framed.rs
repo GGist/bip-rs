@@ -1,19 +1,19 @@
 use std::io::{self, Cursor};
 
-use bittorrent::message::{self, HandshakeMessage};
+use crate::bittorrent::message::{self, HandshakeMessage};
 
-use bytes::BytesMut;
-use bytes::buf::BufMut;
-use futures::{StartSend, AsyncSink, Async, Poll};
+use bytes::buf::BufMutExt;
+use bytes::{Buf, BytesMut};
 use futures::sink::Sink;
 use futures::stream::Stream;
-use tokio_io::{AsyncWrite, AsyncRead};
-use nom::IResult;
+use futures::{Async, AsyncSink, Poll, StartSend};
+use tokio_io::try_nb;
+use tokio_io::{AsyncRead, AsyncWrite};
 
 enum HandshakeState {
     Waiting,
     Length(u8),
-    Finished
+    Finished,
 }
 
 // We can't use the built in frames because they may buffer more
@@ -21,18 +21,22 @@ enum HandshakeState {
 // because we are giving a raw socket to the client of this library.
 // We don't want to steal any of their bytes during our handshake!
 pub struct FramedHandshake<S> {
-    sock:         S,
+    sock: S,
     write_buffer: BytesMut,
-    read_buffer:  Vec<u8>,
-    read_pos:     usize,
-    state:        HandshakeState
+    read_buffer: Vec<u8>,
+    read_pos: usize,
+    state: HandshakeState,
 }
 
 impl<S> FramedHandshake<S> {
     pub fn new(sock: S) -> FramedHandshake<S> {
-        FramedHandshake{ sock: sock, write_buffer: BytesMut::with_capacity(1),
-                         read_buffer: vec![0], read_pos: 0,
-                         state: HandshakeState::Waiting }
+        FramedHandshake {
+            sock,
+            write_buffer: BytesMut::with_capacity(1),
+            read_buffer: vec![0],
+            read_pos: 0,
+            state: HandshakeState::Waiting,
+        }
     }
 
     pub fn into_inner(self) -> S {
@@ -40,13 +44,16 @@ impl<S> FramedHandshake<S> {
     }
 }
 
-impl<S> Sink for FramedHandshake<S> where S: AsyncWrite {
+impl<S> Sink for FramedHandshake<S>
+where
+    S: AsyncWrite,
+{
     type SinkItem = HandshakeMessage;
     type SinkError = io::Error;
 
     fn start_send(&mut self, item: HandshakeMessage) -> StartSend<Self::SinkItem, Self::SinkError> {
         self.write_buffer.reserve(item.write_len());
-        try!(item.write_bytes(self.write_buffer.by_ref().writer()));
+        item.write_bytes(self.write_buffer.as_mut().writer())?;
 
         Ok(AsyncSink::Ready)
     }
@@ -56,21 +63,26 @@ impl<S> Sink for FramedHandshake<S> where S: AsyncWrite {
             let write_result = self.sock.write_buf(&mut Cursor::new(&self.write_buffer));
 
             match try_nb!(write_result) {
-                Async::Ready(0)       => { return Err(io::Error::new(io::ErrorKind::WriteZero, "Failed To Write Bytes").into()) },
-                Async::Ready(written) => { self.write_buffer.split_to(written); },
-                Async::NotReady       => { return Ok(Async::NotReady) }
+                Async::Ready(0) => return Err(io::Error::new(io::ErrorKind::WriteZero, "Failed To Write Bytes")),
+                Async::Ready(written) => {
+                    self.write_buffer.advance(written);
+                }
+                Async::NotReady => return Ok(Async::NotReady),
             }
 
             if self.write_buffer.is_empty() {
                 try_nb!(self.sock.flush());
 
-                return Ok(Async::Ready(()))
+                return Ok(Async::Ready(()));
             }
         }
     }
 }
 
-impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
+impl<S> Stream for FramedHandshake<S>
+where
+    S: AsyncRead,
+{
     type Item = HandshakeMessage;
     type Error = io::Error;
 
@@ -79,10 +91,10 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
             match self.state {
                 HandshakeState::Waiting => {
                     let read_result = self.sock.read_buf(&mut Cursor::new(&mut self.read_buffer[..]));
-                    
+
                     match try_nb!(read_result) {
-                        Async::Ready(0)    => { return Ok(Async::Ready(None)) },
-                        Async::Ready(1)    => {
+                        Async::Ready(0) => return Ok(Async::Ready(None)),
+                        Async::Ready(1) => {
                             let length = self.read_buffer[0];
 
                             self.state = HandshakeState::Length(length);
@@ -90,25 +102,23 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
                             self.read_pos = 1;
                             self.read_buffer = vec![0u8; message::write_len_with_protocol_len(length)];
                             self.read_buffer[0] = length;
-                        },
+                        }
                         Async::Ready(read) => panic!("bip_handshake: Expected To Read Single Byte, Read {:?}", read),
-                        Async::NotReady    => { return Ok(Async::NotReady) }
+                        Async::NotReady => return Ok(Async::NotReady),
                     }
-                },
+                }
                 HandshakeState::Length(length) => {
                     let expected_length = message::write_len_with_protocol_len(length);
-                    
+
                     if self.read_pos == expected_length {
                         match HandshakeMessage::from_bytes(&*self.read_buffer) {
-                            IResult::Done(_, message) => {
+                            Ok((_, message)) => {
                                 self.state = HandshakeState::Finished;
 
-                                return Ok(Async::Ready(Some(message)))
-                            },
-                            IResult::Incomplete(_)    => panic!("bip_handshake: HandshakeMessage Failed With Incomplete Bytes"),
-                            IResult::Error(_)         => {
-                                return Err(io::Error::new(io::ErrorKind::InvalidData, "HandshakeMessage Failed To Parse"))
+                                return Ok(Async::Ready(Some(message)));
                             }
+                            Err(nom::Err::Incomplete(_)) => panic!("bip_handshake: HandshakeMessage Failed With Incomplete Bytes"),
+                            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "HandshakeMessage Failed To Parse")),
                         }
                     } else {
                         let read_result = {
@@ -116,19 +126,17 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
 
                             try_nb!(self.sock.read_buf(&mut cursor))
                         };
-                        
+
                         match read_result {
-                            Async::Ready(0)    => { return Ok(Async::Ready(None)) },
-                            Async::Ready(read) => { self.read_pos += read; },
-                            Async::NotReady    => {
-                                return Ok(Async::NotReady)
+                            Async::Ready(0) => return Ok(Async::Ready(None)),
+                            Async::Ready(read) => {
+                                self.read_pos += read;
                             }
+                            Async::NotReady => return Ok(Async::NotReady),
                         }
                     }
-                },
-                HandshakeState::Finished => {
-                    return Ok(Async::Ready(None))
                 }
+                HandshakeState::Finished => return Ok(Async::Ready(None)),
             }
         }
     }
@@ -138,15 +146,15 @@ impl<S> Stream for FramedHandshake<S> where S: AsyncRead {
 mod tests {
     use std::io::{Cursor, Write};
 
-    use super::{FramedHandshake};
-    use bittorrent::message::HandshakeMessage;
-    use message::extensions::{self, Extensions};
-    use message::protocol::Protocol;
+    use super::FramedHandshake;
+    use crate::bittorrent::message::HandshakeMessage;
+    use crate::message::extensions::{self, Extensions};
+    use crate::message::protocol::Protocol;
 
-    use bip_util::bt::{self, PeerId, InfoHash};
-    use futures::Future;
+    use bip_util::bt::{self, InfoHash, PeerId};
     use futures::sink::Sink;
     use futures::stream::Stream;
+    use futures::Future;
 
     fn any_peer_id() -> PeerId {
         [22u8; bt::PEER_ID_LEN].into()
@@ -164,8 +172,7 @@ mod tests {
     fn positive_write_handshake_message() {
         let message = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
 
-        let write_frame = FramedHandshake::new(Cursor::new(Vec::new()))
-            .send(message.clone()).wait().unwrap();
+        let write_frame = FramedHandshake::new(Cursor::new(Vec::new())).send(message.clone()).wait().unwrap();
         let recv_buffer = write_frame.into_inner().into_inner();
 
         let mut exp_buffer = Vec::new();
@@ -180,8 +187,12 @@ mod tests {
         let message_two = HandshakeMessage::from_parts(Protocol::Custom(vec![5, 6, 7]), any_extensions(), any_info_hash(), any_peer_id());
 
         let write_frame = FramedHandshake::new(Cursor::new(Vec::new()))
-            .send(message_one.clone()).wait().unwrap()
-            .send(message_two.clone()).wait().unwrap();
+            .send(message_one.clone())
+            .wait()
+            .unwrap()
+            .send(message_two.clone())
+            .wait()
+            .unwrap();
         let recv_buffer = write_frame.into_inner().into_inner();
 
         let mut exp_buffer = Vec::new();
@@ -216,11 +227,7 @@ mod tests {
         // to be able to read them afterwards)
         buffer.write_all(&[55]).unwrap();
 
-        let read_frame = FramedHandshake::new(&buffer[..])
-            .into_future()
-            .wait()
-            .ok()
-            .unwrap().1;
+        let read_frame = FramedHandshake::new(&buffer[..]).into_future().wait().ok().unwrap().1;
         let buffer_ref = read_frame.into_inner();
 
         assert_eq!(&[55], buffer_ref);
@@ -237,11 +244,7 @@ mod tests {
         // to be able to read them afterwards)
         buffer.write_all(&[55, 54, 21]).unwrap();
 
-        let read_frame = FramedHandshake::new(&buffer[..])
-            .into_future()
-            .wait()
-            .ok()
-            .unwrap().1;
+        let read_frame = FramedHandshake::new(&buffer[..]).into_future().wait().ok().unwrap().1;
         let buffer_ref = read_frame.into_inner();
 
         assert_eq!(&[55, 54, 21], buffer_ref);

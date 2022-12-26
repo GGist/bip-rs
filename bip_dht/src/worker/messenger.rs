@@ -4,7 +4,7 @@ use std::thread;
 
 use mio::Sender;
 
-use worker::OneshotTask;
+use crate::worker::OneshotTask;
 
 const OUTGOING_MESSAGE_CAPACITY: usize = 4096;
 

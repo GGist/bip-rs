@@ -1,6 +1,6 @@
 
 
-use ControlMessage;
+use crate::ControlMessage;
 use bip_handshake::InfoHash;
 use bip_metainfo::Metainfo;
 use bip_peer::PeerInfo;
@@ -13,9 +13,9 @@ use futures::StartSend;
 use futures::Stream;
 use futures::task;
 use futures::task::Task;
-use revelation::IRevealMessage;
-use revelation::ORevealMessage;
-use revelation::error::{RevealError, RevealErrorKind};
+use crate::revelation::IRevealMessage;
+use crate::revelation::ORevealMessage;
+use crate::revelation::error::{RevealError, RevealErrorKind};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -61,7 +61,7 @@ impl HonestRevealModule {
                 piece_set.reserve_len_exact(num_pieces);
 
                 let peers_info = PeersInfo {
-                    num_pieces: num_pieces,
+                    num_pieces,
                     status: piece_set,
                     peers: HashSet::new(),
                 };
@@ -133,8 +133,8 @@ impl HonestRevealModule {
             .map(|peers_info| {
                 if index as usize >= peers_info.num_pieces {
                     Err(RevealError::from_kind(RevealErrorKind::InvalidPieceOutOfRange {
-                        index: index,
-                        hash: hash,
+                        index,
+                        hash,
                     }))
                 } else {
                     // Queue up all have messages
@@ -148,7 +148,7 @@ impl HonestRevealModule {
                     Ok(AsyncSink::Ready)
                 }
             })
-            .unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash: hash })))
+            .unwrap_or_else(|| Err(RevealError::from_kind(RevealErrorKind::InvalidMetainfoNotExists { hash })))
     }
 
     //------------------------------------------------------//
@@ -234,7 +234,7 @@ impl Stream for HonestRevealModule {
 #[cfg(test)]
 mod tests {
     use super::HonestRevealModule;
-    use ControlMessage;
+    use crate::ControlMessage;
     use bip_handshake::Extensions;
     use bip_metainfo::{DirectAccessor, Metainfo, MetainfoBuilder, PieceLength};
     use bip_peer::PeerInfo;
@@ -242,8 +242,8 @@ mod tests {
     use bip_util::bt::InfoHash;
     use futures::{Async, Sink, Stream};
     use futures_test::harness::Harness;
-    use revelation::{IRevealMessage, ORevealMessage};
-    use revelation::error::RevealErrorKind;
+    use crate::revelation::{IRevealMessage, ORevealMessage};
+    use crate::revelation::error::RevealErrorKind;
 
     fn metainfo(num_pieces: usize) -> Metainfo {
         let data = vec![0u8; num_pieces];
@@ -272,7 +272,7 @@ mod tests {
             .send(IRevealMessage::Control(ControlMessage::AddTorrent(metainfo.clone())))
             .unwrap();
         block_send
-            .send(IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo.clone())))
+            .send(IRevealMessage::Control(ControlMessage::RemoveTorrent(metainfo)))
             .unwrap();
     }
 

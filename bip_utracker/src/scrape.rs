@@ -21,9 +21,9 @@ impl ScrapeStats {
     /// Create a new ScrapeStats.
     pub fn new(seeders: i32, downloaded: i32, leechers: i32) -> ScrapeStats {
         ScrapeStats {
-            seeders: seeders,
-            downloaded: downloaded,
-            leechers: leechers,
+            seeders,
+            downloaded,
+            leechers,
         }
     }
 

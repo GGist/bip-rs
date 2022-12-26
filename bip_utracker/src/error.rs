@@ -14,7 +14,9 @@ pub struct ErrorResponse<'a> {
 impl<'a> ErrorResponse<'a> {
     /// Create a new ErrorResponse.
     pub fn new(message: &'a str) -> ErrorResponse<'a> {
-        ErrorResponse { message: Cow::Borrowed(message) }
+        ErrorResponse {
+            message: Cow::Borrowed(message),
+        }
     }
 
     /// Construct an ErrorResponse from the given bytes.
@@ -24,9 +26,10 @@ impl<'a> ErrorResponse<'a> {
 
     /// Write the ErrorResponse to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
-        try!(writer.write_all(self.message.as_bytes()));
+        writer.write_all(self.message.as_bytes())?;
 
         Ok(())
     }
@@ -38,6 +41,8 @@ impl<'a> ErrorResponse<'a> {
 
     /// Create an owned version of the ErrorResponse.
     pub fn to_owned(&self) -> ErrorResponse<'static> {
-        ErrorResponse { message: Cow::Owned((*self.message).to_owned()) }
+        ErrorResponse {
+            message: Cow::Owned((*self.message).to_owned()),
+        }
     }
 }

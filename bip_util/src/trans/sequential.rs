@@ -3,7 +3,7 @@ use std::num::Wrapping;
 
 use num::{One, Zero};
 
-use trans::TransactionIds;
+use crate::trans::TransactionIds;
 
 /// Generates sequentially unique ids and wraps when overflow occurs.
 pub struct SequentialIds<T> {
@@ -37,7 +37,7 @@ impl<T> TransactionIds<T> for SequentialIds<T>
 #[cfg(test)]
 mod tests {
     use super::SequentialIds;
-    use trans::TransactionIds;
+    use crate::trans::TransactionIds;
 
     #[test]
     fn positive_sequentail_zero_initial() {

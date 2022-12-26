@@ -1,13 +1,13 @@
-use ControlMessage;
+use crate::ControlMessage;
 use bip_peer::messages::builders::ExtendedMessageBuilder;
-use discovery::IDiscoveryMessage;
-use discovery::ODiscoveryMessage;
-use discovery::error::DiscoveryError;
-use error::UberError;
-use extended::ExtendedListener;
-use extended::ExtendedModule;
-use extended::IExtendedMessage;
-use extended::OExtendedMessage;
+use crate::discovery::IDiscoveryMessage;
+use crate::discovery::ODiscoveryMessage;
+use crate::discovery::error::DiscoveryError;
+use crate::error::UberError;
+use crate::extended::ExtendedListener;
+use crate::extended::ExtendedModule;
+use crate::extended::IExtendedMessage;
+use crate::extended::OExtendedMessage;
 use futures::{Async, AsyncSink};
 use futures::Poll;
 use futures::Sink;
@@ -47,7 +47,7 @@ pub enum OUberMessage {
 /// Builder for constructing an `UberModule`.
 pub struct UberModuleBuilder {
     // TODO: Remove these bounds when something like https://github.com/rust-lang/rust/pull/45047 lands
-    discovery: Vec<Box<DiscoveryTrait<SinkItem = IDiscoveryMessage, SinkError = DiscoveryError, Item = ODiscoveryMessage, Error = DiscoveryError>>>,
+    discovery: Vec<Box<dyn DiscoveryTrait<SinkItem = IDiscoveryMessage, SinkError = DiscoveryError, Item = ODiscoveryMessage, Error = DiscoveryError>>>,
     ext_builder: Option<ExtendedMessageBuilder>,
 }
 
@@ -79,7 +79,7 @@ impl UberModuleBuilder {
     {
         self.discovery.push(Box::new(module)
             as Box<
-                DiscoveryTrait<SinkItem = IDiscoveryMessage, SinkError = DiscoveryError, Item = ODiscoveryMessage, Error = DiscoveryError>,
+                dyn DiscoveryTrait<SinkItem = IDiscoveryMessage, SinkError = DiscoveryError, Item = ODiscoveryMessage, Error = DiscoveryError>,
             >);
         self
     }
@@ -113,7 +113,7 @@ impl<T> IsReady for Async<T> {
 
 /// Module for multiplexing messages across zero or more other modules.
 pub struct UberModule {
-    discovery: Vec<Box<DiscoveryTrait<SinkItem = IDiscoveryMessage, SinkError = DiscoveryError, Item = ODiscoveryMessage, Error = DiscoveryError>>>,
+    discovery: Vec<Box<dyn DiscoveryTrait<SinkItem = IDiscoveryMessage, SinkError = DiscoveryError, Item = ODiscoveryMessage, Error = DiscoveryError>>>,
     extended: Option<ExtendedModule>,
     last_sink_state: Option<ModuleState>,
     last_stream_state: Option<ModuleState>,
@@ -132,7 +132,7 @@ impl UberModule {
             discovery: builder.discovery,
             extended: builder
                 .ext_builder
-                .map(|builder| ExtendedModule::new(builder)),
+                .map(ExtendedModule::new),
             last_sink_state: None,
             last_stream_state: None,
         }
@@ -197,7 +197,7 @@ impl UberModule {
 
         let mut should_continue = result
             .as_ref()
-            .map(|async| (is_sink && async.is_ready()) || (is_stream && !async.is_ready()))
+            .map(|r#async| (is_sink && r#async.is_ready()) || (is_stream && !r#async.is_ready()))
             .unwrap_or(false);
         // While we are ready, and we havent exhausted states, continue to loop
         while should_continue && opt_next_state.is_some() {
@@ -205,7 +205,7 @@ impl UberModule {
             result = logic(self, next_state);
             should_continue = result
                 .as_ref()
-                .map(|async| (is_sink && async.is_ready()) || (is_stream && !async.is_ready()))
+                .map(|r#async| (is_sink && r#async.is_ready()) || (is_stream && !r#async.is_ready()))
                 .unwrap_or(false);
 
             // If we dont need to return to the user because of this error, mark it as done
@@ -236,13 +236,13 @@ impl UberModule {
                 (ModuleState::Discovery(index), &IUberMessage::Control(ref control)) => {
                     uber.discovery[index]
                         .start_send(IDiscoveryMessage::Control(control.clone()))
-                        .map(|async| async.map(|_| ()))
+                        .map(|r#async| r#async.map(|_| ()))
                         .map_err(|err| err.into())
                 },
                 (ModuleState::Discovery(index), &IUberMessage::Discovery(ref discovery)) => {
                     uber.discovery[index]
                         .start_send(discovery.clone())
-                        .map(|async| async.map(|_| ()))
+                        .map(|r#async| r#async.map(|_| ()))
                         .map_err(|err| err.into())
                 },
                 (ModuleState::Extended, &IUberMessage::Control(ref control)) => {
@@ -313,9 +313,9 @@ impl UberModule {
                             ext_module
                                 .poll()
                                 .map(|async_opt_message| {
-                                    async_opt_message.map(|opt_message| opt_message.map(|message| OUberMessage::Extended(message)))
+                                    async_opt_message.map(|opt_message| opt_message.map(OUberMessage::Extended))
                                 })
-                                .map_err(|err| err.into())
+                                .map_err(|err| err)
                         })
                         .unwrap_or(Ok(Async::Ready(None)))
                 },
@@ -323,7 +323,7 @@ impl UberModule {
                     uber.discovery[index]
                         .poll()
                         .map(|async_opt_message| {
-                            async_opt_message.map(|opt_message| opt_message.map(|message| OUberMessage::Discovery(message)))
+                            async_opt_message.map(|opt_message| opt_message.map(OUberMessage::Discovery))
                         })
                         .map_err(|err| err.into())
                 },
@@ -339,7 +339,7 @@ impl Sink for UberModule {
     fn start_send(&mut self, item: Self::SinkItem) -> StartSend<Self::SinkItem, Self::SinkError> {
         // Currently we dont return NotReady from the module directly, so no saving our task state here
         self.start_sink_state(&item)
-            .map(|async| async.map(|_| item))
+            .map(|r#async| r#async.map(|_| item))
     }
 
     fn poll_complete(&mut self) -> Poll<(), Self::SinkError> {
