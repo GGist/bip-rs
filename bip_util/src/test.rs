@@ -1,18 +1,20 @@
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4};
 
-use chrono::{Duration, UTC, DateTime};
+use crate::chrono::*;
 
 use crate::bt::{self, NodeId};
 use crate::net::IpAddr;
 
 /// Allows us to time travel into the future.
-pub fn travel_into_future(offset: Duration) -> DateTime<UTC> {
-    UTC::now().checked_add(offset).unwrap()
+pub fn travel_into_future(offset: Duration) -> chrono::DateTime<Utc> {
+    let now = crate::chrono::Utc::now();
+    now.checked_add_signed(offset).unwrap()
 }
 
 /// Allows us to time travel into the past.
-pub fn travel_into_past(offset: Duration) -> DateTime<UTC> {
-    UTC::now().checked_sub(offset).unwrap()
+pub fn travel_into_past(offset: Duration) -> chrono::DateTime<Utc> {
+    let now = Utc::now();
+    now.checked_sub_signed(offset).unwrap()
 }
 
 /// Generates a dummy Ipv4 address as an `IpAddr`.
