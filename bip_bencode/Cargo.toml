@@ -12,10 +12,10 @@ documentation    = "https://docs.rs/bip_bencode/"
 keywords         = ["bencode", "bittorrent"]
 
 license          = "MIT/Apache-2.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-error-chain      = "0.12.1"
+error-chain      = "0.12"
 
 [features]
 unstable         = []
