@@ -9,44 +9,37 @@ const CREATED_BY: &str = "Fridge";
 
 #[test]
 fn positive_set_trackers() {
-    let trackers = vec![
-        vec![TRACKER.to_string()]
-    ];
+    let trackers = vec![vec![TRACKER.to_string()]];
 
-    let builder = MetainfoBuilder::new()
-        .set_trackers(Some(&trackers));
+    let builder = MetainfoBuilder::new().set_trackers(Some(&trackers));
 
     assert_eq!(builder.get_trackers(), Some(trackers.clone()));
 }
 
 #[test]
 fn positive_set_main_tracker() {
-    let builder = MetainfoBuilder::new()
-        .set_main_tracker(Some(TRACKER));
+    let builder = MetainfoBuilder::new().set_main_tracker(Some(TRACKER));
 
     assert_eq!(builder.get_main_tracker(), Some(TRACKER.to_string()));
 }
 
 #[test]
 fn positive_set_creation_date() {
-    let builder = MetainfoBuilder::new()
-        .set_creation_date(Some(DATE));
+    let builder = MetainfoBuilder::new().set_creation_date(Some(DATE));
 
     assert_eq!(builder.get_creation_date(), Some(DATE));
 }
 
 #[test]
 fn positive_set_comment() {
-    let builder = MetainfoBuilder::new()
-        .set_comment(Some(COMMENT));
+    let builder = MetainfoBuilder::new().set_comment(Some(COMMENT));
 
     assert_eq!(builder.get_comment(), Some(COMMENT.to_string()));
 }
 
 #[test]
 fn positive_set_created_by() {
-    let builder = MetainfoBuilder::new()
-        .set_created_by(Some(CREATED_BY));
+    let builder = MetainfoBuilder::new().set_created_by(Some(CREATED_BY));
 
     assert_eq!(builder.get_created_by(), Some(CREATED_BY.to_string()));
 }

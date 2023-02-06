@@ -1,36 +1,36 @@
 [package]
-name             = "bip_disk"
-version          = "0.6.0"
-description      = "Bittorrent Infrastructure Project Disk Module"
+name        = "bip_disk"
+version     = "0.6.0"
+description = "Bittorrent Infrastructure Project Disk Module"
 
-authors          = ["Andrew <amiller4421@gmail.com>"]
+authors = [ "Andrew <amiller4421@gmail.com>" ]
 
-homepage         = "https://github.com/GGist/bip-rs/bip_disk"
-repository       = "https://github.com/GGist/bip-rs/bip_disk"
+homepage   = "https://github.com/GGist/bip-rs/bip_disk"
+repository = "https://github.com/GGist/bip-rs/bip_disk"
 
-keywords         = ["filesystem", "fs", "disk"]
+keywords = [ "filesystem", "fs", "disk" ]
 
-license          = "MIT/Apache-2.0"
+license = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-bip_metainfo     = { path = "../bip_metainfo" }
-bip_util         = { path = "../bip_util" }
-bytes            = "0.4"
-crossbeam        = "0.3"
-futures          = "0.1"
-futures-cpupool  = "0.1"
-error-chain      = "0.12.1"
-log              = "0.3"
-lru-cache        = "0.1"
+bip_metainfo    = { path = "../bip_metainfo" }
+bip_util        = { path = "../bip_util" }
+bytes           = "0.4"
+crossbeam       = "0.8"
+futures         = "0.1"
+futures-cpupool = "0.1"
+error-chain     = "0.12.1"
+log             = "0.3"
+lru-cache       = "0.1"
 
 [dev-dependencies]
-rand             = "0.3"
-tokio-core       = "0.1"
+rand       = "0.3"
+tokio-core = "0.1"
 
 [features]
-unstable         = []
+unstable = [  ]
 
 [[test]]
-name             = "test"
-path             = "test/mod.rs"
+name = "test"
+path = "test/mod.rs"

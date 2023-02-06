@@ -1,5 +1,5 @@
 use bip_bencode::BRefAccess;
-use bip_bencode::{BDictAccess, BConvert, BencodeConvertError, BListAccess};
+use bip_bencode::{BConvert, BDictAccess, BListAccess, BencodeConvertError};
 
 use crate::error::{ParseError, ParseResult};
 
@@ -223,6 +223,8 @@ where
 
 /// Parses the path string from the path bencode.
 pub fn parse_path_str<B>(path_bencode: &B) -> ParseResult<&str>
-    where B: BRefAccess {
+where
+    B: BRefAccess,
+{
     CONVERT.convert_str(path_bencode, PATH_KEY)
 }

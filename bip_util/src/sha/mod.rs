@@ -149,7 +149,10 @@ pub struct Bits<'a> {
 
 impl<'a> Bits<'a> {
     fn new(bytes: &'a [u8]) -> Bits<'a> {
-        Bits { bytes: bytes, bit_pos: 0 }
+        Bits {
+            bytes: bytes,
+            bit_pos: 0,
+        }
     }
 }
 

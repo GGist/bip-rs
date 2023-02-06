@@ -2,14 +2,14 @@ extern crate bip_metainfo;
 extern crate chrono;
 extern crate pbr;
 
-use std::fs::{File};
-use std::path::{Path};
-use std::io::{self, Write, BufRead};
+use std::fs::File;
+use std::io::{self, BufRead, Write};
+use std::path::Path;
 
-use bip_metainfo::{MetainfoBuilder, Metainfo};
-use bip_metainfo::error::{ParseResult};
+use bip_metainfo::error::ParseResult;
+use bip_metainfo::{Metainfo, MetainfoBuilder};
 use chrono::offset::{TimeZone, Utc};
-use pbr::{ProgressBar};
+use pbr::ProgressBar;
 
 fn main() {
     println!("\nIMPORTANT: Remember to run in release mode for real world performance...\n");
@@ -17,7 +17,7 @@ fn main() {
     let input = io::stdin();
     let mut input_lines = input.lock().lines();
     let mut output = io::stdout();
-    
+
     output.write_all(b"Enter A Source Folder/File: ").unwrap();
     output.flush().unwrap();
     let src_path = input_lines.next().unwrap().unwrap();
@@ -27,12 +27,12 @@ fn main() {
         .unwrap();
     output.flush().unwrap();
     let dst_path = input_lines.next().unwrap().unwrap();
-    
+
     match create_torrent(&src_path) {
-        Ok(bytes)  => {
+        Ok(bytes) => {
             let mut output_file = File::create(dst_path).unwrap();
             output_file.write_all(&bytes).unwrap();
-            
+
             print_metainfo_overview(&bytes);
         }
         Err(error) => println!("Error With Input: {:?}", error),
@@ -41,20 +41,22 @@ fn main() {
 
 /// Create a torrent from the given source path.
 fn create_torrent<S>(src_path: S) -> ParseResult<Vec<u8>>
-    where S: AsRef<Path> {
+where
+    S: AsRef<Path>,
+{
     let count = 10000;
     let mut pb = ProgressBar::new(count);
     pb.format("╢▌▌░╟");
-    
+
     let builder = MetainfoBuilder::new()
         .set_created_by(Some("bip_metainfo"))
         .set_comment(Some("Just Some Comment"));
-    
+
     let mut prev_progress = 0;
     builder.build(2, src_path, move |progress| {
         let whole_progress = (progress * (count as f64)) as u64;
         let delta_progress = whole_progress - prev_progress;
-        
+
         if delta_progress > 0 {
             pb.add(delta_progress);
         }
@@ -66,7 +68,10 @@ fn create_torrent<S>(src_path: S) -> ParseResult<Vec<u8>>
 fn print_metainfo_overview(bytes: &[u8]) {
     let metainfo = Metainfo::from_bytes(bytes).unwrap();
     let info = metainfo.info();
-    let info_hash_hex = metainfo.info().info_hash().as_ref()
+    let info_hash_hex = metainfo
+        .info()
+        .info_hash()
+        .as_ref()
         .iter()
         .map(|b| format!("{:02X}", b))
         .fold(String::new(), |mut acc, nex| {
