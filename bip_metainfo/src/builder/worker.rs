@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::thread;
 
 use bip_util::sha::ShaHash;
-use crossbeam::sync::MsQueue;
+use crossbeam::queue::SegQueue;
+use crossbeam::utils::Backoff;
 
 use crate::accessor::{Accessor, PieceAccess};
 use crate::builder::buffer::{PieceBuffer, PieceBuffers};
@@ -42,7 +43,7 @@ where
     let (prog_send, prog_recv) = mpsc::channel();
 
     // Create queue to push work to and pull work from
-    let work_queue = Arc::new(MsQueue::new());
+    let work_queue = Arc::new(SegQueue::new());
 
     // Create buffer allocator to reuse pre allocated buffers
     let piece_buffers = Arc::new(PieceBuffers::new(piece_length, num_workers));
@@ -75,7 +76,7 @@ fn start_hash_master<A>(
     accessor: A,
     num_workers: usize,
     recv: Receiver<MasterMessage>,
-    work: Arc<MsQueue<WorkerMessage>>,
+    work: Arc<SegQueue<WorkerMessage>>,
     buffers: Arc<PieceBuffers>,
     progress_sender: Sender<usize>,
 ) -> ParseResult<Vec<(usize, ShaHash)>>
@@ -173,12 +174,20 @@ where
 // ----------------------------------------------------------------------------//
 
 /// Starts a hasher worker which will hash all of the buffers it receives.
-fn start_hash_worker(send: Sender<MasterMessage>, work: Arc<MsQueue<WorkerMessage>>, buffers: Arc<PieceBuffers>) {
+fn start_hash_worker(send: Sender<MasterMessage>, work: Arc<SegQueue<WorkerMessage>>, buffers: Arc<PieceBuffers>) {
     let mut work_to_do = true;
 
+    let backoff = Backoff::new();
     // Loop until we are instructed to stop working
     while work_to_do {
         let work_item = work.pop();
+        if work_item.is_none() {
+            backoff.snooze();
+            continue;
+        }
+
+        backoff.reset();
+        let work_item = work_item.unwrap();
 
         match work_item {
             WorkerMessage::Finish => {

@@ -13,7 +13,7 @@ use crate::iter::{Files, Pieces};
 use crate::parse;
 
 /// Contains optional metadata for a torrent file.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Metainfo {
     comment: Option<String>,
     announce: Option<String>,
@@ -135,7 +135,7 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
 // ----------------------------------------------------------------------------//
 
 /// Contains directory and checksum data for a torrent file.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct Info {
     info_hash: InfoHash,
     files: Vec<File>,

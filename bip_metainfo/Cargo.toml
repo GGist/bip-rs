@@ -1,30 +1,39 @@
 [package]
-name             = "bip_metainfo"
-version          = "0.12.0"
-description      = "Parsing and building of bittorrent metainfo files"
+name        = "bip_metainfo"
+version     = "0.12.1"
+description = "Parsing and building of bittorrent metainfo files"
 
-authors          = ["Andrew <amiller4421@gmail.com>"]
+authors = [ "Andrew <amiller4421@gmail.com>" ]
 
-homepage         = "https://github.com/GGist/bip-rs"
-repository       = "https://github.com/GGist/bip-rs/tree/master/bip_metainfo"
-documentation    = "https://docs.rs/bip_metainfo/"
+homepage      = "https://github.com/GGist/bip-rs"
+repository    = "https://github.com/GGist/bip-rs/tree/master/bip_metainfo"
+documentation = "https://docs.rs/bip_metainfo/"
 
-keywords         = ["metainfo", "torrent", "file", "bittorrent"]
+keywords = [ "metainfo", "torrent", "file", "bittorrent" ]
 
-license          = "MIT/Apache-2.0"
+license = "MIT/Apache-2.0"
 edition = "2018"
 
 [dependencies]
-bip_bencode      = { path = "../bip_bencode" }
-bip_util         = { path = "../bip_util" }
-crossbeam        = "0.3"
-walkdir          = "2.0"
-error-chain      = "0.12.1"
+bip_bencode = { path = "../bip_bencode" }
+bip_util    = { path = "../bip_util" }
+crossbeam   = "0.8"
+walkdir     = "2.0"
+error-chain = "0.12.1"
 
 [dev-dependencies]
-chrono           = "0.4"
-rand             = "0.3"
-pbr              = "1.0"
+chrono = "0.4"
+rand   = "0.3"
+pbr    = "1.0"
 
 [features]
-unstable         = []
+unstable = [  ]
+
+[profile.bench]
+opt-level        = 3
+debug            = false
+rpath            = false
+lto              = false
+debug-assertions = false
+codegen-units    = 1
+panic            = 'unwind'

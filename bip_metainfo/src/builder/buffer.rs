@@ -1,6 +1,7 @@
 use std::io;
 
-use crossbeam::sync::MsQueue;
+use crossbeam::queue::SegQueue;
+use crossbeam::utils::Backoff;
 
 // Ensures that we have enough buffers to keep workers busy.
 const TOTAL_BUFFERS_MULTIPLICATIVE: usize = 2;
@@ -8,13 +9,13 @@ const TOTAL_BUFFERS_ADDITIVE: usize = 0;
 
 /// Stores a set number of piece buffers to be used and re-used.
 pub struct PieceBuffers {
-    piece_queue: MsQueue<PieceBuffer>,
+    piece_queue: SegQueue<PieceBuffer>,
 }
 
 impl PieceBuffers {
     /// Create a new queue filled with a number of piece buffers based on the number of workers.
     pub fn new(piece_length: usize, num_workers: usize) -> PieceBuffers {
-        let piece_queue = MsQueue::new();
+        let piece_queue = SegQueue::new();
 
         let total_buffers = calculate_total_buffers(num_workers);
         for _ in 0..total_buffers {
@@ -33,7 +34,14 @@ impl PieceBuffers {
 
     /// Checkout a piece buffer (possibly blocking) to be used.
     pub fn checkout(&self) -> PieceBuffer {
-        self.piece_queue.pop()
+        let backoff = Backoff::new();
+
+        loop {
+            match self.piece_queue.pop() {
+                Some(p) => return p,
+                None => backoff.snooze(),
+            }
+        }
     }
 }
 
