@@ -2,8 +2,8 @@ use std::io::{self, Cursor};
 
 use crate::bittorrent::message::{self, HandshakeMessage};
 
-use bytes::buf::BufMutExt;
-use bytes::{Buf, BytesMut};
+use bytes::buf::BufMut;
+use bytes::BytesMut;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use futures::{Async, AsyncSink, Poll, StartSend};
@@ -53,7 +53,7 @@ where
 
     fn start_send(&mut self, item: HandshakeMessage) -> StartSend<Self::SinkItem, Self::SinkError> {
         self.write_buffer.reserve(item.write_len());
-        item.write_bytes(self.write_buffer.as_mut().writer())?;
+        item.write_bytes(self.write_buffer.by_ref().writer())?;
 
         Ok(AsyncSink::Ready)
     }
@@ -70,7 +70,7 @@ where
                     ))
                 }
                 Async::Ready(written) => {
-                    self.write_buffer.advance(written);
+                    self.write_buffer.split_to(written);
                 }
                 Async::NotReady => return Ok(Async::NotReady),
             }

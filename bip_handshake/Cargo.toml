@@ -16,7 +16,7 @@ edition = "2018"
 
 [dependencies]
 bip_util      = { path = "../bip_util" }
-bytes         = "0.5.3"
+bytes         = "0.4"
 futures       = "0.1"
 nom           = "5.0.1"
 rand          = "0.7.2"
