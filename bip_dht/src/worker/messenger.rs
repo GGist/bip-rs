@@ -30,11 +30,13 @@ fn send_bytes(socket: &UdpSocket, bytes: &[u8], addr: SocketAddr) {
             bytes_sent += num_sent;
         } else {
             // TODO: Maybe shut down in this case, will fail on every write...
-            warn!("bip_dht: Outgoing messenger failed to write {} bytes to {}; {} bytes written \
+            warn!(
+                "bip_dht: Outgoing messenger failed to write {} bytes to {}; {} bytes written \
                    before error...",
-                  bytes.len(),
-                  addr,
-                  bytes_sent);
+                bytes.len(),
+                addr,
+                bytes_sent
+            );
             break;
         }
     }

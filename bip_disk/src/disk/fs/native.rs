@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::disk::fs::FileSystem;
 
-// TODO: This should be sanitizing paths passed into it so they don't escape the base directory!!!
+// TODO: This should be sanitizing paths passed into it so they don't escape the
+// base directory!!!
 
 /// File that exists on disk.
 pub struct NativeFile {
@@ -60,7 +61,12 @@ impl FileSystem for NativeFileSystem {
         file.file.metadata().map(|metadata| metadata.len())
     }
 
-    fn read_file(&self, file: &mut NativeFile, offset: u64, buffer: &mut [u8]) -> io::Result<usize> {
+    fn read_file(
+        &self,
+        file: &mut NativeFile,
+        offset: u64,
+        buffer: &mut [u8],
+    ) -> io::Result<usize> {
         file.file.seek(SeekFrom::Start(offset))?;
 
         file.file.read(buffer)
@@ -84,9 +90,16 @@ where
         Some(parent_dir) => {
             fs::create_dir_all(parent_dir)?;
 
-            OpenOptions::new().read(true).write(true).create(true).open(&path)
-        },
-        None => Err(io::Error::new(io::ErrorKind::InvalidInput, "File Path Has No Parent")),
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&path)
+        }
+        None => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "File Path Has No Parent",
+        )),
     }
 }
 

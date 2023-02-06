@@ -51,9 +51,12 @@ where
     F: FnMut(I, S, S::Item) -> Loop<R, (I, S)>,
     S: Stream,
 {
-    let timeout = Timeout::new(Duration::from_millis(timeout_ms), &core.handle()).unwrap().then(|_| Err(()));
+    let timeout = Timeout::new(Duration::from_millis(timeout_ms), &core.handle())
+        .unwrap()
+        .then(|_| Err(()));
 
-    // Have to stick the call in our init state so that we transfer ownership between loops
+    // Have to stick the call in our init state so that we transfer ownership
+    // between loops
     core.run(
         future::loop_fn((call, state), |(mut call, (init, stream))| {
             stream.into_future().map(|(opt_msg, stream)| {
@@ -73,15 +76,25 @@ where
 }
 
 /// Send block with the given metadata and entire data given.
-fn send_block<S, M>(blocking_send: &mut Wait<S>, data: &[u8], hash: InfoHash, piece_index: u64, block_offset: u64, block_len: usize, modify: M)
-where
+fn send_block<S, M>(
+    blocking_send: &mut Wait<S>,
+    data: &[u8],
+    hash: InfoHash,
+    piece_index: u64,
+    block_offset: u64,
+    block_len: usize,
+    modify: M,
+) where
     S: Sink<SinkItem = IDiskMessage>,
     M: Fn(&mut [u8]),
 {
     let mut bytes = BytesMut::new();
     bytes.extend_from_slice(data);
 
-    let mut block = BlockMut::new(BlockMetadata::new(hash, piece_index, block_offset, block_len), bytes);
+    let mut block = BlockMut::new(
+        BlockMetadata::new(hash, piece_index, block_offset, block_len),
+        bytes,
+    );
 
     modify(&mut block[..]);
 
@@ -104,7 +117,8 @@ impl MultiFileDirectAccessor {
     }
 }
 
-// TODO: Ugh, once specialization lands, we can see about having a default impl for IntoAccessor
+// TODO: Ugh, once specialization lands, we can see about having a default impl
+// for IntoAccessor
 impl IntoAccessor for MultiFileDirectAccessor {
     type Accessor = MultiFileDirectAccessor;
 
@@ -206,7 +220,12 @@ impl FileSystem for InMemoryFileSystem {
         })
     }
 
-    fn read_file(&self, file: &mut Self::File, offset: u64, buffer: &mut [u8]) -> io::Result<usize> {
+    fn read_file(
+        &self,
+        file: &mut Self::File,
+        offset: u64,
+        buffer: &mut [u8],
+    ) -> io::Result<usize> {
         self.run_with_lock(|files| {
             files
                 .get(&file.path)
@@ -238,10 +257,12 @@ impl FileSystem for InMemoryFileSystem {
                     let bytes_to_copy = cmp::min(file_buffer.len() - cast_offset, buffer.len());
 
                     if bytes_to_copy != 0 {
-                        file_buffer[cast_offset..(cast_offset + bytes_to_copy)].clone_from_slice(buffer);
+                        file_buffer[cast_offset..(cast_offset + bytes_to_copy)]
+                            .clone_from_slice(buffer);
                     }
 
-                    // TODO: If the file is full, this will return zero, we should also simulate io::ErrorKind::WriteZero
+                    // TODO: If the file is full, this will return zero, we should also simulate
+                    // io::ErrorKind::WriteZero
                     bytes_to_copy
                 })
                 .ok_or(io::Error::new(io::ErrorKind::NotFound, "File Not Found"))

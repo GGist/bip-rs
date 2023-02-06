@@ -25,7 +25,8 @@ pub mod peer_info;
 mod future;
 mod task;
 
-// We configure our tick duration based on this, could let users configure this in the future...
+// We configure our tick duration based on this, could let users configure this
+// in the future...
 const DEFAULT_TIMER_SLOTS: usize = 2048;
 
 /// Manages a set of peers with heartbeating heartbeating.
@@ -45,7 +46,8 @@ where
 {
     /// Create a new `PeerManager` from the given `PeerManagerBuilder`.
     pub fn from_builder(builder: PeerManagerBuilder, handle: Handle) -> PeerManager<P> {
-        // We use one timer for manager heartbeat intervals, and one for peer heartbeat timeouts
+        // We use one timer for manager heartbeat intervals, and one for peer heartbeat
+        // timeouts
         let maximum_timers = builder.peer_capacity() * 2;
         let pow_maximum_timers = if maximum_timers & (maximum_timers - 1) == 0 {
             maximum_timers
@@ -56,7 +58,8 @@ where
         // Figure out the right tick duration to get num slots of 2048.
         // TODO: We could probably let users change this in the future...
         let max_duration = cmp::max(builder.heartbeat_interval(), builder.heartbeat_timeout());
-        let tick_duration = Duration::from_millis(max_duration.as_secs() * 1000 / (DEFAULT_TIMER_SLOTS as u64) + 1);
+        let tick_duration =
+            Duration::from_millis(max_duration.as_secs() * 1000 / (DEFAULT_TIMER_SLOTS as u64) + 1);
         let timer = tokio_timer::wheel()
             .tick_duration(tick_duration)
             .max_capacity(pow_maximum_timers + 1)
@@ -68,7 +71,14 @@ where
         let peers = Arc::new(Mutex::new(HashMap::new()));
         let task_queue = Arc::new(MsQueue::new());
 
-        let sink = PeerManagerSink::new(handle, timer, builder, res_send, peers.clone(), task_queue.clone());
+        let sink = PeerManagerSink::new(
+            handle,
+            timer,
+            builder,
+            res_send,
+            peers.clone(),
+            task_queue.clone(),
+        );
         let stream = PeerManagerStream::new(res_recv, peers, task_queue);
 
         PeerManager { sink, stream }
@@ -188,7 +198,11 @@ where
             );
 
             // Closure could return not ready, need to stash in that case
-            if result.as_ref().map(|r#async| r#async.is_not_ready()).unwrap_or(false) {
+            if result
+                .as_ref()
+                .map(|r#async| r#async.is_not_ready())
+                .unwrap_or(false)
+            {
                 self.task_queue.push(futures_task::current());
             }
 
@@ -207,7 +221,11 @@ where
                 );
 
                 // Closure could return not ready, need to stash in that case
-                if result.as_ref().map(|r#async| r#async.is_not_ready()).unwrap_or(false) {
+                if result
+                    .as_ref()
+                    .map(|r#async| r#async.is_not_ready())
+                    .unwrap_or(false)
+                {
                     self.task_queue.push(futures_task::current());
                 }
 
@@ -238,7 +256,13 @@ where
         ) -> Poll<T, E>,
     {
         let (result, took_lock) = if let Ok(mut guard) = self.peers.try_lock() {
-            let result = call(&mut self.handle, &mut self.timer, &mut self.build, &mut self.send, &mut *guard);
+            let result = call(
+                &mut self.handle,
+                &mut self.timer,
+                &mut self.build,
+                &mut self.send,
+                &mut *guard,
+            );
 
             (result, true)
         } else {
@@ -247,7 +271,13 @@ where
 
             // Try to get lock again in case of race condition
             if let Ok(mut guard) = self.peers.try_lock() {
-                let result = call(&mut self.handle, &mut self.timer, &mut self.build, &mut self.send, &mut *guard);
+                let result = call(
+                    &mut self.handle,
+                    &mut self.timer,
+                    &mut self.build,
+                    &mut self.send,
+                    &mut *guard,
+                );
 
                 (result, true)
             } else {
@@ -281,12 +311,23 @@ where
                 (info, peer),
                 |(info, peer), handle, timer, builder, send, peers| {
                     if peers.len() >= builder.peer_capacity() {
-                        Ok(AsyncSink::NotReady(IPeerManagerMessage::AddPeer(info, peer)))
+                        Ok(AsyncSink::NotReady(IPeerManagerMessage::AddPeer(
+                            info, peer,
+                        )))
                     } else {
                         match peers.entry(info) {
-                            Entry::Occupied(_) => Err(PeerManagerError::from_kind(PeerManagerErrorKind::PeerNotFound { info })),
+                            Entry::Occupied(_) => Err(PeerManagerError::from_kind(
+                                PeerManagerErrorKind::PeerNotFound { info },
+                            )),
                             Entry::Vacant(vac) => {
-                                vac.insert(task::run_peer(peer, info, send.clone(), timer.clone(), builder, handle));
+                                vac.insert(task::run_peer(
+                                    peer,
+                                    info,
+                                    send.clone(),
+                                    timer.clone(),
+                                    builder,
+                                    handle,
+                                ));
 
                                 Ok(AsyncSink::Ready)
                             }
@@ -300,10 +341,14 @@ where
                 |info, _, _, _, _, peers| {
                     peers
                         .get_mut(&info)
-                        .ok_or_else(|| PeerManagerError::from_kind(PeerManagerErrorKind::PeerNotFound { info }))
+                        .ok_or_else(|| {
+                            PeerManagerError::from_kind(PeerManagerErrorKind::PeerNotFound { info })
+                        })
                         .and_then(|send| {
                             send.start_send(IPeerManagerMessage::RemovePeer(info))
-                                .map_err(|_| panic!("bip_peer: PeerManager Failed To Send RemovePeer"))
+                                .map_err(|_| {
+                                    panic!("bip_peer: PeerManager Failed To Send RemovePeer")
+                                })
                         })
                 },
                 IPeerManagerMessage::RemovePeer,
@@ -313,13 +358,21 @@ where
                 |(info, mid, peer_message), _, _, _, _, peers| {
                     peers
                         .get_mut(&info)
-                        .ok_or_else(|| PeerManagerError::from_kind(PeerManagerErrorKind::PeerNotFound { info }))
+                        .ok_or_else(|| {
+                            PeerManagerError::from_kind(PeerManagerErrorKind::PeerNotFound { info })
+                        })
                         .and_then(|send| {
-                            send.start_send(IPeerManagerMessage::SendMessage(info, mid, peer_message))
-                                .map_err(|_| panic!("bip_peer: PeerManager Failed to Send SendMessage"))
+                            send.start_send(IPeerManagerMessage::SendMessage(
+                                info,
+                                mid,
+                                peer_message,
+                            ))
+                            .map_err(|_| panic!("bip_peer: PeerManager Failed to Send SendMessage"))
                         })
                 },
-                |(info, mid, peer_message)| IPeerManagerMessage::SendMessage(info, mid, peer_message),
+                |(info, mid, peer_message)| {
+                    IPeerManagerMessage::SendMessage(info, mid, peer_message)
+                },
             ),
         }
     }
@@ -378,18 +431,21 @@ where
         let (result, took_lock) = if let Ok(mut guard) = self.peers.try_lock() {
             let result = call(item, &mut *guard);
 
-            // Nothing calling us will return NotReady, so we dont have to push to queue here
+            // Nothing calling us will return NotReady, so we dont have to push to queue
+            // here
 
             (result, true)
         } else {
             // Couldnt get the lock, stash a task away
             self.task_queue.push(futures_task::current());
 
-            // Try to get the lock once more, in case of a race condition with stashing the task
+            // Try to get the lock once more, in case of a race condition with stashing the
+            // task
             if let Ok(mut guard) = self.peers.try_lock() {
                 let result = call(item, &mut *guard);
 
-                // Nothing calling us will return NotReady, so we dont have to push to queue here
+                // Nothing calling us will return NotReady, so we dont have to push to queue
+                // here
 
                 (result, true)
             } else {
@@ -419,7 +475,8 @@ where
     type Error = ();
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // Intercept and propogate any messages indicating the peer shutdown so we can remove them from our peer map
+        // Intercept and propogate any messages indicating the peer shutdown so we can
+        // remove them from our peer map
         let next_message = self
             .opt_pending
             .take()

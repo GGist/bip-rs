@@ -29,7 +29,13 @@ pub struct AnnouncePeerRequest<'a> {
 }
 
 impl<'a> AnnouncePeerRequest<'a> {
-    pub fn new(trans_id: &'a [u8], node_id: NodeId, info_hash: InfoHash, token: &'a [u8], port: ConnectPort) -> AnnouncePeerRequest<'a> {
+    pub fn new(
+        trans_id: &'a [u8],
+        node_id: NodeId,
+        info_hash: InfoHash,
+        token: &'a [u8],
+        port: ConnectPort,
+    ) -> AnnouncePeerRequest<'a> {
         AnnouncePeerRequest {
             trans_id,
             node_id,
@@ -39,30 +45,45 @@ impl<'a> AnnouncePeerRequest<'a> {
         }
     }
 
-    pub fn from_parts(rqst_root: &dyn Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8]) -> DhtResult<AnnouncePeerRequest<'a>> {
+    pub fn from_parts(
+        rqst_root: &dyn Dictionary<'a, Bencode<'a>>,
+        trans_id: &'a [u8],
+    ) -> DhtResult<AnnouncePeerRequest<'a>> {
         let validate = RequestValidate::new(trans_id);
 
         let node_id_bytes = validate.lookup_and_convert_bytes(rqst_root, message::NODE_ID_KEY)?;
         let node_id = validate.validate_node_id(node_id_bytes)?;
 
-        let info_hash_bytes = validate.lookup_and_convert_bytes(rqst_root, message::INFO_HASH_KEY)?;
+        let info_hash_bytes =
+            validate.lookup_and_convert_bytes(rqst_root, message::INFO_HASH_KEY)?;
         let info_hash = validate.validate_info_hash(info_hash_bytes)?;
 
         let token = validate.lookup_and_convert_bytes(rqst_root, message::TOKEN_KEY)?;
         let port = validate.lookup_and_convert_int(rqst_root, PORT_KEY);
 
-        // Technically, the specification says that the value is either 0 or 1 but goes on to say that
-        // if it is not zero, then the source port should be used. We will allow values other than 0 or 1.
-        let response_port = match rqst_root.lookup(IMPLIED_PORT_KEY.as_bytes()).map(|n| n.int()) {
+        // Technically, the specification says that the value is either 0 or 1 but goes
+        // on to say that if it is not zero, then the source port should be
+        // used. We will allow values other than 0 or 1.
+        let response_port = match rqst_root
+            .lookup(IMPLIED_PORT_KEY.as_bytes())
+            .map(|n| n.int())
+        {
             Some(Some(n)) if n != 0 => ConnectPort::Implied,
             _ => {
-                // If we hit this, the port either was not provided or it was of the wrong bencode type
+                // If we hit this, the port either was not provided or it was of the wrong
+                // bencode type
                 let port_number = port? as u16;
                 ConnectPort::Explicit(port_number)
-            },
+            }
         };
 
-        Ok(AnnouncePeerRequest::new(trans_id, node_id, info_hash, token, response_port))
+        Ok(AnnouncePeerRequest::new(
+            trans_id,
+            node_id,
+            info_hash,
+            token,
+            response_port,
+        ))
     }
 
     pub fn transaction_id(&self) -> &'a [u8] {
@@ -121,7 +142,10 @@ impl<'a> AnnouncePeerResponse<'a> {
         AnnouncePeerResponse { trans_id, node_id }
     }
 
-    pub fn from_parts(rqst_root: &dyn Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8]) -> DhtResult<AnnouncePeerResponse<'a>> {
+    pub fn from_parts(
+        rqst_root: &dyn Dictionary<'a, Bencode<'a>>,
+        trans_id: &'a [u8],
+    ) -> DhtResult<AnnouncePeerResponse<'a>> {
         let validate = RequestValidate::new(&trans_id);
 
         let node_id_bytes = validate.lookup_and_convert_bytes(rqst_root, message::NODE_ID_KEY)?;

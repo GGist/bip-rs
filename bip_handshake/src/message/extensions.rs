@@ -103,7 +103,10 @@ impl From<Vec<u8>> for Extensions {
 
 /// Parse the given bytes for extension bits.
 fn parse_extension_bits(bytes: &[u8]) -> IResult<&[u8], Extensions> {
-    do_parse!(bytes, bytes: count!(be_u8, NUM_EXTENSION_BYTES) >> (bytes.into()))
+    do_parse!(
+        bytes,
+        bytes: count!(be_u8, NUM_EXTENSION_BYTES) >> (bytes.into())
+    )
 }
 
 #[cfg(test)]

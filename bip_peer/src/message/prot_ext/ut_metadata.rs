@@ -20,8 +20,9 @@ pub enum UtMetadataMessage {
 
 impl UtMetadataMessage {
     pub fn parse_bytes(mut bytes: Bytes) -> io::Result<UtMetadataMessage> {
-        // Our bencode is pretty flat, and we dont want to enforce a full decode, as data
-        // messages have the raw data appended outside of the bencode structure...
+        // Our bencode is pretty flat, and we dont want to enforce a full decode, as
+        // data messages have the raw data appended outside of the bencode
+        // structure...
         let decode_opts = BDecodeOpt::new(2, false, false);
 
         match BencodeRef::decode(bytes.clone().as_ref(), decode_opts) {
@@ -34,11 +35,12 @@ impl UtMetadataMessage {
                 let extra_bytes = bytes;
 
                 match msg_type {
-                    REQUEST_MESSAGE_TYPE_ID => Ok(UtMetadataMessage::Request(UtMetadataRequestMessage::with_bytes(
-                        piece,
-                        bencode_bytes,
-                    ))),
-                    REJECT_MESSAGE_TYPE_ID => Ok(UtMetadataMessage::Reject(UtMetadataRejectMessage::with_bytes(piece, bencode_bytes))),
+                    REQUEST_MESSAGE_TYPE_ID => Ok(UtMetadataMessage::Request(
+                        UtMetadataRequestMessage::with_bytes(piece, bencode_bytes),
+                    )),
+                    REJECT_MESSAGE_TYPE_ID => Ok(UtMetadataMessage::Reject(
+                        UtMetadataRejectMessage::with_bytes(piece, bencode_bytes),
+                    )),
                     DATA_MESSAGE_TYPE_ID => {
                         let total_size = bencode::parse_total_size(bencode_dict)?;
 
@@ -51,7 +53,10 @@ impl UtMetadataMessage {
                     }
                     other => Err(io::Error::new(
                         io::ErrorKind::Other,
-                        format!("Failed To Recognize Message Type For UtMetadataMessage: {}", msg_type),
+                        format!(
+                            "Failed To Recognize Message Type For UtMetadataMessage: {}",
+                            msg_type
+                        ),
                     )),
                 }
             }
@@ -82,7 +87,7 @@ impl UtMetadataMessage {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Message for requesting a piece of metadata from a peer.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -162,7 +167,12 @@ impl UtMetadataDataMessage {
         }
     }
 
-    pub fn with_bytes(piece: i64, total_size: i64, data: Bytes, bytes: Bytes) -> UtMetadataDataMessage {
+    pub fn with_bytes(
+        piece: i64,
+        total_size: i64,
+        data: Bytes,
+        bytes: Bytes,
+    ) -> UtMetadataDataMessage {
         UtMetadataDataMessage {
             piece,
             total_size,

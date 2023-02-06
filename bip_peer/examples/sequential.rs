@@ -1,5 +1,3 @@
 extern crate bip_peer;
 
-fn main() {
-    
-}
+fn main() {}

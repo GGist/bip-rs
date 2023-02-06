@@ -52,8 +52,12 @@ impl<'a> CompactPeers<'a> {
     /// Iterator over all of the contact information.
     pub fn iter<'b>(&'b self) -> CompactPeersIter<'b> {
         match self {
-            &CompactPeers::V4(ref peers) => CompactPeersIter::new(CompactPeersIterType::V4(peers.iter())),
-            &CompactPeers::V6(ref peers) => CompactPeersIter::new(CompactPeersIterType::V6(peers.iter())),
+            &CompactPeers::V4(ref peers) => {
+                CompactPeersIter::new(CompactPeersIterType::V4(peers.iter()))
+            }
+            &CompactPeers::V6(ref peers) => {
+                CompactPeersIter::new(CompactPeersIterType::V6(peers.iter()))
+            }
         }
     }
 
@@ -66,7 +70,7 @@ impl<'a> CompactPeers<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Internal storage for one of the compact peers iterators.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -99,7 +103,7 @@ impl<'a> Iterator for CompactPeersIter<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Container for IPv4 peers to be sent/received from a tracker.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -158,11 +162,16 @@ fn parse_peers_v4<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], CompactPeersV4<'a>> 
     } else {
         let end_of_bytes = &bytes[bytes.len()..bytes.len()];
 
-        IResult::Done(end_of_bytes, CompactPeersV4 { peers: Cow::Borrowed(bytes) })
+        IResult::Done(
+            end_of_bytes,
+            CompactPeersV4 {
+                peers: Cow::Borrowed(bytes),
+            },
+        )
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Iterator over the SocketAddrV4 info for some peers.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -187,7 +196,13 @@ impl<'a> Iterator for CompactPeersV4Iter<'a> {
         } else {
             let mut sock_bytes = [0u8; SOCKET_ADDR_V4_BYTES];
 
-            for (src, dst) in self.peers.iter().skip(self.offset).take(SOCKET_ADDR_V4_BYTES).zip(sock_bytes.iter_mut()) {
+            for (src, dst) in self
+                .peers
+                .iter()
+                .skip(self.offset)
+                .take(SOCKET_ADDR_V4_BYTES)
+                .zip(sock_bytes.iter_mut())
+            {
                 *dst = *src;
             }
             self.offset += SOCKET_ADDR_V4_BYTES;
@@ -197,7 +212,7 @@ impl<'a> Iterator for CompactPeersV4Iter<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Container for IPv6 peers to be sent/received from a tracker.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -256,11 +271,16 @@ fn parse_peers_v6<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], CompactPeersV6<'a>> 
     } else {
         let end_of_bytes = &bytes[bytes.len()..bytes.len()];
 
-        IResult::Done(end_of_bytes, CompactPeersV6 { peers: Cow::Borrowed(bytes) })
+        IResult::Done(
+            end_of_bytes,
+            CompactPeersV6 {
+                peers: Cow::Borrowed(bytes),
+            },
+        )
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Iterator over the SocketAddrV6 info for some peers.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -285,7 +305,13 @@ impl<'a> Iterator for CompactPeersV6Iter<'a> {
         } else {
             let mut sock_bytes = [0u8; SOCKET_ADDR_V6_BYTES];
 
-            for (src, dst) in self.peers.iter().skip(self.offset).take(SOCKET_ADDR_V6_BYTES).zip(sock_bytes.iter_mut()) {
+            for (src, dst) in self
+                .peers
+                .iter()
+                .skip(self.offset)
+                .take(SOCKET_ADDR_V6_BYTES)
+                .zip(sock_bytes.iter_mut())
+            {
                 *dst = *src;
             }
             self.offset += SOCKET_ADDR_V6_BYTES;
@@ -396,8 +422,12 @@ mod tests {
     fn positive_iterate_v6() {
         let mut peers = CompactPeersV6::new();
 
-        let peer_one = "[ADBB:234A:55BD:FF34:3D3A:FFFF:234A:55BD]:256".parse().unwrap();
-        let peer_two = "[ADBB:0000:55BD:FF34:3D3A::234A:55BD]:3923".parse().unwrap();
+        let peer_one = "[ADBB:234A:55BD:FF34:3D3A:FFFF:234A:55BD]:256"
+            .parse()
+            .unwrap();
+        let peer_two = "[ADBB:0000:55BD:FF34:3D3A::234A:55BD]:3923"
+            .parse()
+            .unwrap();
 
         peers.insert(peer_one);
         peers.insert(peer_two);
@@ -422,7 +452,8 @@ mod tests {
     #[test]
     fn positive_parse_peer_v6() {
         let bytes = [
-            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A, 0x55, 0xBD, 1, 0,
+            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A,
+            0x55, 0xBD, 1, 0,
         ];
 
         let received = CompactPeersV6::from_bytes(&bytes);
@@ -436,8 +467,9 @@ mod tests {
     #[test]
     fn positive_parse_peers_v6() {
         let bytes = [
-            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A, 0x55, 0xBD, 1, 0, 0xDA, 0xBB, 0x23, 0x4A, 0x55, 0xBD,
-            0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A, 0x55, 0xBD, 2, 0,
+            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A,
+            0x55, 0xBD, 1, 0, 0xDA, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00,
+            0x00, 0x23, 0x4A, 0x55, 0xBD, 2, 0,
         ];
 
         let received = CompactPeersV6::from_bytes(&bytes);
@@ -470,7 +502,8 @@ mod tests {
         peers.write_bytes(&mut received).unwrap();
 
         let expected = [
-            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A, 0x55, 0xBD, 1, 0,
+            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A,
+            0x55, 0xBD, 1, 0,
         ];
 
         assert_eq!(&received[..], &expected[..]);
@@ -486,8 +519,9 @@ mod tests {
         peers.write_bytes(&mut received).unwrap();
 
         let expected = [
-            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A, 0x55, 0xBD, 1, 0, 0xDA, 0xBB, 0x23, 0x4A, 0x55, 0xBD,
-            0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A, 0x55, 0xBD, 2, 0,
+            0xAD, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00, 0x00, 0x23, 0x4A,
+            0x55, 0xBD, 1, 0, 0xDA, 0xBB, 0x23, 0x4A, 0x55, 0xBD, 0xFF, 0x34, 0x3D, 0x3A, 0x00,
+            0x00, 0x23, 0x4A, 0x55, 0xBD, 2, 0,
         ];
 
         assert_eq!(&received[..], &expected[..]);

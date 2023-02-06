@@ -66,8 +66,8 @@ pub enum ShutdownCause {
     Unspecified,
 }
 
-/// Spawns the necessary workers that make up our local DHT node and connects them via channels
-/// so that they can send and receive DHT messages.
+/// Spawns the necessary workers that make up our local DHT node and connects
+/// them via channels so that they can send and receive DHT messages.
 pub fn start_mainline_dht<H>(
     send_socket: UdpSocket,
     recv_socket: UdpSocket,
@@ -84,7 +84,14 @@ where
 
     // TODO: Utilize the security extension.
     let routing_table = RoutingTable::new(table::random_node_id());
-    let message_sender = handler::create_dht_handler(routing_table, outgoing, read_only, handshaker, kill_sock, kill_addr)?;
+    let message_sender = handler::create_dht_handler(
+        routing_table,
+        outgoing,
+        read_only,
+        handshaker,
+        kill_sock,
+        kill_addr,
+    )?;
 
     messenger::create_incoming_messenger(recv_socket, message_sender.clone());
 

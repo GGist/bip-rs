@@ -22,7 +22,9 @@ where
 
     pub fn read_piece(&self, piece_buffer: &mut [u8], message: &BlockMetadata) -> io::Result<()> {
         self.run_with_file_regions(message, |mut file, offset, begin, end| {
-            let bytes_read = self.fs.read_file(&mut file, offset, &mut piece_buffer[begin..end])?;
+            let bytes_read = self
+                .fs
+                .read_file(&mut file, offset, &mut piece_buffer[begin..end])?;
             assert_eq!(bytes_read, end - begin);
 
             Ok(())
@@ -31,22 +33,28 @@ where
 
     pub fn write_piece(&self, piece_buffer: &[u8], message: &BlockMetadata) -> io::Result<()> {
         self.run_with_file_regions(message, |mut file, offset, begin, end| {
-            let bytes_written = self.fs.write_file(&mut file, offset, &piece_buffer[begin..end])?;
+            let bytes_written = self
+                .fs
+                .write_file(&mut file, offset, &piece_buffer[begin..end])?;
             assert_eq!(bytes_written, end - begin);
 
             Ok(())
         })
     }
 
-    /// Run the given closure with the file, the file offset, and the read/write buffer stard (inclusive) and end (exclusive) indices.
-    /// TODO: We do not detect when/if the file size changes after the initial file size check, so the returned number of
+    /// Run the given closure with the file, the file offset, and the read/write
+    /// buffer stard (inclusive) and end (exclusive) indices.
+    ///
+    /// TODO: We do not detect when/if the file size changes after the initial
+    /// file size check, so the returned number of
     fn run_with_file_regions<C>(&self, message: &BlockMetadata, mut callback: C) -> io::Result<()>
     where
         C: FnMut(F::File, u64, usize, usize) -> io::Result<()>,
     {
         let piece_length = self.info_dict.piece_length() as u64;
 
-        let mut total_bytes_to_skip = (message.piece_index() * piece_length) + message.block_offset();
+        let mut total_bytes_to_skip =
+            (message.piece_index() * piece_length) + message.block_offset();
         let mut total_bytes_accessed = 0;
         let total_block_length = message.block_length() as u64;
 
@@ -67,7 +75,10 @@ where
                 let actual_bytes_to_access = cmp::min(total_max_bytes_to_access, bytes_to_access);
                 let offset = total_file_size - bytes_to_access;
 
-                let (begin, end) = (total_bytes_accessed as usize, (total_bytes_accessed + actual_bytes_to_access) as usize);
+                let (begin, end) = (
+                    total_bytes_accessed as usize,
+                    (total_bytes_accessed + actual_bytes_to_access) as usize,
+                );
                 callback(fs_file, offset, begin, end)?;
                 total_bytes_accessed += actual_bytes_to_access;
             }

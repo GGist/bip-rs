@@ -1,6 +1,6 @@
 use std::ops::BitXor;
 
-use crate::error::{LengthError, LengthResult, LengthErrorKind};
+use crate::error::{LengthError, LengthErrorKind, LengthResult};
 
 mod builder;
 
@@ -24,11 +24,18 @@ impl ShaHash {
     /// Create a ShaHash directly from the given hash.
     pub fn from_hash(hash: &[u8]) -> LengthResult<ShaHash> {
         if hash.len() != SHA_HASH_LEN {
-            Err(LengthError::new(LengthErrorKind::LengthExpected, SHA_HASH_LEN))
+            Err(LengthError::new(
+                LengthErrorKind::LengthExpected,
+                SHA_HASH_LEN,
+            ))
         } else {
             let mut my_hash = [0u8; SHA_HASH_LEN];
 
-            my_hash.iter_mut().zip(hash.iter()).map(|(dst, src)| *dst = *src).count();
+            my_hash
+                .iter_mut()
+                .zip(hash.iter())
+                .map(|(dst, src)| *dst = *src)
+                .count();
 
             Ok(ShaHash { hash: my_hash })
         }
@@ -65,7 +72,10 @@ impl PartialEq<[u8]> for ShaHash {
     fn eq(&self, other: &[u8]) -> bool {
         let is_equal = other.len() == self.hash.len();
 
-        self.hash.iter().zip(other.iter()).fold(is_equal, |prev, (h, o)| prev && h == o)
+        self.hash
+            .iter()
+            .zip(other.iter())
+            .fold(is_equal, |prev, (h, o)| prev && h == o)
     }
 }
 
@@ -81,7 +91,7 @@ impl BitXor<ShaHash> for ShaHash {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Representation of a bit after a xor operation.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -109,7 +119,7 @@ impl<'a> Iterator for XorBits<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Representation of a bit.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -161,7 +171,7 @@ impl<'a> Iterator for Bits<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[cfg(test)]
 mod tests {

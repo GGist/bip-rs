@@ -1,23 +1,23 @@
-use std::time::Duration;
 use std::default::Default;
+use std::time::Duration;
 
 const DEFAULT_HANDSHAKE_BUFFER_SIZE: usize = 1000;
-const DEFAULT_WAIT_BUFFER_SIZE:      usize = 10;
-const DEFAULT_DONE_BUFFER_SIZE:      usize = 10;
+const DEFAULT_WAIT_BUFFER_SIZE: usize = 10;
+const DEFAULT_DONE_BUFFER_SIZE: usize = 10;
 
 /// Once we get parallel handshake support (requires
 /// mpmc future channel support, we can bump this up).
-const DEFAULT_HANDSHAKE_TIMEOUT_MILLIS:         u64 = 1000;
+const DEFAULT_HANDSHAKE_TIMEOUT_MILLIS: u64 = 1000;
 const DEFAULT_HANDSHAKE_CONNECT_TIMEOUT_MILLIS: u64 = 1000;
 
 /// Configures the internals of a `Handshaker`.
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub struct HandshakerConfig {
-    sink_buffer_size:  usize,
-    wait_buffer_size:  usize,
-    done_buffer_size:  usize,
+    sink_buffer_size: usize,
+    wait_buffer_size: usize,
+    done_buffer_size: usize,
     handshake_timeout: Duration,
-    connect_timeout:   Duration
+    connect_timeout: Duration,
 }
 
 impl HandshakerConfig {
@@ -27,7 +27,7 @@ impl HandshakerConfig {
         self.sink_buffer_size = size;
         self
     }
-    
+
     /// Sets the buffer size that `Handshaker` uses internally
     /// to store handshake connections before they are processed.
     pub fn with_wait_buffer_size(mut self, size: usize) -> HandshakerConfig {
@@ -90,7 +90,7 @@ impl Default for HandshakerConfig {
             wait_buffer_size: DEFAULT_WAIT_BUFFER_SIZE,
             done_buffer_size: DEFAULT_DONE_BUFFER_SIZE,
             handshake_timeout: Duration::from_millis(DEFAULT_HANDSHAKE_TIMEOUT_MILLIS),
-            connect_timeout: Duration::from_millis(DEFAULT_HANDSHAKE_CONNECT_TIMEOUT_MILLIS)
-         }
+            connect_timeout: Duration::from_millis(DEFAULT_HANDSHAKE_CONNECT_TIMEOUT_MILLIS),
+        }
     }
 }

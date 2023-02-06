@@ -2,9 +2,9 @@
 
 use crate::ControlMessage;
 use bip_handshake::InfoHash;
-use bip_peer::PeerInfo;
 use bip_peer::messages::BitFieldMessage;
 use bip_peer::messages::HaveMessage;
+use bip_peer::PeerInfo;
 
 pub mod error;
 
@@ -24,7 +24,8 @@ pub enum IRevealMessage {
     ReceivedHave(PeerInfo, HaveMessage),
 }
 
-/// Enumeration of revelation messages that can be received from a revelation module.
+/// Enumeration of revelation messages that can be received from a revelation
+/// module.
 pub enum ORevealMessage {
     /// Send a `BitFieldMessage`.
     SendBitField(PeerInfo, BitFieldMessage),

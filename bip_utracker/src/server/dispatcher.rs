@@ -38,13 +38,15 @@ where
     let dispatch = ServerDispatcher::new(handler);
 
     thread::spawn(move || {
-        eloop.run(dispatch).expect("bip_utracker: ELoop Shutdown Unexpectedly...");
+        eloop
+            .run(dispatch)
+            .expect("bip_utracker: ELoop Shutdown Unexpectedly...");
     });
 
     Ok(channel)
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Dispatcher that executes requests asynchronously.
 struct ServerDispatcher<H>
@@ -64,7 +66,12 @@ where
     }
 
     /// Forward the request on to the appropriate handler method.
-    fn process_request<'a, 'b>(&mut self, provider: &mut Provider<'a, ServerDispatcher<H>>, request: TrackerRequest<'b>, addr: SocketAddr) {
+    fn process_request<'a, 'b>(
+        &mut self,
+        provider: &mut Provider<'a, ServerDispatcher<H>>,
+        request: TrackerRequest<'b>,
+        addr: SocketAddr,
+    ) {
         let conn_id = request.connection_id();
         let trans_id = request.transaction_id();
 
@@ -73,18 +80,23 @@ where
                 if conn_id == request::CONNECT_ID_PROTOCOL_ID {
                     self.forward_connect(provider, trans_id, addr);
                 } // TODO: Add Logging
-            },
+            }
             &RequestType::Announce(ref req) => {
                 self.forward_announce(provider, trans_id, conn_id, req, addr);
-            },
+            }
             &RequestType::Scrape(ref req) => {
                 self.forward_scrape(provider, trans_id, conn_id, req, addr);
-            },
+            }
         };
     }
 
     /// Forward a connect request on to the appropriate handler method.
-    fn forward_connect<'a>(&mut self, provider: &mut Provider<'a, ServerDispatcher<H>>, trans_id: u32, addr: SocketAddr) {
+    fn forward_connect<'a>(
+        &mut self,
+        provider: &mut Provider<'a, ServerDispatcher<H>>,
+        trans_id: u32,
+        addr: SocketAddr,
+    ) {
         self.handler.connect(addr, |result| {
             let response_type = match result {
                 Ok(conn_id) => ResponseType::Connect(conn_id),
@@ -138,8 +150,11 @@ where
 }
 
 /// Write the given tracker response through to the given provider.
-fn write_response<'a, 'b, H>(provider: &mut Provider<'a, ServerDispatcher<H>>, response: TrackerResponse<'b>, addr: SocketAddr)
-where
+fn write_response<'a, 'b, H>(
+    provider: &mut Provider<'a, ServerDispatcher<H>>,
+    response: TrackerResponse<'b>,
+    addr: SocketAddr,
+) where
     H: ServerHandler,
 {
     provider.outgoing(|buffer| {

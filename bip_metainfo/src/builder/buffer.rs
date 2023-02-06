@@ -13,7 +13,8 @@ pub struct PieceBuffers {
 }
 
 impl PieceBuffers {
-    /// Create a new queue filled with a number of piece buffers based on the number of workers.
+    /// Create a new queue filled with a number of piece buffers based on the
+    /// number of workers.
     pub fn new(piece_length: usize, num_workers: usize) -> PieceBuffers {
         let piece_queue = SegQueue::new();
 
@@ -50,7 +51,7 @@ fn calculate_total_buffers(num_workers: usize) -> usize {
     num_workers * TOTAL_BUFFERS_MULTIPLICATIVE + TOTAL_BUFFERS_ADDITIVE
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Piece buffer that can be filled up until it contains a full piece.
 #[derive(PartialEq, Eq)]

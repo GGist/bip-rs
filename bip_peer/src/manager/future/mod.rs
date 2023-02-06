@@ -1,22 +1,25 @@
 use std::io;
 use std::time::Duration;
 
-use tokio_timer::{Timer, TimeoutError, Sleep};
-use futures::{Poll, Async, Future};
-use futures::stream::{Stream, Fuse};
+use futures::stream::{Fuse, Stream};
+use futures::{Async, Future, Poll};
+use tokio_timer::{Sleep, TimeoutError, Timer};
 
 /// Error type for `PersistentStream`.
 pub enum PersistentError {
     Disconnect,
     Timeout,
-    IoError(io::Error)
+    IoError(io::Error),
 }
 
 impl<T> From<TimeoutError<T>> for PersistentError {
     fn from(error: TimeoutError<T>) -> PersistentError {
         match error {
-            TimeoutError::Timer(_, err) => panic!("bip_peer: Timer Error In Peer Stream, Timer Capacity Is Probably Too Small: {}", err),
-            TimeoutError::TimedOut(_) => PersistentError::Timeout
+            TimeoutError::Timer(_, err) => panic!(
+                "bip_peer: Timer Error In Peer Stream, Timer Capacity Is Probably Too Small: {}",
+                err
+            ),
+            TimeoutError::TimedOut(_) => PersistentError::Timeout,
         }
     }
 }
@@ -25,29 +28,35 @@ impl<T> From<TimeoutError<T>> for PersistentError {
 /// stream maps to an actual error, and calling poll multiple times will always
 /// return such error.
 pub struct PersistentStream<S> {
-    stream: Fuse<S>
+    stream: Fuse<S>,
 }
 
-impl<S> PersistentStream<S> where S: Stream {
+impl<S> PersistentStream<S>
+where
+    S: Stream,
+{
     /// Create a new `PersistentStream`.
     pub fn new(stream: S) -> PersistentStream<S> {
-        PersistentStream{ stream: stream.fuse() }
+        PersistentStream {
+            stream: stream.fuse(),
+        }
     }
 }
 
 impl<S> Stream for PersistentStream<S>
-    where S: Stream<Error=io::Error> {
+where
+    S: Stream<Error = io::Error>,
+{
     type Item = S::Item;
     type Error = PersistentError;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.stream.poll()
+        self.stream
+            .poll()
             .map_err(PersistentError::IoError)
-            .and_then(|item| {
-                match item {
-                    Async::Ready(None) => Err(PersistentError::Disconnect),
-                    other          => Ok(other)
-                }
+            .and_then(|item| match item {
+                Async::Ready(None) => Err(PersistentError::Disconnect),
+                other => Ok(other),
             })
     }
 }
@@ -58,7 +67,7 @@ impl<S> Stream for PersistentStream<S>
 pub enum RecurringTimeoutError {
     /// None and any errors are mapped to this type...
     Disconnect,
-    Timeout
+    Timeout,
 }
 
 /// Stream similar to `tokio_timer::TimeoutStream`, but which doesn't return
@@ -72,22 +81,28 @@ pub enum RecurringTimeoutError {
 /// any other message to the client for n seconds and we would like to send
 /// some heartbeat message in that case, but continue polling the stream.
 pub struct RecurringTimeoutStream<S> {
-    dur:    Duration,
-    timer:  Timer,
-    sleep:  Sleep,
-    stream: S
+    dur: Duration,
+    timer: Timer,
+    sleep: Sleep,
+    stream: S,
 }
 
 impl<S> RecurringTimeoutStream<S> {
     pub fn new(stream: S, timer: Timer, dur: Duration) -> RecurringTimeoutStream<S> {
         let sleep = timer.sleep(dur);
 
-        RecurringTimeoutStream{ dur, timer, sleep, stream }
+        RecurringTimeoutStream {
+            dur,
+            timer,
+            sleep,
+            stream,
+        }
     }
 }
 
 impl<S> Stream for RecurringTimeoutStream<S>
-    where S: Stream
+where
+    S: Stream,
 {
     type Item = S::Item;
     type Error = RecurringTimeoutError;
@@ -95,16 +110,16 @@ impl<S> Stream for RecurringTimeoutStream<S>
     fn poll(&mut self) -> Poll<Option<S::Item>, RecurringTimeoutError> {
         // First, try polling the future
         match self.stream.poll() {
-            Ok(Async::NotReady) => {},
+            Ok(Async::NotReady) => {}
             Ok(Async::Ready(Some(v))) => {
                 // Reset the timeout
                 self.sleep = self.timer.sleep(self.dur);
 
                 // Return the value
                 return Ok(Async::Ready(Some(v)));
-            },
-            Ok(Async::Ready(None)) => { return Ok(Async::Ready(None)) },
-            Err(_) => { return Err(RecurringTimeoutError::Disconnect) }
+            }
+            Ok(Async::Ready(None)) => return Ok(Async::Ready(None)),
+            Err(_) => return Err(RecurringTimeoutError::Disconnect),
         }
 
         // Now check the timer
@@ -113,10 +128,12 @@ impl<S> Stream for RecurringTimeoutStream<S>
             Ok(Async::Ready(_)) => {
                 // Reset the timeout
                 self.sleep = self.timer.sleep(self.dur);
-                
+
                 Err(RecurringTimeoutError::Timeout)
             }
-            Err(_) => panic!("bip_peer: Timer Error In Manager Stream, Timer Capacity Is Probably Too Small...")
+            Err(_) => panic!(
+                "bip_peer: Timer Error In Manager Stream, Timer Capacity Is Probably Too Small..."
+            ),
         }
     }
 }

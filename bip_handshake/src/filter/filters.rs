@@ -1,47 +1,57 @@
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use crate::filter::{HandshakeFilter};
+use crate::filter::HandshakeFilter;
 
 #[derive(Clone)]
 pub struct Filters {
-    filters: Arc<RwLock<Vec<Box<dyn HandshakeFilter + Send + Sync>>>>
+    filters: Arc<RwLock<Vec<Box<dyn HandshakeFilter + Send + Sync>>>>,
 }
 
 impl Filters {
     pub fn new() -> Filters {
-        Filters{ filters: Arc::new(RwLock::new(Vec::new())) }
+        Filters {
+            filters: Arc::new(RwLock::new(Vec::new())),
+        }
     }
 
     pub fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
+    where
+        F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static,
+    {
         self.write_filters(|mut_filters| {
             let opt_found = check_index(&mut_filters[..], &filter);
 
             match opt_found {
                 Some(_) => (),
-                None    => { mut_filters.push(Box::new(filter)); }
+                None => {
+                    mut_filters.push(Box::new(filter));
+                }
             }
         });
     }
 
     pub fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + 'static {
+    where
+        F: HandshakeFilter + PartialEq + Eq + 'static,
+    {
         self.write_filters(|mut_filters| {
             let opt_found = check_index(&mut_filters[..], &filter);
 
             match opt_found {
-                Some(index) => { mut_filters.swap_remove(index); },
-                None        => ()
+                Some(index) => {
+                    mut_filters.swap_remove(index);
+                }
+                None => (),
             }
         });
     }
 
     pub fn access_filters<B>(&self, block: B)
-        where B: FnOnce(&[Box<dyn HandshakeFilter + Send + Sync>]) {
-        self.read_filters(|ref_filters| {
-            block(ref_filters)
-        })
+    where
+        B: FnOnce(&[Box<dyn HandshakeFilter + Send + Sync>]),
+    {
+        self.read_filters(|ref_filters| block(ref_filters))
     }
 
     pub fn clear_filters(&self) {
@@ -51,31 +61,48 @@ impl Filters {
     }
 
     fn read_filters<B, R>(&self, block: B) -> R
-        where B: FnOnce(&[Box<dyn HandshakeFilter + Send + Sync>]) -> R {
-        let ref_filters = self.filters.as_ref().read()
+    where
+        B: FnOnce(&[Box<dyn HandshakeFilter + Send + Sync>]) -> R,
+    {
+        let ref_filters = self
+            .filters
+            .as_ref()
+            .read()
             .expect("bip_handshake: Poisoned Read Lock In Filters");
-        
+
         block(&ref_filters)
     }
 
     fn write_filters<B, R>(&self, block: B) -> R
-        where B: FnOnce(&mut Vec<Box<dyn HandshakeFilter + Send + Sync>>) -> R {
-        let mut mut_filters = self.filters.as_ref().write()
+    where
+        B: FnOnce(&mut Vec<Box<dyn HandshakeFilter + Send + Sync>>) -> R,
+    {
+        let mut mut_filters = self
+            .filters
+            .as_ref()
+            .write()
             .expect("bip_handshake: Poisoned Write Lock In Filters");
 
         block(&mut mut_filters)
     }
 }
 
-fn check_index<F>(ref_filters: &[Box<dyn HandshakeFilter + Send + Sync>], filter: &F) -> Option<usize>
-    where F: HandshakeFilter + PartialEq + Eq + 'static {
+fn check_index<F>(
+    ref_filters: &[Box<dyn HandshakeFilter + Send + Sync>],
+    filter: &F,
+) -> Option<usize>
+where
+    F: HandshakeFilter + PartialEq + Eq + 'static,
+{
     for (index, ref_filter) in ref_filters.iter().enumerate() {
-        let opt_match = ref_filter.as_any().downcast_ref::<F>()
+        let opt_match = ref_filter
+            .as_any()
+            .downcast_ref::<F>()
             .map(|downcast_filter| downcast_filter == filter);
 
         match opt_match {
-            Some(true)         => { return Some(index) },
-            Some(false) | None => ()
+            Some(true) => return Some(index),
+            Some(false) | None => (),
         }
     }
 
@@ -84,22 +111,22 @@ fn check_index<F>(ref_filters: &[Box<dyn HandshakeFilter + Send + Sync>], filter
 
 #[cfg(test)]
 pub mod test_filters {
-    use std::net::SocketAddr;
     use std::any::Any;
+    use std::net::SocketAddr;
 
+    use crate::filter::{FilterDecision, HandshakeFilter};
     use crate::message::protocol::Protocol;
-    use crate::filter::{HandshakeFilter, FilterDecision};
 
     use bip_util::bt::PeerId;
 
     #[derive(PartialEq, Eq)]
     pub struct BlockAddrFilter {
-        addr: SocketAddr
+        addr: SocketAddr,
     }
 
     impl BlockAddrFilter {
         pub fn new(addr: SocketAddr) -> BlockAddrFilter {
-            BlockAddrFilter{ addr }
+            BlockAddrFilter { addr }
         }
     }
 
@@ -112,7 +139,7 @@ pub mod test_filters {
             match opt_addr {
                 Some(in_addr) if in_addr == &self.addr => FilterDecision::Block,
                 Some(_) => FilterDecision::Pass,
-                None => FilterDecision::NeedData
+                None => FilterDecision::NeedData,
             }
         }
     }
@@ -121,12 +148,12 @@ pub mod test_filters {
 
     #[derive(PartialEq, Eq)]
     pub struct BlockProtocolFilter {
-        prot: Protocol
+        prot: Protocol,
     }
 
     impl BlockProtocolFilter {
         pub fn new(prot: Protocol) -> BlockProtocolFilter {
-            BlockProtocolFilter{ prot }
+            BlockProtocolFilter { prot }
         }
     }
 
@@ -139,7 +166,7 @@ pub mod test_filters {
             match opt_prot {
                 Some(in_prot) if in_prot == &self.prot => FilterDecision::Block,
                 Some(_) => FilterDecision::Pass,
-                None => FilterDecision::NeedData
+                None => FilterDecision::NeedData,
             }
         }
     }
@@ -148,12 +175,12 @@ pub mod test_filters {
 
     #[derive(PartialEq, Eq)]
     pub struct BlockPeerIdFilter {
-        pid: PeerId
+        pid: PeerId,
     }
 
     impl BlockPeerIdFilter {
         pub fn new(pid: PeerId) -> BlockPeerIdFilter {
-            BlockPeerIdFilter{ pid }
+            BlockPeerIdFilter { pid }
         }
     }
 
@@ -166,7 +193,7 @@ pub mod test_filters {
             match opt_pid {
                 Some(in_pid) if in_pid == &self.pid => FilterDecision::Block,
                 Some(_) => FilterDecision::Pass,
-                None => FilterDecision::NeedData
+                None => FilterDecision::NeedData,
             }
         }
     }
@@ -174,8 +201,8 @@ pub mod test_filters {
 
 #[cfg(test)]
 mod tests {
-    use super::Filters;
     use super::test_filters::BlockAddrFilter;
+    use super::Filters;
 
     #[test]
     fn positive_add_filter() {

@@ -41,7 +41,12 @@ pub struct TableBootstrap {
 }
 
 impl TableBootstrap {
-    pub fn new<I>(table_id: NodeId, id_generator: MIDGenerator, nodes: Vec<SocketAddr>, routers: I) -> TableBootstrap
+    pub fn new<I>(
+        table_id: NodeId,
+        id_generator: MIDGenerator,
+        nodes: Vec<SocketAddr>,
+        routers: I,
+    ) -> TableBootstrap
     where
         I: Iterator<Item = SocketAddr>,
     {
@@ -57,7 +62,11 @@ impl TableBootstrap {
         }
     }
 
-    pub fn start_bootstrap<H>(&mut self, out: &SyncSender<(Vec<u8>, SocketAddr)>, event_loop: &mut EventLoop<DhtHandler<H>>) -> BootstrapStatus
+    pub fn start_bootstrap<H>(
+        &mut self,
+        out: &SyncSender<(Vec<u8>, SocketAddr)>,
+        event_loop: &mut EventLoop<DhtHandler<H>>,
+    ) -> BootstrapStatus
     where
         H: Handshaker,
     {
@@ -70,7 +79,10 @@ impl TableBootstrap {
 
         // Set a timer to begin the actual bootstrap
         let res_timeout = event_loop.timeout_ms(
-            (BOOTSTRAP_INITIAL_TIMEOUT, ScheduledTask::CheckBootstrapTimeout(trans_id)),
+            (
+                BOOTSTRAP_INITIAL_TIMEOUT,
+                ScheduledTask::CheckBootstrapTimeout(trans_id),
+            ),
             BOOTSTRAP_INITIAL_TIMEOUT,
         );
         let timeout = if let Ok(t) = res_timeout {
@@ -80,12 +92,18 @@ impl TableBootstrap {
             return BootstrapStatus::Failed;
         };
 
-        // Insert the timeout into the active bootstraps just so we can check if a response was valid (and begin the bucket bootstraps)
+        // Insert the timeout into the active bootstraps just so we can check if a
+        // response was valid (and begin the bucket bootstraps)
         self.active_messages.insert(trans_id, timeout);
 
-        let find_node_msg = FindNodeRequest::new(trans_id.as_ref(), self.table_id, self.table_id).encode();
+        let find_node_msg =
+            FindNodeRequest::new(trans_id.as_ref(), self.table_id, self.table_id).encode();
         // Ping all initial routers and nodes
-        for addr in self.starting_routers.iter().chain(self.starting_nodes.iter()) {
+        for addr in self
+            .starting_routers
+            .iter()
+            .chain(self.starting_nodes.iter())
+        {
             if out.send((find_node_msg.clone(), *addr)).is_err() {
                 error!("bip_dht: Failed to send bootstrap message to router through channel...");
                 return BootstrapStatus::Failed;
@@ -120,8 +138,9 @@ impl TableBootstrap {
             return self.current_bootstrap_status();
         };
 
-        // If this response was from the initial bootstrap, we don't want to clear the timeout or remove
-        // the token from the map as we want to wait until the proper timeout has been triggered before starting
+        // If this response was from the initial bootstrap, we don't want to clear the
+        // timeout or remove the token from the map as we want to wait until the
+        // proper timeout has been triggered before starting
         if self.curr_bootstrap_bucket != 0 {
             // Message was not from the initial ping
             // Remove the timeout from the event loop
@@ -179,7 +198,9 @@ impl TableBootstrap {
 
         // Get the optimal iterator to bootstrap the current bucket
         if self.curr_bootstrap_bucket == 0 || self.curr_bootstrap_bucket == 1 {
-            let iter = table.closest_nodes(target_id).filter(|n| n.status() == NodeStatus::Questionable);
+            let iter = table
+                .closest_nodes(target_id)
+                .filter(|n| n.status() == NodeStatus::Questionable);
 
             self.send_bootstrap_requests(iter, target_id, table, out, event_loop)
         } else {
@@ -215,10 +236,13 @@ impl TableBootstrap {
                 dummy_bucket.iter()
             };
 
-            // TODO: Figure out why chaining them in reverse gives us more total nodes on average, perhaps it allows us to fill up the lower
-            // buckets faster at the cost of less nodes in the higher buckets (since lower buckets are very easy to fill)...Although it should
-            // even out since we are stagnating buckets, so doing it in reverse may make sense since on the 3rd iteration, it allows us to ping
-            // questionable nodes in our first buckets right off the bat.
+            // TODO: Figure out why chaining them in reverse gives us more total nodes on
+            // average, perhaps it allows us to fill up the lower buckets faster
+            // at the cost of less nodes in the higher buckets (since lower buckets are very
+            // easy to fill)...Although it should even out since we are
+            // stagnating buckets, so doing it in reverse may make sense since on the 3rd
+            // iteration, it allows us to ping questionable nodes in our first
+            // buckets right off the bat.
             let iter = percent_25_bucket
                 .chain(percent_50_bucket)
                 .chain(percent_100_bucket)
@@ -240,18 +264,25 @@ impl TableBootstrap {
         I: Iterator<Item = &'a Node>,
         H: Handshaker,
     {
-        info!("bip_dht: bootstrap::send_bootstrap_requests {}", self.curr_bootstrap_bucket);
+        info!(
+            "bip_dht: bootstrap::send_bootstrap_requests {}",
+            self.curr_bootstrap_bucket
+        );
 
         let mut messages_sent = 0;
 
         for node in nodes.take(BOOTSTRAP_PINGS_PER_BUCKET) {
             // Generate a transaction id
             let trans_id = self.id_generator.generate();
-            let find_node_msg = FindNodeRequest::new(trans_id.as_ref(), self.table_id, target_id).encode();
+            let find_node_msg =
+                FindNodeRequest::new(trans_id.as_ref(), self.table_id, target_id).encode();
 
             // Add a timeout for the node
             let res_timeout = event_loop.timeout_ms(
-                (BOOTSTRAP_NODE_TIMEOUT, ScheduledTask::CheckBootstrapTimeout(trans_id)),
+                (
+                    BOOTSTRAP_NODE_TIMEOUT,
+                    ScheduledTask::CheckBootstrapTimeout(trans_id),
+                ),
                 BOOTSTRAP_NODE_TIMEOUT,
             );
             let timeout = if let Ok(t) = res_timeout {

@@ -41,7 +41,8 @@ pub enum DispatchMessage {
     Shutdown,
 }
 
-/// Create a new background dispatcher to execute request and send responses back.
+/// Create a new background dispatcher to execute request and send responses
+/// back.
 ///
 /// Assumes msg_capacity is less than usize::max_value().
 pub fn create_dispatcher<H>(
@@ -67,7 +68,9 @@ where
     let dispatch = ClientDispatcher::new(handshaker, bind, limiter);
 
     thread::spawn(move || {
-        eloop.run(dispatch).expect("bip_utracker: ELoop Shutdown Unexpectedly...");
+        eloop
+            .run(dispatch)
+            .expect("bip_utracker: ELoop Shutdown Unexpectedly...");
     });
 
     channel
@@ -77,7 +80,7 @@ where
     Ok(channel)
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Dispatcher that executes requests asynchronously.
 struct ClientDispatcher<H> {
@@ -115,7 +118,12 @@ where
     pub fn shutdown<'a>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>) {
         // Notify all active requests with the appropriate error
         for token_index in 0..self.active_requests.len() {
-            let next_token = *self.active_requests.keys().skip(token_index).next().unwrap();
+            let next_token = *self
+                .active_requests
+                .keys()
+                .skip(token_index)
+                .next()
+                .unwrap();
 
             self.notify_client(next_token, Err(ClientError::ClientShutdown));
         }
@@ -134,7 +142,8 @@ where
         self.limiter.acknowledge();
     }
 
-    /// Process a request to be sent to the given address and associated with the given token.
+    /// Process a request to be sent to the given address and associated with
+    /// the given token.
     pub fn send_request<'a>(
         &mut self,
         provider: &mut Provider<'a, ClientDispatcher<H>>,
@@ -148,16 +157,23 @@ where
                 self.notify_client(token, Err(ClientError::IPVersionMismatch));
 
                 return;
-            },
+            }
             _ => (),
         };
-        self.active_requests.insert(token, ConnectTimer::new(addr, request));
+        self.active_requests
+            .insert(token, ConnectTimer::new(addr, request));
 
         self.process_request(provider, token, false);
     }
 
-    /// Process a response received from some tracker and match it up against our sent requests.
-    pub fn recv_response<'a, 'b>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>, addr: SocketAddr, response: TrackerResponse<'b>) {
+    /// Process a response received from some tracker and match it up against
+    /// our sent requests.
+    pub fn recv_response<'a, 'b>(
+        &mut self,
+        provider: &mut Provider<'a, ClientDispatcher<H>>,
+        addr: SocketAddr,
+        response: TrackerResponse<'b>,
+    ) {
         let token = ClientToken(response.transaction_id());
 
         let conn_timer = if let Some(conn_timer) = self.active_requests.remove(&token) {
@@ -165,12 +181,17 @@ where
                 conn_timer
             } else {
                 return;
-            } // TODO: Add Logging (Server Receive Addr Different Than Send Addr)
+            } // TODO: Add Logging (Server Receive Addr Different Than Send
+              // Addr)
         } else {
             return;
         }; // TODO: Add Logging (Server Gave Us Invalid Transaction Id)
 
-        provider.clear_timeout(conn_timer.timeout_id().expect("bip_utracker: Failed To Clear Request Timeout"));
+        provider.clear_timeout(
+            conn_timer
+                .timeout_id()
+                .expect("bip_utracker: Failed To Clear Request Timeout"),
+        );
 
         // Check if the response requires us to update the connection timer
         if let &ResponseType::Connect(id) = response.response_type() {
@@ -185,29 +206,39 @@ where
                     // Forward contact information on to the handshaker
                     for addr in res.peers().iter() {
                         self.handshaker
-                            .send(Either::A(InitiateMessage::new(Protocol::BitTorrent, hash, addr)).into())
+                            .send(
+                                Either::A(InitiateMessage::new(Protocol::BitTorrent, hash, addr))
+                                    .into(),
+                            )
                             .unwrap_or_else(|_| panic!("NEED TO FIX"));
                     }
 
                     self.notify_client(token, Ok(ClientResponse::Announce(res.to_owned())));
-                },
+                }
                 (&ClientRequest::Scrape(..), &ResponseType::Scrape(ref res)) => {
                     self.notify_client(token, Ok(ClientResponse::Scrape(res.to_owned())));
-                },
+                }
                 (_, &ResponseType::Error(ref res)) => {
                     self.notify_client(token, Err(ClientError::ServerMessage(res.to_owned())));
-                },
+                }
                 _ => {
                     self.notify_client(token, Err(ClientError::ServerError));
-                },
+                }
             }
         }
     }
 
-    /// Process an existing request, either re requesting a connection id or sending the actual request again.
+    /// Process an existing request, either re requesting a connection id or
+    /// sending the actual request again.
     ///
-    /// If this call is the result of a timeout, that will decide whether to cancel the request or not.
-    fn process_request<'a>(&mut self, provider: &mut Provider<'a, ClientDispatcher<H>>, token: ClientToken, timed_out: bool) {
+    /// If this call is the result of a timeout, that will decide whether to
+    /// cancel the request or not.
+    fn process_request<'a>(
+        &mut self,
+        provider: &mut Provider<'a, ClientDispatcher<H>>,
+        token: ClientToken,
+        timed_out: bool,
+    ) {
         let mut conn_timer = if let Some(conn_timer) = self.active_requests.remove(&token) {
             conn_timer
         } else {
@@ -221,7 +252,7 @@ where
                 self.notify_client(token, Err(ClientError::MaxTimeout));
 
                 return;
-            },
+            }
         };
 
         let addr = conn_timer.message_params().0;
@@ -249,13 +280,13 @@ where
                         AnnounceOptions::new(),
                     )),
                 )
-            },
+            }
             (Some(id), &ClientRequest::Scrape(hash)) => {
                 let mut scrape_request = ScrapeRequest::new();
                 scrape_request.insert(hash);
 
                 (id, RequestType::Scrape(scrape_request))
-            },
+            }
             (None, _) => (request::CONNECT_ID_PROTOCOL_ID, RequestType::Connect),
         };
         let tracker_request = TrackerRequest::new(conn_id, token.0, request_type);
@@ -309,7 +340,7 @@ where
         match message {
             DispatchMessage::Request(addr, token, req_type) => {
                 self.send_request(&mut provider, addr, token, req_type);
-            },
+            }
             DispatchMessage::StartTimer => self.timeout(provider, DispatchTimeout::CleanUp),
             DispatchMessage::Shutdown => self.shutdown(&mut provider),
         }
@@ -322,14 +353,17 @@ where
                 self.id_cache.clean_expired();
 
                 provider
-                    .set_timeout(DispatchTimeout::CleanUp, CONNECTION_ID_VALID_DURATION_MILLIS as u64)
+                    .set_timeout(
+                        DispatchTimeout::CleanUp,
+                        CONNECTION_ID_VALID_DURATION_MILLIS as u64,
+                    )
                     .expect("bip_utracker: Failed To Restart Connect Id Cleanup Timer");
-            },
+            }
         };
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Contains logic for making sure a valid connection id is present
 /// and correctly timing out when sending requests to the server.
@@ -351,7 +385,8 @@ impl ConnectTimer {
         }
     }
 
-    /// Yields the current timeout value to use or None if the request should time out completely.
+    /// Yields the current timeout value to use or None if the request should
+    /// time out completely.
     pub fn current_timeout(&mut self, timed_out: bool) -> Option<u64> {
         if self.attempt == MAXIMUM_REQUEST_RETRANSMIT_ATTEMPTS {
             None
@@ -385,7 +420,7 @@ fn calculate_message_timeout_millis(attempt: u64) -> u64 {
     (15 * 2u64.pow(attempt as u32)) * 1000
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Cache for storing connection ids associated with a specific server address.
 struct ConnectIdCache {
@@ -395,7 +430,9 @@ struct ConnectIdCache {
 impl ConnectIdCache {
     /// Create a new connect id cache.
     fn new() -> ConnectIdCache {
-        ConnectIdCache { cache: HashMap::new() }
+        ConnectIdCache {
+            cache: HashMap::new(),
+        }
     }
 
     /// Get an un expired connection id for the given addr.
@@ -413,7 +450,7 @@ impl ConnectIdCache {
                 } else {
                     Some(occ.get().0)
                 }
-            },
+            }
         }
     }
 
@@ -429,14 +466,24 @@ impl ConnectIdCache {
         let curr_time = Utc::now();
         let mut curr_index = 0;
 
-        let mut opt_curr_entry = self.cache.iter().skip(curr_index).map(|(&k, &v)| (k, v)).next();
+        let mut opt_curr_entry = self
+            .cache
+            .iter()
+            .skip(curr_index)
+            .map(|(&k, &v)| (k, v))
+            .next();
         while let Some((addr, (_, prev_time))) = opt_curr_entry.take() {
             if is_expired(curr_time, prev_time) {
                 self.cache.remove(&addr);
             }
 
             curr_index += 1;
-            opt_curr_entry = self.cache.iter().skip(curr_index).map(|(&k, &v)| (k, v)).next();
+            opt_curr_entry = self
+                .cache
+                .iter()
+                .skip(curr_index)
+                .map(|(&k, &v)| (k, v))
+                .next();
         }
     }
 }

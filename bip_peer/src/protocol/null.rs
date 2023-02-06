@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use crate::message::NullProtocolMessage;
-use crate::protocol::{PeerProtocol, NestedPeerProtocol};
+use crate::protocol::{NestedPeerProtocol, PeerProtocol};
 
 use bytes::Bytes;
 
@@ -30,11 +30,16 @@ impl PeerProtocol for NullProtocol {
     }
 
     fn parse_bytes(&mut self, _bytes: Bytes) -> io::Result<Self::ProtocolMessage> {
-        Err(io::Error::new(io::ErrorKind::Other, "Attempted To Parse Bytes As Null Protocol"))
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            "Attempted To Parse Bytes As Null Protocol",
+        ))
     }
 
     fn write_bytes<W>(&mut self, _message: &Self::ProtocolMessage, _writer: W) -> io::Result<()>
-        where W: Write {
+    where
+        W: Write,
+    {
         panic!("bip_peer: NullProtocol::write_bytes Was Called...Wait, How Did You Construct An Instance Of NullProtocolMessage? :)")
     }
 
@@ -44,7 +49,7 @@ impl PeerProtocol for NullProtocol {
 }
 
 impl<M> NestedPeerProtocol<M> for NullProtocol {
-    fn received_message(&mut self, _message: &M) { }
+    fn received_message(&mut self, _message: &M) {}
 
-    fn sent_message(&mut self, _message: &M) { }
+    fn sent_message(&mut self, _message: &M) {}
 }

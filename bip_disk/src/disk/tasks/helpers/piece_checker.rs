@@ -11,7 +11,8 @@ use crate::memory::block::BlockMetadata;
 use bip_metainfo::Info;
 use bip_util::bt::InfoHash;
 
-/// Calculates hashes on existing files within the file system given and reports good/bad pieces.
+/// Calculates hashes on existing files within the file system given and reports
+/// good/bad pieces.
 pub struct PieceChecker<'a, F> {
     fs: F,
     info_dict: &'a Info,
@@ -40,7 +41,11 @@ where
     }
 
     /// Create a new PieceChecker with the given state.
-    pub fn with_state(fs: F, info_dict: &'a Info, checker_state: &'a mut PieceCheckerState) -> PieceChecker<'a, F> {
+    pub fn with_state(
+        fs: F,
+        info_dict: &'a Info,
+        checker_state: &'a mut PieceCheckerState,
+    ) -> PieceChecker<'a, F> {
         PieceChecker {
             fs,
             info_dict,
@@ -48,8 +53,8 @@ where
         }
     }
 
-    /// Calculate the diff of old to new good/bad pieces and store them in the piece checker state
-    /// to be retrieved by the caller.
+    /// Calculate the diff of old to new good/bad pieces and store them in the
+    /// piece checker state to be retrieved by the caller.
     pub fn calculate_diff(self) -> io::Result<()> {
         let piece_length = self.info_dict.piece_length() as u64;
         // TODO: Use Block Allocator
@@ -58,55 +63,73 @@ where
         let info_dict = self.info_dict;
         let piece_accessor = PieceAccessor::new(&self.fs, self.info_dict);
 
-        self.checker_state.run_with_whole_pieces(piece_length as usize, |message| {
-            piece_accessor.read_piece(&mut piece_buffer[..message.block_length()], message)?;
+        self.checker_state
+            .run_with_whole_pieces(piece_length as usize, |message| {
+                piece_accessor.read_piece(&mut piece_buffer[..message.block_length()], message)?;
 
-            let calculated_hash = InfoHash::from_bytes(&piece_buffer[..message.block_length()]);
-            let expected_hash = InfoHash::from_hash(
-                info_dict
-                    .pieces()
-                    .skip(message.piece_index() as usize)
-                    .next()
-                    .expect("bip_peer: Piece Checker Failed To Retrieve Expected Hash"),
-            )
-            .expect("bip_peer: Wrong Length Of Expected Hash Received");
+                let calculated_hash = InfoHash::from_bytes(&piece_buffer[..message.block_length()]);
+                let expected_hash = InfoHash::from_hash(
+                    info_dict
+                        .pieces()
+                        .skip(message.piece_index() as usize)
+                        .next()
+                        .expect("bip_peer: Piece Checker Failed To Retrieve Expected Hash"),
+                )
+                .expect("bip_peer: Wrong Length Of Expected Hash Received");
 
-            Ok(calculated_hash == expected_hash)
-        })?;
+                Ok(calculated_hash == expected_hash)
+            })?;
 
         Ok(())
     }
 
-    /// Fill the PieceCheckerState with all piece messages for each file in our info dictionary.
+    /// Fill the PieceCheckerState with all piece messages for each file in our
+    /// info dictionary.
     ///
-    /// This is done once when a torrent file is added to see if we have any good pieces that
-    /// the caller can use to skip (if the torrent was partially downloaded before).
+    /// This is done once when a torrent file is added to see if we have any
+    /// good pieces that the caller can use to skip (if the torrent was
+    /// partially downloaded before).
     fn fill_checker_state(&mut self) -> io::Result<()> {
         let piece_length = self.info_dict.piece_length() as u64;
-        let total_bytes: u64 = self.info_dict.files().map(|file| file.length() as u64).sum();
+        let total_bytes: u64 = self
+            .info_dict
+            .files()
+            .map(|file| file.length() as u64)
+            .sum();
 
         let full_pieces = total_bytes / piece_length;
         let last_piece_size = last_piece_size(self.info_dict);
 
         for piece_index in 0..full_pieces {
             self.checker_state
-                .add_pending_block(BlockMetadata::with_default_hash(piece_index, 0, piece_length as usize));
+                .add_pending_block(BlockMetadata::with_default_hash(
+                    piece_index,
+                    0,
+                    piece_length as usize,
+                ));
         }
 
         if last_piece_size != 0 {
             self.checker_state
-                .add_pending_block(BlockMetadata::with_default_hash(full_pieces, 0, last_piece_size as usize));
+                .add_pending_block(BlockMetadata::with_default_hash(
+                    full_pieces,
+                    0,
+                    last_piece_size as usize,
+                ));
         }
 
         Ok(())
     }
 
-    /// Validates the file sizes for the given torrent file and block allocates them if they do not exist.
+    /// Validates the file sizes for the given torrent file and block allocates
+    /// them if they do not exist.
     ///
-    /// This function will, if the file does not exist, or exists and is zero size, fill the file with zeroes.
-    /// Otherwise, if the file exists and it is of the correct size, it will be left alone. If it is of the wrong
-    /// size, an error will be thrown as we do not want to overwrite and existing file that maybe just had the same
-    /// name as a file in our dictionary.
+    /// This function will, if the file does not exist, or exists and is zero
+    /// size, fill the file with zeroes. Otherwise, if the file exists and
+    /// it is of the correct size, it will be left alone. If it is of the wrong
+    /// size, an error will be thrown as we do not want to overwrite and
+    /// existing file that maybe just had the same name as a file in our
+    /// dictionary.
     fn validate_files_sizes(&mut self) -> TorrentResult<()> {
         for file in self.info_dict.files() {
             let file_path = helpers::build_path(self.info_dict.directory(), file);
@@ -125,11 +148,13 @@ where
                     .write_file(&mut file, expected_size - 1, &[0])
                     .expect("bip_peer: Failed To Create File When Validating Sizes");
             } else if !size_matches {
-                return Err(TorrentError::from_kind(TorrentErrorKind::ExistingFileSizeCheck {
-                    file_path: file_path,
-                    expected_size: expected_size,
-                    actual_size: actual_size,
-                }));
+                return Err(TorrentError::from_kind(
+                    TorrentErrorKind::ExistingFileSizeCheck {
+                        file_path: file_path,
+                        expected_size: expected_size,
+                        actual_size: actual_size,
+                    },
+                ));
             }
         }
 
@@ -144,7 +169,7 @@ fn last_piece_size(info_dict: &Info) -> usize {
     (total_bytes % piece_length) as usize
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Stores state for the PieceChecker between invocations.
 pub struct PieceCheckerState {
@@ -177,11 +202,15 @@ impl PieceCheckerState {
 
     /// Add a pending piece block to the current pending blocks.
     pub fn add_pending_block(&mut self, msg: BlockMetadata) {
-        self.pending_blocks.entry(msg.piece_index()).or_insert(Vec::new()).push(msg);
+        self.pending_blocks
+            .entry(msg.piece_index())
+            .or_insert(Vec::new())
+            .push(msg);
     }
 
-    /// Run the given closures against NewGood and NewBad messages. Each of the messages will
-    /// then either be dropped (NewBad) or converted to OldGood (NewGood).
+    /// Run the given closures against NewGood and NewBad messages. Each of the
+    /// messages will then either be dropped (NewBad) or converted to
+    /// OldGood (NewGood).
     pub fn run_with_diff<F>(&mut self, mut callback: F)
     where
         F: FnMut(&PieceState),
@@ -193,8 +222,9 @@ impl PieceCheckerState {
         }
     }
 
-    /// Pass any pieces that have not been identified as OldGood into the callback which determines
-    /// if the piece is good or bad so it can be marked as NewGood or NewBad.
+    /// Pass any pieces that have not been identified as OldGood into the
+    /// callback which determines if the piece is good or bad so it can be
+    /// marked as NewGood or NewBad.
     fn run_with_whole_pieces<F>(&mut self, piece_length: usize, mut callback: F) -> io::Result<()>
     where
         F: FnMut(&BlockMetadata) -> io::Result<bool>,
@@ -210,8 +240,12 @@ impl PieceCheckerState {
         for messages in self
             .pending_blocks
             .values_mut()
-            .filter(|ref messages| piece_is_complete(total_blocks, last_block_size, piece_length, messages))
-            .filter(|ref messages| !old_states.contains(&PieceState::Good(messages[0].piece_index())))
+            .filter(|ref messages| {
+                piece_is_complete(total_blocks, last_block_size, piece_length, messages)
+            })
+            .filter(|ref messages| {
+                !old_states.contains(&PieceState::Good(messages[0].piece_index()))
+            })
         {
             let is_good = callback(&messages[0])?;
 
@@ -258,23 +292,40 @@ impl PieceCheckerState {
 }
 
 /// True if the piece is ready to be hashed and checked (full) as good or not.
-fn piece_is_complete(total_blocks: usize, last_block_size: usize, piece_length: usize, messages: &[BlockMetadata]) -> bool {
+fn piece_is_complete(
+    total_blocks: usize,
+    last_block_size: usize,
+    piece_length: usize,
+    messages: &[BlockMetadata],
+) -> bool {
     let is_single_message = messages.len() == 1;
-    let is_piece_length = messages.get(0).map(|message| message.block_length() == piece_length).unwrap_or(false);
+    let is_piece_length = messages
+        .get(0)
+        .map(|message| message.block_length() == piece_length)
+        .unwrap_or(false);
     let is_last_block = messages
         .get(0)
         .map(|message| message.piece_index() == (total_blocks - 1) as u64)
         .unwrap_or(false);
-    let is_last_block_length = messages.get(0).map(|message| message.block_length() == last_block_size).unwrap_or(false);
+    let is_last_block_length = messages
+        .get(0)
+        .map(|message| message.block_length() == last_block_size)
+        .unwrap_or(false);
 
     is_single_message && (is_piece_length || (is_last_block && is_last_block_length))
 }
 
 /// Merge a piece message a with a piece message b if possible.
 ///
-/// First message's block offset should come before (or at) the block offset of the second message.
-fn merge_piece_messages(message_a: &BlockMetadata, message_b: &BlockMetadata) -> Option<BlockMetadata> {
-    if message_a.info_hash() != message_b.info_hash() || message_a.piece_index() != message_b.piece_index() {
+/// First message's block offset should come before (or at) the block offset of
+/// the second message.
+fn merge_piece_messages(
+    message_a: &BlockMetadata,
+    message_b: &BlockMetadata,
+) -> Option<BlockMetadata> {
+    if message_a.info_hash() != message_b.info_hash()
+        || message_a.piece_index() != message_b.piece_index()
+    {
         return None;
     }
     let info_hash = message_a.info_hash();
@@ -287,18 +338,29 @@ fn merge_piece_messages(message_a: &BlockMetadata, message_b: &BlockMetadata) ->
     let start_b = message_b.block_offset();
     let end_b = start_b + message_b.block_length() as u64;
 
-    // If start b falls between start and end a, then start a is where we start, and we end at the max of end a
-    // or end b, then calculate the length from end minus start. Vice versa if a falls between start and end b.
+    // If start b falls between start and end a, then start a is where we start, and
+    // we end at the max of end a or end b, then calculate the length from end
+    // minus start. Vice versa if a falls between start and end b.
     if start_b >= start_a && start_b <= end_a {
         let end_to_take = cmp::max(end_a, end_b);
         let length = end_to_take - start_a;
 
-        Some(BlockMetadata::new(info_hash, piece_index, start_a, length as usize))
+        Some(BlockMetadata::new(
+            info_hash,
+            piece_index,
+            start_a,
+            length as usize,
+        ))
     } else if start_a >= start_b && start_a <= end_b {
         let end_to_take = cmp::max(end_a, end_b);
         let length = end_to_take - start_b;
 
-        Some(BlockMetadata::new(info_hash, piece_index, start_b, length as usize))
+        Some(BlockMetadata::new(
+            info_hash,
+            piece_index,
+            start_b,
+            length as usize,
+        ))
     } else {
         None
     }

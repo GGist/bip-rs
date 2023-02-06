@@ -1,5 +1,5 @@
-use std::ops::Add;
 use std::num::Wrapping;
+use std::ops::Add;
 
 use num::{Bounded, One, Zero};
 
@@ -20,12 +20,14 @@ const TRANSACTION_ID_PREALLOC_LEN: usize = 2048;
 /// transaction type (such as u64) but also works with smaller types.
 pub struct LocallyShuffledIds<T> {
     sequential: SequentialIds<T>,
-    stored_ids: Vec<T>
+    stored_ids: Vec<T>,
 }
 
 impl<T> LocallyShuffledIds<T>
-    where T: One + Zero + Clone + Eq + Bounded + Default,
-          Wrapping<T>: Add<Wrapping<T>, Output = Wrapping<T>> {
+where
+    T: One + Zero + Clone + Eq + Bounded + Default,
+    Wrapping<T>: Add<Wrapping<T>, Output = Wrapping<T>>,
+{
     /// Create a new LocallyShuffledIds struct.
     pub fn new() -> LocallyShuffledIds<T> {
         LocallyShuffledIds::start_at(T::zero())
@@ -33,7 +35,10 @@ impl<T> LocallyShuffledIds<T>
 
     /// Create a new LocallyShuffledIds struct at the starting value.
     pub fn start_at(start: T) -> LocallyShuffledIds<T> {
-        LocallyShuffledIds{ sequential: SequentialIds::start_at(start), stored_ids: Vec::new() }
+        LocallyShuffledIds {
+            sequential: SequentialIds::start_at(start),
+            stored_ids: Vec::new(),
+        }
     }
 
     /// Refills our stored ids list with new ids and resets our current index.
@@ -45,16 +50,20 @@ impl<T> LocallyShuffledIds<T>
         let max_value = T::max_value();
         let min_value = T::min_value();
 
-        // If we see that we picked up the min value, then we can't rollover after the max value
-        // for the current pre allocation chunk otherwise we will have duplicates in the same block.
+        // If we see that we picked up the min value, then we can't rollover after the
+        // max value for the current pre allocation chunk otherwise we will have
+        // duplicates in the same block.
         let mut contains_min_value = false;
         let mut contains_max_value = false;
 
         let mut num_ids_generated = 0;
-        while num_ids_generated < TRANSACTION_ID_PREALLOC_LEN && (!contains_min_value || !contains_max_value) {
+        while num_ids_generated < TRANSACTION_ID_PREALLOC_LEN
+            && (!contains_min_value || !contains_max_value)
+        {
             let next_id = self.sequential.generate();
 
-            // If we haven't seen the min or max values yet, see if the current id is either of them.
+            // If we haven't seen the min or max values yet, see if the current id is either
+            // of them.
             contains_min_value = contains_min_value || next_id == min_value;
             contains_max_value = contains_max_value || next_id == max_value;
 
@@ -67,8 +76,10 @@ impl<T> LocallyShuffledIds<T>
 }
 
 impl<T> TransactionIds<T> for LocallyShuffledIds<T>
-    where T: One + Zero + Clone + Eq + Bounded + Default,
-          Wrapping<T>: Add<Wrapping<T>, Output = Wrapping<T>>{
+where
+    T: One + Zero + Clone + Eq + Bounded + Default,
+    Wrapping<T>: Add<Wrapping<T>, Output = Wrapping<T>>,
+{
     fn generate(&mut self) -> T {
         self.stored_ids.pop().unwrap_or_else(|| {
             self.refill_stored_ids();

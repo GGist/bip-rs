@@ -1,12 +1,12 @@
-use crate::error::{TorrentError, BlockError};
+use crate::error::{BlockError, TorrentError};
 use crate::memory::block::{Block, BlockMut};
 
 use bip_metainfo::Metainfo;
-use bip_util::bt::{InfoHash};
+use bip_util::bt::InfoHash;
 
 pub mod builder;
-pub mod manager;
 pub mod fs;
+pub mod manager;
 mod tasks;
 
 //----------------------------------------------------------------------------//
@@ -36,7 +36,7 @@ pub enum IDiskMessage {
     /// Message to load the given block in to memory.
     LoadBlock(BlockMut),
     /// Message to process the given block and persist it.
-    ProcessBlock(Block)
+    ProcessBlock(Block),
 }
 
 /// Messages that can be received from the `DiskManager`.
@@ -66,5 +66,5 @@ pub enum ODiskMessage {
     /// Error occurring from a `LoadBlock` message.
     LoadBlockError(BlockMut, BlockError),
     /// Error occurring from a `ProcessBlock` message.
-    ProcessBlockError(Block, BlockError)
+    ProcessBlockError(Block, BlockError),
 }

@@ -48,13 +48,16 @@ impl<'a, V: 'a> IntoIterator for &'a dyn BListAccess<V> {
     type IntoIter = BListIter<'a, V>;
 
     fn into_iter(self) -> BListIter<'a, V> {
-        BListIter{ index: 0, access: self }
+        BListIter {
+            index: 0,
+            access: self,
+        }
     }
 }
 
 pub struct BListIter<'a, V: 'a> {
-    index:  usize,
-    access: &'a dyn BListAccess<V>
+    index: usize,
+    access: &'a dyn BListAccess<V>,
 }
 
 impl<'a, V> Iterator for BListIter<'a, V> {

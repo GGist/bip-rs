@@ -12,10 +12,7 @@ pub struct Files<'a> {
 
 impl<'a> Files<'a> {
     pub fn new(files: &'a [File]) -> Files<'a> {
-        Files {
-            index: 0,
-            files,
-        }
+        Files { index: 0, files }
     }
 }
 
@@ -32,7 +29,7 @@ impl<'a> Iterator for Files<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Iterator over each piece hash within the MetainfoFile.
 pub struct Pieces<'a> {
@@ -42,10 +39,7 @@ pub struct Pieces<'a> {
 
 impl<'a> Pieces<'a> {
     pub fn new(pieces: &'a [[u8; sha::SHA_HASH_LEN]]) -> Pieces<'a> {
-        Pieces {
-            index: 0,
-            pieces,
-        }
+        Pieces { index: 0, pieces }
     }
 }
 

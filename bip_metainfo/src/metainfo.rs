@@ -132,7 +132,7 @@ fn parse_meta_bytes(bytes: &[u8]) -> ParseResult<Metainfo> {
     })
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Contains directory and checksum data for a torrent file.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
@@ -183,18 +183,18 @@ impl Info {
 
     /// Iterator over each of the pieces SHA-1 hash.
     ///
-    /// Ordering of pieces yielded in the iterator is guaranteed to be the order in
-    /// which they are found in the torrent file as this is necessary to refer to
-    /// pieces by their index to other peers.
+    /// Ordering of pieces yielded in the iterator is guaranteed to be the order
+    /// in which they are found in the torrent file as this is necessary to
+    /// refer to pieces by their index to other peers.
     pub fn pieces<'a>(&'a self) -> Pieces<'a> {
         Pieces::new(&self.pieces)
     }
 
     /// Iterator over each file within the torrent file.
     ///
-    /// Ordering of files yielded in the iterator is guaranteed to be the order in
-    /// which they are found in the torrent file as this is necessary to reconstruct
-    /// pieces received from peers.
+    /// Ordering of files yielded in the iterator is guaranteed to be the order
+    /// in which they are found in the torrent file as this is necessary to
+    /// reconstruct pieces received from peers.
     pub fn files<'a>(&'a self) -> Files<'a> {
         Files::new(&self.files)
     }
@@ -322,7 +322,9 @@ where
 fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
     if pieces.len() % sha::SHA_HASH_LEN != 0 {
         let error_msg = format!("Piece Hash Length Of {} Is Invalid", pieces.len());
-        Err(ParseError::from_kind(ParseErrorKind::MissingData { details: error_msg }))
+        Err(ParseError::from_kind(ParseErrorKind::MissingData {
+            details: error_msg,
+        }))
     } else {
         let mut hash_buffers = Vec::with_capacity(pieces.len() / sha::SHA_HASH_LEN);
         let mut hash_bytes = [0u8; sha::SHA_HASH_LEN];
@@ -339,7 +341,7 @@ fn allocate_pieces(pieces: &[u8]) -> ParseResult<Vec<[u8; sha::SHA_HASH_LEN]>> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Contains information for a single file.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -419,10 +421,11 @@ mod tests {
     use crate::metainfo::Metainfo;
     use crate::parse;
 
-    /// Helper function for manually constructing a metainfo file based on the parameters given.
+    /// Helper function for manually constructing a metainfo file based on the
+    /// parameters given.
     ///
-    /// If the metainfo file builds successfully, assertions will be made about the contents of it based
-    /// on the parameters given.
+    /// If the metainfo file builds successfully, assertions will be made about
+    /// the contents of it based on the parameters given.
     fn validate_parse_from_params(
         tracker: Option<&str>,
         create_date: Option<i64>,
@@ -455,7 +458,9 @@ mod tests {
                     .as_ref()
                     .map(|&p| info_dict_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(p)));
                 pieces.map(|p| info_dict_access.insert(parse::PIECES_KEY.into(), ben_bytes!(p)));
-                private.as_ref().map(|&p| info_dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(p)));
+                private
+                    .as_ref()
+                    .map(|&p| info_dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(p)));
 
                 directory
                     .and_then(|d| {
@@ -473,7 +478,8 @@ mod tests {
                                         let mut bencode_paths = BencodeMut::new_list();
 
                                         {
-                                            let bencode_paths_access = bencode_paths.list_mut().unwrap();
+                                            let bencode_paths_access =
+                                                bencode_paths.list_mut().unwrap();
                                             for path in paths.iter() {
                                                 bencode_paths_access.push(ben_bytes!(&path[..]));
                                             }
@@ -486,9 +492,17 @@ mod tests {
                                     {
                                         let file_dict_access = file_dict.dict_mut().unwrap();
 
-                                        opt_bencode_paths.map(|p| file_dict_access.insert(parse::PATH_KEY.into(), p));
-                                        opt_len.map(|l| file_dict_access.insert(parse::LENGTH_KEY.into(), ben_int!(l)));
-                                        opt_md5.map(|m| file_dict_access.insert(parse::MD5SUM_KEY.into(), ben_bytes!(m)));
+                                        opt_bencode_paths.map(|p| {
+                                            file_dict_access.insert(parse::PATH_KEY.into(), p)
+                                        });
+                                        opt_len.map(|l| {
+                                            file_dict_access
+                                                .insert(parse::LENGTH_KEY.into(), ben_int!(l))
+                                        });
+                                        opt_md5.map(|m| {
+                                            file_dict_access
+                                                .insert(parse::MD5SUM_KEY.into(), ben_bytes!(m))
+                                        });
                                     }
 
                                     bencode_files_access.push(file_dict)
@@ -501,15 +515,21 @@ mod tests {
                         Some(d)
                     })
                     .or_else(|| {
-                        // We intended to build a single file torrent if a directory was not specified
+                        // We intended to build a single file torrent if a directory was not
+                        // specified
                         files.as_ref().map(|files| {
                             let (ref opt_len, ref opt_md5, ref opt_path) = files[0];
 
-                            opt_path
-                                .as_ref()
-                                .map(|p| info_dict_access.insert(parse::NAME_KEY.into(), ben_bytes!(&p[0][..])));
-                            opt_len.map(|l| info_dict_access.insert(parse::LENGTH_KEY.into(), ben_int!(l)));
-                            opt_md5.map(|m| info_dict_access.insert(parse::MD5SUM_KEY.into(), ben_bytes!(m)));
+                            opt_path.as_ref().map(|p| {
+                                info_dict_access
+                                    .insert(parse::NAME_KEY.into(), ben_bytes!(&p[0][..]))
+                            });
+                            opt_len.map(|l| {
+                                info_dict_access.insert(parse::LENGTH_KEY.into(), ben_int!(l))
+                            });
+                            opt_md5.map(|m| {
+                                info_dict_access.insert(parse::MD5SUM_KEY.into(), ben_bytes!(m))
+                            });
                         });
 
                         None
@@ -530,13 +550,28 @@ mod tests {
         assert_eq!(metainfo_file.encoding(), encoding);
         assert_eq!(metainfo_file.creation_date, create_date);
 
-        assert_eq!(metainfo_file.info().directory(), directory.map(|d| d.as_ref()));
-        assert_eq!(metainfo_file.info().piece_length(), piece_length.unwrap() as u64);
-        assert_eq!(metainfo_file.info().is_private(), private.map(|private| private == 1));
+        assert_eq!(
+            metainfo_file.info().directory(),
+            directory.map(|d| d.as_ref())
+        );
+        assert_eq!(
+            metainfo_file.info().piece_length(),
+            piece_length.unwrap() as u64
+        );
+        assert_eq!(
+            metainfo_file.info().is_private(),
+            private.map(|private| private == 1)
+        );
 
         let pieces = pieces.unwrap();
-        assert_eq!(pieces.chunks(sha::SHA_HASH_LEN).count(), metainfo_file.info().pieces().count());
-        for (piece_chunk, piece_elem) in pieces.chunks(sha::SHA_HASH_LEN).zip(metainfo_file.info().pieces()) {
+        assert_eq!(
+            pieces.chunks(sha::SHA_HASH_LEN).count(),
+            metainfo_file.info().pieces().count()
+        );
+        for (piece_chunk, piece_elem) in pieces
+            .chunks(sha::SHA_HASH_LEN)
+            .zip(metainfo_file.info().pieces())
+        {
             assert_eq!(piece_chunk, piece_elem);
         }
 
@@ -553,11 +588,17 @@ mod tests {
             assert_eq!(meta_file.md5sum(), supp_file.1);
 
             let meta_paths: &Path = meta_file.path();
-            let supp_paths: PathBuf = supp_file.2.as_ref().unwrap().iter().fold(PathBuf::new(), |mut buf, item| {
-                let item: &str = item;
-                buf.push(item);
-                buf
-            });
+            let supp_paths: PathBuf =
+                supp_file
+                    .2
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .fold(PathBuf::new(), |mut buf, item| {
+                        let item: &str = item;
+                        buf.push(item);
+                        buf
+                    });
             assert_eq!(meta_paths, supp_paths);
         }
     }
@@ -592,7 +633,14 @@ mod tests {
         let pieces = [0u8; sha::SHA_HASH_LEN];
 
         let directory = "dummy_file_directory";
-        let files = vec![(Some(0), None, Some(vec!["dummy_sub_directory".to_owned(), "dummy_file_name".to_owned()]))];
+        let files = vec![(
+            Some(0),
+            None,
+            Some(vec![
+                "dummy_sub_directory".to_owned(),
+                "dummy_file_name".to_owned(),
+            ]),
+        )];
 
         validate_parse_from_params(
             Some(tracker),
@@ -616,8 +664,19 @@ mod tests {
 
         let directory = "dummy_file_directory";
         let files = vec![
-            (Some(0), None, Some(vec!["dummy_sub_directory".to_owned(), "dummy_file_name".to_owned()])),
-            (Some(5), None, Some(vec!["other_dummy_file_name".to_owned()])),
+            (
+                Some(0),
+                None,
+                Some(vec![
+                    "dummy_sub_directory".to_owned(),
+                    "dummy_file_name".to_owned(),
+                ]),
+            ),
+            (
+                Some(5),
+                None,
+                Some(vec!["other_dummy_file_name".to_owned()]),
+            ),
         ];
 
         validate_parse_from_params(

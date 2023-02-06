@@ -21,8 +21,10 @@ fn main() {
     output.write_all(b"Enter A Source Folder/File: ").unwrap();
     output.flush().unwrap();
     let src_path = input_lines.next().unwrap().unwrap();
-    
-    output.write_all(b"Enter A File Name (With Extension): ").unwrap();
+
+    output
+        .write_all(b"Enter A File Name (With Extension): ")
+        .unwrap();
     output.flush().unwrap();
     let dst_path = input_lines.next().unwrap().unwrap();
     
@@ -32,8 +34,8 @@ fn main() {
             output_file.write_all(&bytes).unwrap();
             
             print_metainfo_overview(&bytes);
-        },
-        Err(error) => println!("Error With Input: {:?}", error)
+        }
+        Err(error) => println!("Error With Input: {:?}", error),
     }
 }
 
@@ -68,14 +70,14 @@ fn print_metainfo_overview(bytes: &[u8]) {
         .iter()
         .map(|b| format!("{:02X}", b))
         .fold(String::new(), |mut acc, nex| {
-        acc.push_str(&nex);
-        acc
-    });
-    let utc_creation_date = metainfo.creation_date().map(|c| {
-        Utc.timestamp(c, 0)
-    });
-    
-    println!("\n\n-----------------------------Metainfo File Overview-----------------------------");
+            acc.push_str(&nex);
+            acc
+        });
+    let utc_creation_date = metainfo.creation_date().map(|c| Utc.timestamp(c, 0));
+
+    println!(
+        "\n\n-----------------------------Metainfo File Overview-----------------------------"
+    );
 
     println!("InfoHash: {}", info_hash_hex);
     println!("Main Tracker: {:?}", metainfo.main_tracker());
@@ -87,5 +89,8 @@ fn print_metainfo_overview(bytes: &[u8]) {
     println!("Piece Length: {:?}", info.piece_length());
     println!("Number Of Pieces: {}", info.pieces().count());
     println!("Number Of Files: {}", info.files().count());
-    println!("Total File Size: {}", info.files().fold(0, |acc, nex| acc + nex.length()));
+    println!(
+        "Total File Size: {}",
+        info.files().fold(0, |acc, nex| acc + nex.length())
+    );
 }

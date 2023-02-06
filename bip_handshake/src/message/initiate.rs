@@ -9,13 +9,13 @@ use bip_util::bt::InfoHash;
 pub struct InitiateMessage {
     prot: Protocol,
     hash: InfoHash,
-    addr: SocketAddr
+    addr: SocketAddr,
 }
 
 impl InitiateMessage {
     /// Create a new `InitiateMessage`.
     pub fn new(prot: Protocol, hash: InfoHash, addr: SocketAddr) -> InitiateMessage {
-        InitiateMessage{ prot, hash, addr }
+        InitiateMessage { prot, hash, addr }
     }
 
     /// Protocol that we want to connect to the peer with.

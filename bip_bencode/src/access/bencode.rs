@@ -16,7 +16,7 @@ pub enum BencodeRefKind<'a, K: 'a, V: 'a> {
 /// Trait for read access to some bencode type.
 pub trait BRefAccess: Sized {
     type BKey;
-    type BType: BRefAccess<BKey=Self::BKey>;
+    type BType: BRefAccess<BKey = Self::BKey>;
 
     /// Access the bencode as a `BencodeRefKind`.
     fn kind<'a>(&'a self) -> BencodeRefKind<'a, Self::BKey, Self::BType>;
@@ -38,7 +38,7 @@ pub trait BRefAccess: Sized {
 }
 
 /// Trait for extended read access to some bencode type.
-/// 
+///
 /// Use this trait when you want to make sure that the lifetime of
 /// the underlying buffers is tied to the lifetime of the backing
 /// bencode buffer.
@@ -51,8 +51,10 @@ pub trait BRefAccessExt<'a>: BRefAccess {
 }
 
 impl<'a, T> BRefAccess for &'a T
-    where T: BRefAccess {
-    type BKey  = T::BKey;
+where
+    T: BRefAccess,
+{
+    type BKey = T::BKey;
     type BType = T::BType;
 
     fn kind<'b>(&'b self) -> BencodeRefKind<'b, Self::BKey, Self::BType> {
@@ -81,7 +83,9 @@ impl<'a, T> BRefAccess for &'a T
 }
 
 impl<'a: 'b, 'b, T> BRefAccessExt<'a> for &'b T
-    where T: BRefAccessExt<'a> {
+where
+    T: BRefAccessExt<'a>,
+{
     fn str_ext(&self) -> Option<&'a str> {
         (*self).str_ext()
     }

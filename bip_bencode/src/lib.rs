@@ -40,9 +40,9 @@ extern crate error_chain;
 
 mod access;
 mod cow;
+mod error;
 mod mutable;
 mod reference;
-mod error;
 
 /// Traits for implementation functionality.
 pub mod inner {
@@ -51,19 +51,19 @@ pub mod inner {
 
 /// Traits for extended functionality.
 pub mod ext {
-    pub use crate::access::convert::{BConvertExt};
-    pub use crate::access::bencode::{BRefAccessExt};
+    pub use crate::access::bencode::BRefAccessExt;
+    pub use crate::access::convert::BConvertExt;
 }
 
-pub use crate::reference::bencode_ref::{BencodeRef};
-pub use crate::mutable::bencode_mut::{BencodeMut};
-pub use crate::access::bencode::{BRefAccess, BencodeRefKind, BMutAccess, BencodeMutKind};
-pub use crate::access::convert::{BConvert};
+pub use crate::access::bencode::{BMutAccess, BRefAccess, BencodeMutKind, BencodeRefKind};
+pub use crate::access::convert::BConvert;
 pub use crate::access::dict::BDictAccess;
 pub use crate::access::list::BListAccess;
-pub use crate::reference::decode_opt::BDecodeOpt;
-pub use crate::error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
 pub use crate::error::{BencodeConvertError, BencodeConvertErrorKind, BencodeConvertResult};
+pub use crate::error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult};
+pub use crate::mutable::bencode_mut::BencodeMut;
+pub use crate::reference::bencode_ref::BencodeRef;
+pub use crate::reference::decode_opt::BDecodeOpt;
 
 const BEN_END: u8 = b'e';
 const DICT_START: u8 = b'd';
@@ -74,7 +74,8 @@ const BYTE_LEN_LOW: u8 = b'0';
 const BYTE_LEN_HIGH: u8 = b'9';
 const BYTE_LEN_END: u8 = b':';
 
-/// Construct a `BencodeMut` map by supplying string references as keys and `BencodeMut` as values.
+/// Construct a `BencodeMut` map by supplying string references as keys and
+/// `BencodeMut` as values.
 #[macro_export]
 macro_rules! ben_map {
 ( $($key:expr => $val:expr),* ) => {
@@ -101,7 +102,7 @@ macro_rules! ben_list {
     ( $($ben:expr),* ) => {
         {
             use bip_bencode::{BencodeMut, BMutAccess};
-            
+
             let mut bencode_list = BencodeMut::new_list();
             {
                 let list = bencode_list.list_mut().unwrap();
@@ -118,24 +119,20 @@ macro_rules! ben_list {
 /// Construct `BencodeMut` bytes by supplying a type convertible to `Vec<u8>`.
 #[macro_export]
 macro_rules! ben_bytes {
-    ( $ben:expr ) => {
-        {
-            use bip_bencode::{BencodeMut};
-            use bip_bencode::inner::BCowConvert;
-            
-            BencodeMut::new_bytes(BCowConvert::convert($ben))
-        }
-    }
+    ( $ben:expr ) => {{
+        use bip_bencode::inner::BCowConvert;
+        use bip_bencode::BencodeMut;
+
+        BencodeMut::new_bytes(BCowConvert::convert($ben))
+    }};
 }
 
 /// Construct a `BencodeMut` integer by supplying an `i64`.
 #[macro_export]
 macro_rules! ben_int {
-    ( $ben:expr ) => {
-        {
-            use bip_bencode::{BencodeMut};
-            
-            BencodeMut::new_int($ben)
-        }
-    }
+    ( $ben:expr ) => {{
+        use bip_bencode::BencodeMut;
+
+        BencodeMut::new_int($ben)
+    }};
 }

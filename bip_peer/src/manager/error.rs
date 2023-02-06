@@ -12,6 +12,6 @@ error_chain! {
             description("Peer Was Not Found")
             display("Peer Was Not Found With PeerInfo {:?}", info)
         }
-        
+
     }
 }

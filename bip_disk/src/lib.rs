@@ -16,12 +16,12 @@ mod memory;
 /// Both `Block` and `Torrent` error types.
 pub mod error;
 
-pub use crate::disk::{IDiskMessage, ODiskMessage};
-pub use crate::disk::fs::FileSystem;
 pub use crate::disk::builder::DiskManagerBuilder;
+pub use crate::disk::fs::FileSystem;
 pub use crate::disk::manager::{DiskManager, DiskManagerSink, DiskManagerStream};
+pub use crate::disk::{IDiskMessage, ODiskMessage};
 
-pub use crate::memory::block::{Block, BlockMut, BlockMetadata};
+pub use crate::memory::block::{Block, BlockMetadata, BlockMut};
 
 /// Built in objects implementing `FileSystem`.
 pub mod fs {

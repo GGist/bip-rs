@@ -31,7 +31,11 @@ impl PortMessage {
     where
         W: Write,
     {
-        message::write_length_id_pair(&mut writer, bits_ext::PORT_MESSAGE_LEN, Some(bits_ext::PORT_MESSAGE_ID))?;
+        message::write_length_id_pair(
+            &mut writer,
+            bits_ext::PORT_MESSAGE_LEN,
+            Some(bits_ext::PORT_MESSAGE_ID),
+        )?;
 
         writer.write_u16::<BigEndian>(self.port)
     }

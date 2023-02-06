@@ -1,37 +1,43 @@
 use bip_util;
 use bip_util::convert;
 
-// Transaction IDs are going to be vital for both scalability and performance concerns.
-// They allow us to both protect against unsolicited responses as well as dropping those
-// messages as soon as possible. We are taking an absurdly large, lazily generate, ringbuffer
-// approach to generating transaction ids.
+// Transaction IDs are going to be vital for both scalability and performance
+// concerns. They allow us to both protect against unsolicited responses as well
+// as dropping those messages as soon as possible. We are taking an absurdly
+// large, lazily generate, ringbuffer approach to generating transaction ids.
 
-// We are going for a simple, stateless (for the most part) implementation for generating
-// the transaction ids. We chose to go this route because 1, we dont want to reuse transaction
-// ids used in recent requests that had subsequent responses as well because this would make us
-// vulnerable to nodes that we gave that transaction id to, they would know we would be reusing
-// it soon. And 2, that makes for an unscalable approach unless we also have a timeout for ids
+// We are going for a simple, stateless (for the most part) implementation for
+// generating the transaction ids. We chose to go this route because 1, we dont
+// want to reuse transaction ids used in recent requests that had subsequent
+// responses as well because this would make us vulnerable to nodes that we gave
+// that transaction id to, they would know we would be reusing it soon. And 2,
+// that makes for an unscalable approach unless we also have a timeout for ids
 // that we never received responses for which would lend itself to messy code.
 
-// Instead, we are going to pre-allocate a chunk of ids, shuffle them, and use them until they
-// run out, then pre-allocate some more, shuffle them, and use them. When we run out, (which wont
-// happen for a VERY long time) we will simply wrap around. Also, we are going to break down the
-// transaction id, so our transaction id will be made up of the first 5 bytes which will be the
-// action id, this would be something like an individual lookup, a bucket refresh, or a bootstrap.
-// Now, each of those actions have a number of messages associated with them, this is where the
-// last 3 bytes come in which will be the message id. This allows us to route messages appropriately
-// and associate them with some action we are performing right down to a message that the action is
-// expecting. The pre-allocation strategy is used both on the action id level as well as the message
-// id level.
+// Instead, we are going to pre-allocate a chunk of ids, shuffle them, and use
+// them until they run out, then pre-allocate some more, shuffle them, and use
+// them. When we run out, (which wont happen for a VERY long time) we will
+// simply wrap around. Also, we are going to break down the transaction id, so
+// our transaction id will be made up of the first 5 bytes which will be the
+// action id, this would be something like an individual lookup, a bucket
+// refresh, or a bootstrap. Now, each of those actions have a number of messages
+// associated with them, this is where the last 3 bytes come in which will be
+// the message id. This allows us to route messages appropriately and associate
+// them with some action we are performing right down to a message that the
+// action is expecting. The pre-allocation strategy is used both on the action
+// id level as well as the message id level.
 
-// To protect against timing attacks, where recently pinged nodes got our transaction id and wish
-// to guess other transaction ids in the block that we may have in flight, we will make the pre-allocation
-// space fairly large so that our shuffle provides a strong protection from these attacks. In the future,
-// we may want to dynamically ban nodes that we feel are guessing our transaction ids.
+// To protect against timing attacks, where recently pinged nodes got our
+// transaction id and wish to guess other transaction ids in the block that we
+// may have in flight, we will make the pre-allocation space fairly large so
+// that our shuffle provides a strong protection from these attacks. In the
+// future, we may want to dynamically ban nodes that we feel are guessing our
+// transaction ids.
 
-// IMPORTANT: Allocation markers (not the actual allocated ids) are not shifted so that we can deal with
-// overflow by manually checking since I dont want to rely on langauge level overflows and whether they
-// cause a panic or not (debug and release should have similar semantics)!
+// IMPORTANT: Allocation markers (not the actual allocated ids) are not shifted
+// so that we can deal with overflow by manually checking since I dont want to
+// rely on langauge level overflows and whether they cause a panic or not (debug
+// and release should have similar semantics)!
 
 // Together these make up 8 bytes, or, a u64
 const TRANSACTION_ID_BYTES: usize = ACTION_ID_BYTES + MESSAGE_ID_BYTES;
@@ -120,7 +126,7 @@ fn generate_aids(next_alloc: u64) -> (u64, [u64; ACTION_ID_PREALLOC_LEN]) {
     (next_alloc_end, action_ids)
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 pub struct MIDGenerator {
     // ALREADY SHIFTED, for your convenience :)
@@ -187,8 +193,7 @@ fn generate_mids(next_alloc: u64) -> (u64, [u64; MESSAGE_ID_PREALLOC_LEN]) {
     (next_alloc_end, message_ids)
 }
 
-
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct TransactionID {
@@ -237,7 +242,7 @@ impl AsRef<[u8]> for TransactionID {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ActionID {
@@ -249,11 +254,13 @@ impl ActionID {
         // The ACTUAL action id
         let shifted_action_id = trans_id >> MESSAGE_ID_SHIFT;
 
-        ActionID { action_id: shifted_action_id }
+        ActionID {
+            action_id: shifted_action_id,
+        }
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[allow(unused)]
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -268,11 +275,13 @@ impl MessageID {
         // The ACTUAL message id
         let shifted_message_id = trans_id & clear_action_id;
 
-        MessageID { message_id: shifted_message_id }
+        MessageID {
+            message_id: shifted_message_id,
+        }
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[cfg(test)]
 mod tests {
@@ -324,7 +333,8 @@ mod tests {
 
     #[test]
     fn positive_unique_tid_blocks() {
-        // Go through two blocks of compound ids (transaction ids), make sure they are unique
+        // Go through two blocks of compound ids (transaction ids), make sure they are
+        // unique
         let mut transaction_ids = HashSet::new();
         let mut aid_generator = AIDGenerator::new();
 

@@ -27,7 +27,7 @@ pub trait AnnounceOption<'a>: Sized {
     fn write_option(&self, buffer: &mut [u8]);
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Set of announce options used to provide trackers with extra information.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,7 +38,9 @@ pub struct AnnounceOptions<'a> {
 impl<'a> AnnounceOptions<'a> {
     /// Create a new set of AnnounceOptions.
     pub fn new() -> AnnounceOptions<'a> {
-        AnnounceOptions { raw_options: HashMap::new() }
+        AnnounceOptions {
+            raw_options: HashMap::new(),
+        }
     }
 
     /// Parse a set of AnnounceOptions from the given bytes.
@@ -46,7 +48,9 @@ impl<'a> AnnounceOptions<'a> {
         let mut raw_options = HashMap::new();
 
         map!(bytes, call!(parse_options, &mut raw_options), |_| {
-            AnnounceOptions { raw_options: raw_options }
+            AnnounceOptions {
+                raw_options: raw_options,
+            }
         })
     }
 
@@ -66,22 +70,26 @@ impl<'a> AnnounceOptions<'a> {
             }
         }
 
-        // If we can fit it in, include the option terminating byte, otherwise as per the
-        // spec, we can leave it out since we are assuming this is the end of the packet.
-        // TODO: Allow unused when the compile flag is stabilized
+        // If we can fit it in, include the option terminating byte, otherwise as per
+        // the spec, we can leave it out since we are assuming this is the end
+        // of the packet. TODO: Allow unused when the compile flag is stabilized
         writer.write_u8(END_OF_OPTIONS_BYTE);
 
         Ok(())
     }
 
-    /// Search for and construct the given AnnounceOption from the current AnnounceOptions.
+    /// Search for and construct the given AnnounceOption from the current
+    /// AnnounceOptions.
     ///
-    /// Returns None if the option is not found or it failed to read from the given bytes.
+    /// Returns None if the option is not found or it failed to read from the
+    /// given bytes.
     pub fn get<O>(&'a self) -> Option<O>
     where
         O: AnnounceOption<'a>,
     {
-        self.raw_options.get(&O::option_byte()).and_then(|bytes| O::read_option(&*bytes))
+        self.raw_options
+            .get(&O::option_byte())
+            .and_then(|bytes| O::read_option(&*bytes))
     }
 
     /// Add an AnnounceOption to the current set of AnnounceOptions.
@@ -96,8 +104,8 @@ impl<'a> AnnounceOptions<'a> {
 
         // Unfortunately we cannot return the replaced value unless we modified the
         // AnnounceOption::read_option method to accept a Cow and give it that because
-        // we cant guarantee that the buffer is not Cow::Owned at the moment and would be
-        // dropped (replaced) after being constructed.
+        // we cant guarantee that the buffer is not Cow::Owned at the moment and would
+        // be dropped (replaced) after being constructed.
         self.insert_bytes(O::option_byte(), bytes);
     }
 
@@ -118,12 +126,15 @@ impl<'a> AnnounceOptions<'a> {
 }
 
 /// Parse the options in the byte slice and store them in the option map.
-fn parse_options<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], bool> {
+fn parse_options<'a>(
+    bytes: &'a [u8],
+    option_map: &mut HashMap<u8, Cow<'a, [u8]>>,
+) -> IResult<&'a [u8], bool> {
     let mut curr_bytes = bytes;
     let mut eof = false;
 
-    // Iteratively try all parsers until one succeeds and check whether the eof has been reached.
-    // Return early on incomplete or error.
+    // Iteratively try all parsers until one succeeds and check whether the eof has
+    // been reached. Return early on incomplete or error.
     while !eof {
         let parse_result = alt!(
             curr_bytes,
@@ -135,10 +146,10 @@ fn parse_options<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>
                 eof = found_eof;
 
                 curr_bytes = new_bytes;
-            },
+            }
             some_error => {
                 return some_error;
-            },
+            }
         };
     }
 
@@ -156,7 +167,10 @@ fn parse_no_option<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], bool> {
 }
 
 /// Parse a user defined option.
-fn parse_user_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [u8]>>) -> IResult<&'a [u8], bool> {
+fn parse_user_option<'a>(
+    bytes: &'a [u8],
+    option_map: &mut HashMap<u8, Cow<'a, [u8]>>,
+) -> IResult<&'a [u8], bool> {
     do_parse!(
         bytes,
         option_byte: be_u8
@@ -165,10 +179,10 @@ fn parse_user_option<'a>(bytes: &'a [u8], option_map: &mut HashMap<u8, Cow<'a, [
                 match option_map.entry(option_byte) {
                     Entry::Occupied(mut occ) => {
                         occ.get_mut().to_mut().extend_from_slice(option_contents);
-                    },
+                    }
                     Entry::Vacant(vac) => {
                         vac.insert(Cow::Borrowed(option_contents));
-                    },
+                    }
                 };
 
                 false
@@ -181,7 +195,7 @@ named!(byte_usize<&[u8], usize>, map!(
     be_u8, |b| b as usize
 ));
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Concatenated PATH and QUERY of a UDP tracker URL.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -257,7 +271,13 @@ mod tests {
         options.insert(&option);
         options.write_bytes(&mut received).unwrap();
 
-        let expected = [super::URL_DATA_BYTE, 2, b'A', b'A', super::END_OF_OPTIONS_BYTE];
+        let expected = [
+            super::URL_DATA_BYTE,
+            2,
+            b'A',
+            b'A',
+            super::END_OF_OPTIONS_BYTE,
+        ];
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -276,9 +296,13 @@ mod tests {
 
         let mut expected = Vec::new();
         expected.write_all(&[super::URL_DATA_BYTE, 255]).unwrap();
-        expected.write_all(option_content.chunks(255).nth(0).unwrap()).unwrap();
+        expected
+            .write_all(option_content.chunks(255).nth(0).unwrap())
+            .unwrap();
         expected.write_all(&[super::URL_DATA_BYTE, 1]).unwrap();
-        expected.write_all(option_content.chunks(255).nth(1).unwrap()).unwrap();
+        expected
+            .write_all(option_content.chunks(255).nth(1).unwrap())
+            .unwrap();
         expected.write_all(&[super::END_OF_OPTIONS_BYTE]).unwrap();
 
         assert_eq!(&received[..], &expected[..]);
@@ -330,7 +354,16 @@ mod tests {
 
     #[test]
     fn positive_parse_url_data_end_of_options() {
-        let bytes = [super::URL_DATA_BYTE, 5, 0, 0, 0, 0, 0, super::END_OF_OPTIONS_BYTE];
+        let bytes = [
+            super::URL_DATA_BYTE,
+            5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            super::END_OF_OPTIONS_BYTE,
+        ];
         let url_data_bytes = [0, 0, 0, 0, 0];
 
         let received = AnnounceOptions::from_bytes(&bytes);
@@ -344,7 +377,16 @@ mod tests {
 
     #[test]
     fn positive_parse_url_data_noop_eof() {
-        let bytes = [super::URL_DATA_BYTE, 5, 0, 0, 0, 0, 0, super::NO_OPERATION_BYTE];
+        let bytes = [
+            super::URL_DATA_BYTE,
+            5,
+            0,
+            0,
+            0,
+            0,
+            0,
+            super::NO_OPERATION_BYTE,
+        ];
         let url_data_bytes = [0, 0, 0, 0, 0];
 
         let received = AnnounceOptions::from_bytes(&bytes);
@@ -434,8 +476,9 @@ mod tests {
     fn positive_parse_url_data_undivisible_chunks() {
         const NUM_BYTES: usize = u8::MAX as usize + 2;
 
-        // Add an option tag, length, and a single byte as the payload to create an undivisible
-        // chunk (not evenly divisible by u8::MAX) to see if it serializes correctly.
+        // Add an option tag, length, and a single byte as the payload to create an
+        // undivisible chunk (not evenly divisible by u8::MAX) to see if it
+        // serializes correctly.
         let mut bytes = [0u8; NUM_BYTES + 3];
         let mut url_data_bytes = Vec::new();
         {

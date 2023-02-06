@@ -9,7 +9,10 @@ pub trait DiscoveryInfo {
     fn peer_id(&self) -> PeerId;
 }
 
-impl<'a, T> DiscoveryInfo for &'a T where T: DiscoveryInfo {
+impl<'a, T> DiscoveryInfo for &'a T
+where
+    T: DiscoveryInfo,
+{
     fn port(&self) -> u16 {
         (*self).port()
     }

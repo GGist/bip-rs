@@ -3,16 +3,16 @@ extern crate bip_handshake;
 extern crate bip_util;
 extern crate log;
 
-use std::collections::{HashSet};
+use std::collections::HashSet;
 use std::io::{self, Read};
-use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::thread::{self};
 
 use bip_dht::{DhtBuilder, Router};
-use bip_handshake::{Handshaker};
+use bip_handshake::Handshaker;
 use bip_util::bt::{InfoHash, PeerId};
 
-use log::{LogRecord, LogLevel, LogMetadata, LogLevelFilter};
+use log::{LogLevel, LogLevelFilter, LogMetadata, LogRecord};
 
 struct SimpleLogger;
 
@@ -30,7 +30,7 @@ impl log::Log for SimpleLogger {
 
 struct SimpleHandshaker {
     filter: HashSet<SocketAddr>,
-    count: usize
+    count: usize,
 }
 
 impl Handshaker for SimpleHandshaker {
@@ -44,8 +44,9 @@ impl Handshaker for SimpleHandshaker {
 
     /// Advertise port that is being listened on by the handshaker.
     ///
-    /// It is important that this is the external port that the peer will be sending data
-    /// to. This is relevant if the client employs nat traversal via upnp or other means.
+    /// It is important that this is the external port that the peer will be
+    /// sending data to. This is relevant if the client employs nat
+    /// traversal via upnp or other means.
     fn port(&self) -> u16 {
         6889
     }
@@ -53,31 +54,42 @@ impl Handshaker for SimpleHandshaker {
     /// Initiates a handshake with the given socket address.
     fn connect(&mut self, _: Option<PeerId>, _: InfoHash, addr: SocketAddr) {
         if self.filter.contains(&addr) {
-            return
+            return;
         }
-        
+
         self.filter.insert(addr);
         self.count += 1;
-        println!("Received new peer {:?}, total unique peers {}", addr, self.count);
+        println!(
+            "Received new peer {:?}, total unique peers {}",
+            addr, self.count
+        );
     }
-    
+
     /// Send the given Metadata back to the client.
-    fn metadata(&mut self, _: Self::MetadataEnvelope) {
-        
-    }
+    fn metadata(&mut self, _: Self::MetadataEnvelope) {}
 }
 
 fn main() {
     log::set_logger(|m| {
         m.set(LogLevelFilter::max());
         Box::new(SimpleLogger)
-    }).unwrap();
+    })
+    .unwrap();
     let hash = InfoHash::from_bytes(b"My Unique Info Hash");
-    
-    let handshaker = SimpleHandshaker{ filter: HashSet::new(), count: 0 };
-    let dht = DhtBuilder::with_router(Router::uTorrent).set_source_addr(SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 6889)))
-    .set_read_only(false).start_mainline(handshaker).unwrap();
-    
+
+    let handshaker = SimpleHandshaker {
+        filter: HashSet::new(),
+        count: 0,
+    };
+    let dht = DhtBuilder::with_router(Router::uTorrent)
+        .set_source_addr(SocketAddr::V4(SocketAddrV4::new(
+            Ipv4Addr::new(0, 0, 0, 0),
+            6889,
+        )))
+        .set_read_only(false)
+        .start_mainline(handshaker)
+        .unwrap();
+
     // Spawn a thread to listen to and report events
     let events = dht.events();
     thread::spawn(move || {
@@ -85,7 +97,7 @@ fn main() {
             println!("\nReceived Dht Event {:?}", event);
         }
     });
-    
+
     // Let the user announce or search on our info hash
     let stdin = io::stdin();
     let stdin_lock = stdin.lock();
@@ -93,7 +105,7 @@ fn main() {
         match &[byte.unwrap()] {
             b"a" => dht.search(hash, true),
             b"s" => dht.search(hash, false),
-            _   => ()
+            _ => (),
         }
     }
 }

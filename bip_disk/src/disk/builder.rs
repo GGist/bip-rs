@@ -1,23 +1,26 @@
 use crate::disk::fs::FileSystem;
-use crate::disk::manager::{DiskManager};
+use crate::disk::manager::DiskManager;
 
 use futures_cpupool::Builder;
 
-const DEFAULT_PENDING_SIZE:   usize = 10;
+const DEFAULT_PENDING_SIZE: usize = 10;
 const DEFAULT_COMPLETED_SIZE: usize = 10;
 
 /// `DiskManagerBuilder` for building `DiskManager`s with different settings.
 pub struct DiskManagerBuilder {
-    builder:        Builder,
-    pending_size:   usize,
-    completed_size: usize
+    builder: Builder,
+    pending_size: usize,
+    completed_size: usize,
 }
 
 impl DiskManagerBuilder {
     /// Create a new `DiskManagerBuilder`.
     pub fn new() -> DiskManagerBuilder {
-        DiskManagerBuilder{ builder: Builder::new(), pending_size: DEFAULT_PENDING_SIZE,
-                            completed_size: DEFAULT_COMPLETED_SIZE }
+        DiskManagerBuilder {
+            builder: Builder::new(),
+            pending_size: DEFAULT_PENDING_SIZE,
+            completed_size: DEFAULT_COMPLETED_SIZE,
+        }
     }
 
     /// Use a custom `Builder` for the `CpuPool`.
@@ -55,7 +58,9 @@ impl DiskManagerBuilder {
 
     /// Build a `DiskManager` with the given `FileSystem`.
     pub fn build<F>(self, fs: F) -> DiskManager<F>
-        where F: FileSystem + Send + Sync + 'static {
+    where
+        F: FileSystem + Send + Sync + 'static,
+    {
         DiskManager::from_builder(self, fs)
     }
 }

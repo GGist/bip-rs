@@ -59,5 +59,8 @@ fn parse_real_protocol(bytes: &[u8]) -> IResult<&[u8], Protocol> {
 }
 
 fn parse_raw_protocol(bytes: &[u8]) -> IResult<&[u8], &[u8]> {
-    do_parse!(bytes, length: be_u8 >> raw_protocol: take!(length) >> (raw_protocol))
+    do_parse!(
+        bytes,
+        length: be_u8 >> raw_protocol: take!(length) >> (raw_protocol)
+    )
 }

@@ -49,7 +49,7 @@ impl Into<u8> for ErrorCode {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 struct ErrorValidate;
@@ -77,7 +77,7 @@ impl BencodeConvert for ErrorValidate {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ErrorMessage<'a> {
@@ -87,9 +87,10 @@ pub struct ErrorMessage<'a> {
 }
 
 impl<'a> ErrorMessage<'a> {
-    /// TODO: Figure out a way to make the error message non static while still providing a clean
-    // interface in error.rs for the DhtErrorKind object. Most likely our error messages will not
-    // need to be dynamically generated (up in the air at this point) so this is a performance loss.
+    // TODO: Figure out a way to make the error message non static while still
+    // providing a clean interface in error.rs for the DhtErrorKind object. Most
+    // likely our error messages will not need to be dynamically generated (up
+    // in the air at this point) so this is a performance loss.
     pub fn new(trans_id: Vec<u8>, code: ErrorCode, message: String) -> ErrorMessage<'static> {
         let trans_id_cow = Cow::Owned(trans_id);
         let message_cow = Cow::Owned(message);
@@ -101,7 +102,10 @@ impl<'a> ErrorMessage<'a> {
         }
     }
 
-    pub fn from_parts(root: &dyn Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8]) -> DhtResult<ErrorMessage<'a>> {
+    pub fn from_parts(
+        root: &dyn Dictionary<'a, Bencode<'a>>,
+        trans_id: &'a [u8],
+    ) -> DhtResult<ErrorMessage<'a>> {
         let validate = ErrorValidate;
         let error_args = validate.lookup_and_convert_list(root, ERROR_ARGS_KEY)?;
 

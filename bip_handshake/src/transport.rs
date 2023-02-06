@@ -19,12 +19,16 @@ pub trait Transport {
     type FutureSocket: Future<Item = Self::Socket, Error = io::Error> + 'static;
 
     /// Concrete listener.
-    type Listener: Stream<Item = (Self::Socket, SocketAddr), Error = io::Error> + LocalAddr + 'static;
+    type Listener: Stream<Item = (Self::Socket, SocketAddr), Error = io::Error>
+        + LocalAddr
+        + 'static;
 
-    /// Connect to the given address over this transport, using the supplied `Handle`.
+    /// Connect to the given address over this transport, using the supplied
+    /// `Handle`.
     fn connect(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::FutureSocket>;
 
-    /// Listen to the given address for this transport, using the supplied `Handle`.
+    /// Listen to the given address for this transport, using the supplied
+    /// `Handle`.
     fn listen(&self, addr: &SocketAddr, handle: &Handle) -> io::Result<Self::Listener>;
 }
 
@@ -50,7 +54,8 @@ impl Transport for TcpTransport {
     }
 }
 
-/// Convenient object that wraps a listener stream `L`, and also implements `LocalAddr`.
+/// Convenient object that wraps a listener stream `L`, and also implements
+/// `LocalAddr`.
 pub struct TcpListenerStream<L> {
     listen_addr: SocketAddr,
     listener: L,
@@ -58,7 +63,10 @@ pub struct TcpListenerStream<L> {
 
 impl<L> TcpListenerStream<L> {
     fn new(listen_addr: SocketAddr, listener: L) -> TcpListenerStream<L> {
-        TcpListenerStream { listen_addr, listener }
+        TcpListenerStream {
+            listen_addr,
+            listener,
+        }
     }
 }
 

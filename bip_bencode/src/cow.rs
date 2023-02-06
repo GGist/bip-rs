@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 /// Trait for macros to convert owned/borrowed types to `Cow`.
-/// 
+///
 /// This is needed because `&str` and `String` do not have `From`
 /// impls into `Cow<_, [u8]>`. One solution is to just call `AsRef<[u8]>`
 /// before converting. However, then when a user specifies an owned type,

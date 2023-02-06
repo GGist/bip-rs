@@ -64,7 +64,7 @@ impl<'a> TrackerResponse<'a> {
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
 
                 writer.write_u64::<BigEndian>(id)?;
-            },
+            }
             &ResponseType::Announce(ref req) => {
                 let action_id = match req.peers() {
                     &CompactPeers::V4(_) => crate::ANNOUNCE_IPV4_ACTION_ID,
@@ -75,19 +75,19 @@ impl<'a> TrackerResponse<'a> {
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
 
                 req.write_bytes(writer)?;
-            },
+            }
             &ResponseType::Scrape(ref req) => {
                 writer.write_u32::<BigEndian>(crate::SCRAPE_ACTION_ID)?;
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
 
                 req.write_bytes(writer)?;
-            },
+            }
             &ResponseType::Error(ref err) => {
                 writer.write_u32::<BigEndian>(ERROR_ACTION_ID)?;
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
 
                 err.write_bytes(writer)?;
-            },
+            }
         };
 
         Ok(())

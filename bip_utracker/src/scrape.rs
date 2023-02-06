@@ -5,7 +5,7 @@ use std::io::{self, Write};
 
 use bip_util::bt::{self, InfoHash};
 use bip_util::convert;
-use nom::{IResult, Needed, be_i32};
+use nom::{be_i32, IResult, Needed};
 
 const SCRAPE_STATS_BYTES: usize = 12;
 
@@ -49,15 +49,16 @@ impl ScrapeStats {
 }
 
 fn parse_stats(bytes: &[u8]) -> IResult<&[u8], ScrapeStats> {
-    do_parse!(bytes,
-        seeders:    be_i32 >>
-        downloaded: be_i32 >>
-        leechers:   be_i32 >>
-        (ScrapeStats::new(seeders, downloaded, leechers))
+    do_parse!(
+        bytes,
+        seeders: be_i32
+            >> downloaded: be_i32
+            >> leechers: be_i32
+            >> (ScrapeStats::new(seeders, downloaded, leechers))
     )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Scrape request sent from the client to the server.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -68,7 +69,9 @@ pub struct ScrapeRequest<'a> {
 impl<'a> ScrapeRequest<'a> {
     /// Create a new ScrapeRequest.
     pub fn new() -> ScrapeRequest<'a> {
-        ScrapeRequest { hashes: Cow::Owned(Vec::new()) }
+        ScrapeRequest {
+            hashes: Cow::Owned(Vec::new()),
+        }
     }
 
     /// Construct a ScrapeRequest from the given bytes.
@@ -78,9 +81,11 @@ impl<'a> ScrapeRequest<'a> {
 
     /// Write the ScrapeRequest to the given writer.
     ///
-    /// Ordering of the written InfoHash is identical to that of ScrapeRequest::iter().
+    /// Ordering of the written InfoHash is identical to that of
+    /// ScrapeRequest::iter().
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_all(&*self.hashes)
     }
@@ -99,7 +104,9 @@ impl<'a> ScrapeRequest<'a> {
 
     /// Create an owned version of ScrapeRequest.
     pub fn to_owned(&self) -> ScrapeRequest<'static> {
-        ScrapeRequest { hashes: Cow::Owned((*self.hashes).to_vec()) }
+        ScrapeRequest {
+            hashes: Cow::Owned((*self.hashes).to_vec()),
+        }
     }
 }
 
@@ -111,11 +118,16 @@ fn parse_request<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], ScrapeRequest<'a>> {
     } else {
         let end_of_bytes = &bytes[bytes.len()..bytes.len()];
 
-        IResult::Done(end_of_bytes, ScrapeRequest { hashes: Cow::Borrowed(bytes) })
+        IResult::Done(
+            end_of_bytes,
+            ScrapeRequest {
+                hashes: Cow::Borrowed(bytes),
+            },
+        )
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Scrape response sent from the server to the client.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,7 +138,9 @@ pub struct ScrapeResponse<'a> {
 impl<'a> ScrapeResponse<'a> {
     /// Create a new ScrapeResponse.
     pub fn new() -> ScrapeResponse<'a> {
-        ScrapeResponse { stats: Cow::Owned(Vec::new()) }
+        ScrapeResponse {
+            stats: Cow::Owned(Vec::new()),
+        }
     }
 
     /// Construct a ScrapeResponse from the given bytes.
@@ -136,9 +150,11 @@ impl<'a> ScrapeResponse<'a> {
 
     /// Write the ScrapeResponse to the given writer.
     ///
-    /// Ordering of the written stats is identical to that of ScrapeResponse::iter().
+    /// Ordering of the written stats is identical to that of
+    /// ScrapeResponse::iter().
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_all(&*self.stats)
     }
@@ -158,15 +174,17 @@ impl<'a> ScrapeResponse<'a> {
 
     /// Iterator over each status for every InfoHash in the request.
     ///
-    /// Ordering of the status corresponds to the ordering of the InfoHash in the
-    /// initial request.
+    /// Ordering of the status corresponds to the ordering of the InfoHash in
+    /// the initial request.
     pub fn iter<'b>(&'b self) -> ScrapeResponseIter<'b> {
         ScrapeResponseIter::new(&*self.stats)
     }
 
     /// Create an owned version of ScrapeResponse.
     pub fn to_owned(&self) -> ScrapeResponse<'static> {
-        ScrapeResponse { stats: Cow::Owned((*self.stats).to_vec()) }
+        ScrapeResponse {
+            stats: Cow::Owned((*self.stats).to_vec()),
+        }
     }
 }
 
@@ -178,11 +196,16 @@ fn parse_response<'a>(bytes: &'a [u8]) -> IResult<&'a [u8], ScrapeResponse<'a>> 
     } else {
         let end_of_bytes = &bytes[bytes.len()..bytes.len()];
 
-        IResult::Done(end_of_bytes, ScrapeResponse { stats: Cow::Borrowed(bytes) })
+        IResult::Done(
+            end_of_bytes,
+            ScrapeResponse {
+                stats: Cow::Borrowed(bytes),
+            },
+        )
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Iterator over a number of InfoHashes.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -221,7 +244,7 @@ impl<'a> ExactSizeIterator for ScrapeRequestIter<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Iterator over a number of ScrapeStats.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -338,9 +361,15 @@ mod tests {
         response.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(stat_one.num_seeders()).unwrap();
-        expected.write_i32::<BigEndian>(stat_one.num_downloads()).unwrap();
-        expected.write_i32::<BigEndian>(stat_one.num_leechers()).unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_one.num_seeders())
+            .unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_one.num_downloads())
+            .unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_one.num_leechers())
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -358,13 +387,25 @@ mod tests {
         response.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(stat_one.num_seeders()).unwrap();
-        expected.write_i32::<BigEndian>(stat_one.num_downloads()).unwrap();
-        expected.write_i32::<BigEndian>(stat_one.num_leechers()).unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_one.num_seeders())
+            .unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_one.num_downloads())
+            .unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_one.num_leechers())
+            .unwrap();
 
-        expected.write_i32::<BigEndian>(stat_two.num_seeders()).unwrap();
-        expected.write_i32::<BigEndian>(stat_two.num_downloads()).unwrap();
-        expected.write_i32::<BigEndian>(stat_two.num_leechers()).unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_two.num_seeders())
+            .unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_two.num_downloads())
+            .unwrap();
+        expected
+            .write_i32::<BigEndian>(stat_two.num_leechers())
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -435,8 +476,9 @@ mod tests {
 
     #[test]
     fn positive_parse_response_many_stats() {
-        let stats_bytes = [0, 0, 0, 255, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0,
-                           3];
+        let stats_bytes = [
+            0, 0, 0, 255, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3,
+        ];
 
         let received = ScrapeResponse::from_bytes(&stats_bytes);
 

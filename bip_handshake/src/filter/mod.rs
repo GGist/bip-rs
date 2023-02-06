@@ -1,9 +1,9 @@
-use std::cmp::{PartialEq, Eq};
-use std::net::SocketAddr;
 use std::any::Any;
+use std::cmp::{Eq, PartialEq};
+use std::net::SocketAddr;
 
+use crate::message::extensions::Extensions;
 use crate::message::protocol::Protocol;
-use crate::message::extensions::{Extensions};
 
 use bip_util::bt::{InfoHash, PeerId};
 
@@ -13,24 +13,33 @@ pub mod filters;
 pub trait HandshakeFilters {
     /// Add the filter to the current set of filters.
     fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static;
+    where
+        F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static;
 
     /// Remove the filter from the current set of filters.
     fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static;
+    where
+        F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static;
 
     /// Clear all filters currently set.
     fn clear_filters(&self);
 }
 
-impl<'a, T> HandshakeFilters for &'a T where T: HandshakeFilters {
+impl<'a, T> HandshakeFilters for &'a T
+where
+    T: HandshakeFilters,
+{
     fn add_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
+    where
+        F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static,
+    {
         (*self).add_filter(filter)
     }
 
     fn remove_filter<F>(&self, filter: F)
-        where F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static {
+    where
+        F: HandshakeFilter + PartialEq + Eq + Send + Sync + 'static,
+    {
         (*self).remove_filter(filter)
     }
 
@@ -43,13 +52,14 @@ impl<'a, T> HandshakeFilters for &'a T where T: HandshakeFilters {
 
 /// Trait for filtering connections during handshaking.
 ///
-/// By default, all methods will return `FilterDecision::Pass` so that implementers filtering
-/// on only a few fields only have to implement the methods for those fields. Option is passed
-/// because some filters may be able to block peers before a connection is made, if data is
-/// required, return `FilterDecision::NeedData` when `None` is passed.
+/// By default, all methods will return `FilterDecision::Pass` so that
+/// implementers filtering on only a few fields only have to implement the
+/// methods for those fields. Option is passed because some filters may be able
+/// to block peers before a connection is made, if data is required, return
+/// `FilterDecision::NeedData` when `None` is passed.
 ///
-/// In order for a handshake to pass the filter, each field has to be either not blocked, or 
-/// effectively "whitelisted" (see `FilterDecision::Allow`).
+/// In order for a handshake to pass the filter, each field has to be either not
+/// blocked, or effectively "whitelisted" (see `FilterDecision::Allow`).
 #[allow(unused)]
 pub trait HandshakeFilter {
     /// Used to implement generic equality.
@@ -58,19 +68,29 @@ pub trait HandshakeFilter {
     fn as_any(&self) -> &dyn Any;
 
     /// Make a filter decision based on the peer `SocketAddr`.
-    fn on_addr(&self, opt_addr: Option<&SocketAddr>) -> FilterDecision { FilterDecision::Pass }
+    fn on_addr(&self, opt_addr: Option<&SocketAddr>) -> FilterDecision {
+        FilterDecision::Pass
+    }
 
     /// Make a filter decision based on the handshake `Protocol`.
-    fn on_prot(&self, opt_prot: Option<&Protocol>) -> FilterDecision { FilterDecision::Pass }
+    fn on_prot(&self, opt_prot: Option<&Protocol>) -> FilterDecision {
+        FilterDecision::Pass
+    }
 
     /// Make a filter decision based on the `Extensions`.
-    fn on_ext(&self, opt_ext: Option<&Extensions>) -> FilterDecision { FilterDecision::Pass }
+    fn on_ext(&self, opt_ext: Option<&Extensions>) -> FilterDecision {
+        FilterDecision::Pass
+    }
 
     /// Make a filter decision based on the `InfoHash`.
-    fn on_hash(&self, opt_hash: Option<&InfoHash>) -> FilterDecision { FilterDecision::Pass }
+    fn on_hash(&self, opt_hash: Option<&InfoHash>) -> FilterDecision {
+        FilterDecision::Pass
+    }
 
     /// Make a filter decision based on the `PeerId`.
-    fn on_pid(&self, opt_pid: Option<&PeerId>) -> FilterDecision { FilterDecision::Pass }
+    fn on_pid(&self, opt_pid: Option<&PeerId>) -> FilterDecision {
+        FilterDecision::Pass
+    }
 }
 
 //----------------------------------------------------------------------------------//
@@ -89,7 +109,7 @@ pub enum FilterDecision {
     /// Allowing a field that a previous filter blocked
     /// will have a whitelisting effect, where the block
     /// will be overriden.
-    Allow = 3
+    Allow = 3,
 }
 
 impl FilterDecision {
@@ -116,20 +136,29 @@ mod tests {
     fn positive_decision_choose_self() {
         let decision = FilterDecision::Block;
 
-        assert_eq!(FilterDecision::Block, decision.choose(FilterDecision::Block));
+        assert_eq!(
+            FilterDecision::Block,
+            decision.choose(FilterDecision::Block)
+        );
     }
 
     #[test]
     fn positive_decision_choose_higher() {
         let decision = FilterDecision::Pass;
 
-        assert_eq!(FilterDecision::NeedData, decision.choose(FilterDecision::NeedData));
+        assert_eq!(
+            FilterDecision::NeedData,
+            decision.choose(FilterDecision::NeedData)
+        );
     }
 
     #[test]
     fn positive_decision_keep_higher() {
         let decision = FilterDecision::NeedData;
 
-        assert_eq!(FilterDecision::NeedData, decision.choose(FilterDecision::Pass));
+        assert_eq!(
+            FilterDecision::NeedData,
+            decision.choose(FilterDecision::Pass)
+        );
     }
 }

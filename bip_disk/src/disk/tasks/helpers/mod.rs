@@ -8,6 +8,6 @@ pub mod piece_checker;
 pub fn build_path(parent_directory: Option<&Path>, file: &File) -> PathBuf {
     match parent_directory {
         Some(dir) => PathBuf::from(dir).join(file.path()),
-        None      => file.path().to_owned()
+        None => file.path().to_owned(),
     }
 }

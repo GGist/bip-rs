@@ -1,37 +1,37 @@
-use std::time::Duration;
 use std::io;
+use std::time::Duration;
 
-use crate::manager::{PeerManager, ManagedMessage};
+use crate::manager::{ManagedMessage, PeerManager};
 
 use futures::sink::Sink;
 use futures::stream::Stream;
 use tokio_core::reactor::Handle;
 
-const DEFAULT_PEER_CAPACITY:             usize = 1000;
-const DEFAULT_SINK_BUFFER_CAPACITY:      usize = 100;
-const DEFAULT_STREAM_BUFFER_CAPACITY:    usize = 100;
-const DEFAULT_HEARTBEAT_INTERVAL_MILLIS: u64   = 1 * 60 * 1000;
-const DEFAULT_HEARTBEAT_TIMEOUT_MILLIS:  u64   = 2 * 60 * 1000;
+const DEFAULT_PEER_CAPACITY: usize = 1000;
+const DEFAULT_SINK_BUFFER_CAPACITY: usize = 100;
+const DEFAULT_STREAM_BUFFER_CAPACITY: usize = 100;
+const DEFAULT_HEARTBEAT_INTERVAL_MILLIS: u64 = 1 * 60 * 1000;
+const DEFAULT_HEARTBEAT_TIMEOUT_MILLIS: u64 = 2 * 60 * 1000;
 
 /// Builder for configuring a `PeerManager`.
 #[derive(Copy, Clone)]
 pub struct PeerManagerBuilder {
-    peer:               usize,
-    sink_buffer:        usize,
-    stream_buffer:      usize,
+    peer: usize,
+    sink_buffer: usize,
+    stream_buffer: usize,
     heartbeat_interval: Duration,
-    heartbeat_timeout:  Duration
+    heartbeat_timeout: Duration,
 }
 
 impl PeerManagerBuilder {
     /// Create a new `PeerManagerBuilder`.
     pub fn new() -> PeerManagerBuilder {
         PeerManagerBuilder {
-            peer:               DEFAULT_PEER_CAPACITY,
-            sink_buffer:        DEFAULT_SINK_BUFFER_CAPACITY,
-            stream_buffer:      DEFAULT_STREAM_BUFFER_CAPACITY,
+            peer: DEFAULT_PEER_CAPACITY,
+            sink_buffer: DEFAULT_SINK_BUFFER_CAPACITY,
+            stream_buffer: DEFAULT_STREAM_BUFFER_CAPACITY,
             heartbeat_interval: Duration::from_millis(DEFAULT_HEARTBEAT_INTERVAL_MILLIS),
-            heartbeat_timeout:  Duration::from_millis(DEFAULT_HEARTBEAT_TIMEOUT_MILLIS)
+            heartbeat_timeout: Duration::from_millis(DEFAULT_HEARTBEAT_TIMEOUT_MILLIS),
         }
     }
 
@@ -59,7 +59,8 @@ impl PeerManagerBuilder {
         self
     }
 
-    /// Timeout at which we disconnect from the peer without seeing a keep-alive message.
+    /// Timeout at which we disconnect from the peer without seeing a keep-alive
+    /// message.
     pub fn with_heartbeat_timeout(mut self, timeout: Duration) -> PeerManagerBuilder {
         self.heartbeat_timeout = timeout;
         self
@@ -92,10 +93,11 @@ impl PeerManagerBuilder {
 
     /// Build a `PeerManager` from the current `PeerManagerBuilder`.
     pub fn build<P>(self, handle: Handle) -> PeerManager<P>
-        where P: Sink<SinkError=io::Error> +
-                 Stream<Error=io::Error>,
-              P::SinkItem: ManagedMessage,
-              P::Item:     ManagedMessage {
+    where
+        P: Sink<SinkError = io::Error> + Stream<Error = io::Error>,
+        P::SinkItem: ManagedMessage,
+        P::Item: ManagedMessage,
+    {
         PeerManager::from_builder(self, handle)
     }
 }

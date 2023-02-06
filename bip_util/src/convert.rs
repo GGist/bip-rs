@@ -4,19 +4,26 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, SocketAddrV6};
 pub fn four_bytes_to_array(bytes: u32) -> [u8; 4] {
     let eight_bytes = eight_bytes_to_array(bytes as u64);
 
-    [eight_bytes[4], eight_bytes[5], eight_bytes[6], eight_bytes[7]]
+    [
+        eight_bytes[4],
+        eight_bytes[5],
+        eight_bytes[6],
+        eight_bytes[7],
+    ]
 }
 
 /// Convert an 8 byte value to an array of 8 bytes.
 pub fn eight_bytes_to_array(bytes: u64) -> [u8; 8] {
-    [(bytes >> 56) as u8,
-     (bytes >> 48) as u8,
-     (bytes >> 40) as u8,
-     (bytes >> 32) as u8,
-     (bytes >> 24) as u8,
-     (bytes >> 16) as u8,
-     (bytes >> 8) as u8,
-     bytes as u8]
+    [
+        (bytes >> 56) as u8,
+        (bytes >> 48) as u8,
+        (bytes >> 40) as u8,
+        (bytes >> 32) as u8,
+        (bytes >> 24) as u8,
+        (bytes >> 16) as u8,
+        (bytes >> 8) as u8,
+        bytes as u8,
+    ]
 }
 
 /// Convert an ipv4 address to an array of 4 bytes big endian.
@@ -55,7 +62,11 @@ pub fn sock_v4_to_bytes_be(v4_sock: SocketAddrV4) -> [u8; 6] {
     let ip_bytes = ipv4_to_bytes_be(*v4_sock.ip());
     let port_bytes = port_to_bytes_be(v4_sock.port());
 
-    for (src, dst) in ip_bytes.iter().chain(port_bytes.iter()).zip(sock_bytes.iter_mut()) {
+    for (src, dst) in ip_bytes
+        .iter()
+        .chain(port_bytes.iter())
+        .zip(sock_bytes.iter_mut())
+    {
         *dst = *src;
     }
 
@@ -69,7 +80,11 @@ pub fn sock_v6_to_bytes_be(v6_sock: SocketAddrV6) -> [u8; 18] {
     let ip_bytes = ipv6_to_bytes_be(*v6_sock.ip());
     let port_bytes = port_to_bytes_be(v6_sock.port());
 
-    for (src, dst) in ip_bytes.iter().chain(port_bytes.iter()).zip(sock_bytes.iter_mut()) {
+    for (src, dst) in ip_bytes
+        .iter()
+        .chain(port_bytes.iter())
+        .zip(sock_bytes.iter_mut())
+    {
         *dst = *src;
     }
 
@@ -98,14 +113,16 @@ pub fn bytes_be_to_ipv6(bytes: [u8; 16]) -> Ipv6Addr {
         combined_bytes[combined_index] |= adjusted_value;
     }
 
-    Ipv6Addr::new(combined_bytes[0],
-                  combined_bytes[1],
-                  combined_bytes[2],
-                  combined_bytes[3],
-                  combined_bytes[4],
-                  combined_bytes[5],
-                  combined_bytes[6],
-                  combined_bytes[7])
+    Ipv6Addr::new(
+        combined_bytes[0],
+        combined_bytes[1],
+        combined_bytes[2],
+        combined_bytes[3],
+        combined_bytes[4],
+        combined_bytes[5],
+        combined_bytes[6],
+        combined_bytes[7],
+    )
 }
 
 /// Convert an array of 2 bytes big endian to a port.
@@ -168,7 +185,26 @@ mod tests {
         let sock_addr = SocketAddrV6::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1), 1821, 0, 0);
 
         let received = super::sock_v6_to_bytes_be(sock_addr);
-        let expected = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, (1821 >> 8) as u8, (1821 >> 0) as u8];
+        let expected = [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            (1821 >> 8) as u8,
+            (1821 >> 0) as u8,
+        ];
 
         assert_eq!(received, expected);
     }
@@ -222,7 +258,9 @@ mod tests {
         let bytes = [1, 0, 0, 0, 0, 0, 0, 1];
         let expected_bytes = [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
 
-        let ip = Ipv6Addr::new(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]);
+        let ip = Ipv6Addr::new(
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        );
 
         let result_bytes = super::ipv6_to_bytes_be(ip);
 

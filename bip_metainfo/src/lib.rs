@@ -75,6 +75,6 @@ pub mod iter;
 
 pub use bip_util::bt::InfoHash;
 
-pub use crate::accessor::{Accessor, IntoAccessor, DirectAccessor, FileAccessor, PieceAccess};
-pub use crate::builder::{MetainfoBuilder, PieceLength, InfoBuilder};
-pub use crate::metainfo::{Info, Metainfo, File};
+pub use crate::accessor::{Accessor, DirectAccessor, FileAccessor, IntoAccessor, PieceAccess};
+pub use crate::builder::{InfoBuilder, MetainfoBuilder, PieceLength};
+pub use crate::metainfo::{File, Info, Metainfo};

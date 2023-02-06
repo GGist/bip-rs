@@ -37,7 +37,7 @@ const TARGET_ID_KEY: &str = "target";
 const INFO_HASH_KEY: &str = "info_hash";
 const TOKEN_KEY: &str = "token";
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 struct MessageValidate;
@@ -50,7 +50,7 @@ impl BencodeConvert for MessageValidate {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum MessageType<'a> {
@@ -75,17 +75,19 @@ impl<'a> MessageType<'a> {
                 let rqst_type = validate.lookup_and_convert_str(msg_root, REQUEST_TYPE_KEY)?;
                 let rqst_msg = RequestType::from_parts(msg_root, trans_id, rqst_type)?;
                 Ok(MessageType::Request(rqst_msg))
-            },
+            }
             RESPONSE_TYPE_KEY => {
                 let rsp_type = trans_mapper(trans_id);
                 let rsp_message = ResponseType::from_parts(msg_root, trans_id, rsp_type)?;
                 Ok(MessageType::Response(rsp_message))
-            },
+            }
             ERROR_TYPE_KEY => {
                 let err_message = ErrorMessage::from_parts(msg_root, trans_id)?;
                 Ok(MessageType::Error(err_message))
-            },
-            unknown => Err(DhtError::from_kind(DhtErrorKind::InvalidMessage { code: unknown.to_owned() })),
+            }
+            unknown => Err(DhtError::from_kind(DhtErrorKind::InvalidMessage {
+                code: unknown.to_owned(),
+            })),
         }
     }
 }

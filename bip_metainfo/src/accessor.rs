@@ -53,16 +53,16 @@ where
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Type of access given for computing (or not) the checksums for torrent files.
 ///
-/// Implementations should typically choose to invoke the `access_pieces` callback
-/// with all `Compute` variants, or all `PreComputed` variants. It is allowable to
-/// mix and match variants between calls, but any `PreComputed` hashes will be
-/// considered as the next checksum to be put in the torrent file, so implementations
-/// will typically want to align calls with `Compute` to a piece length boundary
-/// (though not required).
+/// Implementations should typically choose to invoke the `access_pieces`
+/// callback with all `Compute` variants, or all `PreComputed` variants. It is
+/// allowable to mix and match variants between calls, but any `PreComputed`
+/// hashes will be considered as the next checksum to be put in the torrent
+/// file, so implementations will typically want to align calls with `Compute`
+/// to a piece length boundary (though not required).
 pub enum PieceAccess<'a> {
     /// Hash should be computed from the bytes read.
     Compute(&'a mut dyn Read),
@@ -70,7 +70,7 @@ pub enum PieceAccess<'a> {
     PreComputed(ShaHash),
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Accessor that pulls data in from the file system.
 pub struct FileAccessor {
@@ -134,16 +134,24 @@ impl Accessor for FileAccessor {
             self.absolute_path.iter().count() - 1
         };
 
-        for res_entry in WalkDir::new(&self.absolute_path).into_iter().filter(entry_file_filter) {
+        for res_entry in WalkDir::new(&self.absolute_path)
+            .into_iter()
+            .filter(entry_file_filter)
+        {
             let entry = res_entry?;
             let entry_metadata = entry.metadata()?;
 
             let file_length = entry_metadata.len();
             // TODO: Switch to using strip_relative when it is stabilized
-            let relative_path = entry.path().iter().skip(num_skip_paths).fold(PathBuf::new(), |mut acc, nex| {
-                acc.push(nex);
-                acc
-            });
+            let relative_path =
+                entry
+                    .path()
+                    .iter()
+                    .skip(num_skip_paths)
+                    .fold(PathBuf::new(), |mut acc, nex| {
+                        acc.push(nex);
+                        acc
+                    });
 
             callback(file_length, relative_path.as_path());
         }
@@ -155,7 +163,10 @@ impl Accessor for FileAccessor {
     where
         C: for<'a> FnMut(PieceAccess<'a>) -> io::Result<()>,
     {
-        for res_entry in WalkDir::new(&self.absolute_path).into_iter().filter(entry_file_filter) {
+        for res_entry in WalkDir::new(&self.absolute_path)
+            .into_iter()
+            .filter(entry_file_filter)
+        {
             let entry = res_entry?;
             let mut file = File::open(entry.path())?;
 
@@ -168,10 +179,13 @@ impl Accessor for FileAccessor {
 
 /// Filter that yields true if the entry points to a file.
 fn entry_file_filter(res_entry: &walkdir::Result<DirEntry>) -> bool {
-    res_entry.as_ref().map(|f| f.file_type().is_file()).unwrap_or(true)
+    res_entry
+        .as_ref()
+        .map(|f| f.file_type().is_file())
+        .unwrap_or(true)
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Accessor that pulls data in directly from memory.
 pub struct DirectAccessor<'a> {
@@ -182,7 +196,10 @@ pub struct DirectAccessor<'a> {
 impl<'a> DirectAccessor<'a> {
     /// Create a new DirectAccessor from the given file name and contents.
     pub fn new(file_name: &'a str, file_contents: &'a [u8]) -> DirectAccessor<'a> {
-        DirectAccessor { file_name, file_contents }
+        DirectAccessor {
+            file_name,
+            file_contents,
+        }
     }
 }
 

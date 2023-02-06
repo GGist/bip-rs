@@ -46,12 +46,17 @@ mod null;
 mod prot_ext;
 mod standard;
 
-pub use crate::message::bits_ext::{BitsExtensionMessage, ExtendedMessage, ExtendedMessageBuilder, ExtendedType, PortMessage};
+pub use crate::message::bits_ext::{
+    BitsExtensionMessage, ExtendedMessage, ExtendedMessageBuilder, ExtendedType, PortMessage,
+};
 pub use crate::message::null::NullProtocolMessage;
 pub use crate::message::prot_ext::{
-    PeerExtensionProtocolMessage, UtMetadataDataMessage, UtMetadataMessage, UtMetadataRejectMessage, UtMetadataRequestMessage,
+    PeerExtensionProtocolMessage, UtMetadataDataMessage, UtMetadataMessage,
+    UtMetadataRejectMessage, UtMetadataRequestMessage,
 };
-pub use crate::message::standard::{BitFieldIter, BitFieldMessage, CancelMessage, HaveMessage, PieceMessage, RequestMessage};
+pub use crate::message::standard::{
+    BitFieldIter, BitFieldMessage, CancelMessage, HaveMessage, PieceMessage, RequestMessage,
+};
 
 /// Enumeration of messages for `PeerWireProtocol`.
 pub enum PeerWireProtocolMessage<P>
@@ -66,15 +71,18 @@ where
     Choke,
     /// Message to tell a peer we will now be responding to their requests.
     UnChoke,
-    /// Message to tell a peer we are interested in downloading pieces from them.
+    /// Message to tell a peer we are interested in downloading pieces from
+    /// them.
     Interested,
-    /// Message to tell a peer we are not interested in downloading pieces from them.
+    /// Message to tell a peer we are not interested in downloading pieces from
+    /// them.
     UnInterested,
     /// Message to tell a peer we have some (validated) piece.
     Have(HaveMessage),
     /// Message to effectively send multiple HaveMessages in a single message.
     ///
-    /// This message is only valid when the connection is initiated with the peer.
+    /// This message is only valid when the connection is initiated with the
+    /// peer.
     BitField(BitFieldMessage),
     /// Message to request a block from a peer.
     Request(RequestMessage),
@@ -82,12 +90,14 @@ where
     Piece(PieceMessage),
     /// Message to cancel a block request from a peer.
     Cancel(CancelMessage),
-    /// Extension messages which are activated via the `ExtensionBits` as part of the handshake.
+    /// Extension messages which are activated via the `ExtensionBits` as part
+    /// of the handshake.
     BitsExtension(BitsExtensionMessage),
     /// Extension messages which are activated via the Extension Protocol.
     ///
-    /// In reality, this can be any type that implements `ProtocolMessage` if, for example,
-    /// you are running a private swarm where you know all nodes support a given message(s).
+    /// In reality, this can be any type that implements `ProtocolMessage` if,
+    /// for example, you are running a private swarm where you know all
+    /// nodes support a given message(s).
     ProtExtension(P::ProtocolMessage),
 }
 
@@ -119,10 +129,16 @@ where
         }
     }
 
-    pub fn parse_bytes(bytes: Bytes, ext_protocol: &mut P) -> io::Result<PeerWireProtocolMessage<P>> {
+    pub fn parse_bytes(
+        bytes: Bytes,
+        ext_protocol: &mut P,
+    ) -> io::Result<PeerWireProtocolMessage<P>> {
         match parse_message(bytes, ext_protocol) {
             IResult::Done(_, result) => result,
-            _ => Err(io::Error::new(io::ErrorKind::Other, "Failed To Parse PeerWireProtocolMessage")),
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed To Parse PeerWireProtocolMessage",
+            )),
         }
     }
 
@@ -131,18 +147,32 @@ where
         W: Write,
     {
         match self {
-            &PeerWireProtocolMessage::KeepAlive => write_length_id_pair(writer, KEEP_ALIVE_MESSAGE_LEN, None),
-            &PeerWireProtocolMessage::Choke => write_length_id_pair(writer, CHOKE_MESSAGE_LEN, Some(CHOKE_MESSAGE_ID)),
-            &PeerWireProtocolMessage::UnChoke => write_length_id_pair(writer, UNCHOKE_MESSAGE_LEN, Some(UNCHOKE_MESSAGE_ID)),
-            &PeerWireProtocolMessage::Interested => write_length_id_pair(writer, INTERESTED_MESSAGE_LEN, Some(INTERESTED_MESSAGE_ID)),
-            &PeerWireProtocolMessage::UnInterested => write_length_id_pair(writer, UNINTERESTED_MESSAGE_LEN, Some(UNINTERESTED_MESSAGE_ID)),
+            &PeerWireProtocolMessage::KeepAlive => {
+                write_length_id_pair(writer, KEEP_ALIVE_MESSAGE_LEN, None)
+            }
+            &PeerWireProtocolMessage::Choke => {
+                write_length_id_pair(writer, CHOKE_MESSAGE_LEN, Some(CHOKE_MESSAGE_ID))
+            }
+            &PeerWireProtocolMessage::UnChoke => {
+                write_length_id_pair(writer, UNCHOKE_MESSAGE_LEN, Some(UNCHOKE_MESSAGE_ID))
+            }
+            &PeerWireProtocolMessage::Interested => {
+                write_length_id_pair(writer, INTERESTED_MESSAGE_LEN, Some(INTERESTED_MESSAGE_ID))
+            }
+            &PeerWireProtocolMessage::UnInterested => write_length_id_pair(
+                writer,
+                UNINTERESTED_MESSAGE_LEN,
+                Some(UNINTERESTED_MESSAGE_ID),
+            ),
             &PeerWireProtocolMessage::Have(ref msg) => msg.write_bytes(writer),
             &PeerWireProtocolMessage::BitField(ref msg) => msg.write_bytes(writer),
             &PeerWireProtocolMessage::Request(ref msg) => msg.write_bytes(writer),
             &PeerWireProtocolMessage::Piece(ref msg) => msg.write_bytes(writer),
             &PeerWireProtocolMessage::Cancel(ref msg) => msg.write_bytes(writer),
             &PeerWireProtocolMessage::BitsExtension(ref ext) => ext.write_bytes(writer),
-            &PeerWireProtocolMessage::ProtExtension(ref ext) => ext_protocol.write_bytes(ext, writer),
+            &PeerWireProtocolMessage::ProtExtension(ref ext) => {
+                ext_protocol.write_bytes(ext, writer)
+            }
         }
     }
 
@@ -154,9 +184,13 @@ where
             &PeerWireProtocolMessage::Interested => INTERESTED_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::UnInterested => UNINTERESTED_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::Have(_) => HAVE_MESSAGE_LEN as usize,
-            &PeerWireProtocolMessage::BitField(ref msg) => BASE_BITFIELD_MESSAGE_LEN as usize + msg.bitfield().len(),
+            &PeerWireProtocolMessage::BitField(ref msg) => {
+                BASE_BITFIELD_MESSAGE_LEN as usize + msg.bitfield().len()
+            }
             &PeerWireProtocolMessage::Request(_) => REQUEST_MESSAGE_LEN as usize,
-            &PeerWireProtocolMessage::Piece(ref msg) => BASE_PIECE_MESSAGE_LEN as usize + msg.block().len(),
+            &PeerWireProtocolMessage::Piece(ref msg) => {
+                BASE_PIECE_MESSAGE_LEN as usize + msg.block().len()
+            }
             &PeerWireProtocolMessage::Cancel(_) => CANCEL_MESSAGE_LEN as usize,
             &PeerWireProtocolMessage::BitsExtension(ref ext) => ext.message_size(),
             &PeerWireProtocolMessage::ProtExtension(ref ext) => ext_protocol.message_size(ext),
@@ -200,58 +234,67 @@ fn u32_to_usize(value: u32) -> usize {
     value as usize
 }
 
-// Since these messages may come over a stream oriented protocol, if a message is incomplete
-// the number of bytes needed will be returned. However, that number of bytes is on a per parser
-// basis. If possible, we should return the number of bytes needed for the rest of the WHOLE message.
-// This allows clients to only re invoke the parser when it knows it has enough of the data.
-fn parse_message<P>(mut bytes: Bytes, ext_protocol: &mut P) -> IResult<(), io::Result<PeerWireProtocolMessage<P>>>
+// Since these messages may come over a stream oriented protocol, if a message
+// is incomplete the number of bytes needed will be returned. However, that
+// number of bytes is on a per parser basis. If possible, we should return the
+// number of bytes needed for the rest of the WHOLE message. This allows clients
+// to only re invoke the parser when it knows it has enough of the data.
+fn parse_message<P>(
+    mut bytes: Bytes,
+    ext_protocol: &mut P,
+) -> IResult<(), io::Result<PeerWireProtocolMessage<P>>>
 where
     P: PeerProtocol,
 {
     let header_bytes = bytes.clone();
 
-    // Attempt to parse a built in message type, otherwise, see if it is an extension type.
+    // Attempt to parse a built in message type, otherwise, see if it is an
+    // extension type.
     alt!(
         (),
-        ignore_input!(switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, opt!(be_u8))),
-            (KEEP_ALIVE_MESSAGE_LEN, None) => value!(
-                Ok(PeerWireProtocolMessage::KeepAlive)
-            ) |
-            (CHOKE_MESSAGE_LEN, Some(CHOKE_MESSAGE_ID)) => value!(
-                Ok(PeerWireProtocolMessage::Choke)
-            ) |
-            (UNCHOKE_MESSAGE_LEN, Some(UNCHOKE_MESSAGE_ID)) => value!(
-                Ok(PeerWireProtocolMessage::UnChoke)
-            ) |
-            (INTERESTED_MESSAGE_LEN, Some(INTERESTED_MESSAGE_ID)) => value!(
-                Ok(PeerWireProtocolMessage::Interested)
-            ) |
-            (UNINTERESTED_MESSAGE_LEN, Some(UNINTERESTED_MESSAGE_ID)) => value!(
-                Ok(PeerWireProtocolMessage::UnInterested)
-            ) |
-            (HAVE_MESSAGE_LEN, Some(HAVE_MESSAGE_ID)) => map!(
-                call!(HaveMessage::parse_bytes, bytes.split_off(HEADER_LEN)),
-                |res_have| res_have.map(PeerWireProtocolMessage::Have)
-            ) |
-            (message_len, Some(BITFIELD_MESSAGE_ID)) => map!(
-                call!(BitFieldMessage::parse_bytes, bytes.split_off(HEADER_LEN), message_len - 1),
-                |res_bitfield| res_bitfield.map(PeerWireProtocolMessage::BitField)
-            ) |
-            (REQUEST_MESSAGE_LEN, Some(REQUEST_MESSAGE_ID)) => map!(
-                call!(RequestMessage::parse_bytes, bytes.split_off(HEADER_LEN)),
-                |res_request| res_request.map(PeerWireProtocolMessage::Request)
-            ) |
-            (message_len, Some(PIECE_MESSAGE_ID)) => map!(
-                call!(PieceMessage::parse_bytes, bytes.split_off(HEADER_LEN), message_len - 1),
-                |res_piece| res_piece.map(PeerWireProtocolMessage::Piece)
-            ) |
-            (CANCEL_MESSAGE_LEN, Some(CANCEL_MESSAGE_ID)) => map!(
-                call!(CancelMessage::parse_bytes, bytes.split_off(HEADER_LEN)),
-                |res_cancel| res_cancel.map(PeerWireProtocolMessage::Cancel)
+        ignore_input!(
+            switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, opt!(be_u8))),
+                (KEEP_ALIVE_MESSAGE_LEN, None) => value!(
+                    Ok(PeerWireProtocolMessage::KeepAlive)
+                ) |
+                (CHOKE_MESSAGE_LEN, Some(CHOKE_MESSAGE_ID)) => value!(
+                    Ok(PeerWireProtocolMessage::Choke)
+                ) |
+                (UNCHOKE_MESSAGE_LEN, Some(UNCHOKE_MESSAGE_ID)) => value!(
+                    Ok(PeerWireProtocolMessage::UnChoke)
+                ) |
+                (INTERESTED_MESSAGE_LEN, Some(INTERESTED_MESSAGE_ID)) => value!(
+                    Ok(PeerWireProtocolMessage::Interested)
+                ) |
+                (UNINTERESTED_MESSAGE_LEN, Some(UNINTERESTED_MESSAGE_ID)) => value!(
+                    Ok(PeerWireProtocolMessage::UnInterested)
+                ) |
+                (HAVE_MESSAGE_LEN, Some(HAVE_MESSAGE_ID)) => map!(
+                    call!(HaveMessage::parse_bytes, bytes.split_off(HEADER_LEN)),
+                    |res_have| res_have.map(PeerWireProtocolMessage::Have)
+                ) |
+                (message_len, Some(BITFIELD_MESSAGE_ID)) => map!(
+                    call!(BitFieldMessage::parse_bytes, bytes.split_off(HEADER_LEN), message_len - 1),
+                    |res_bitfield| res_bitfield.map(PeerWireProtocolMessage::BitField)
+                ) |
+                (REQUEST_MESSAGE_LEN, Some(REQUEST_MESSAGE_ID)) => map!(
+                    call!(RequestMessage::parse_bytes, bytes.split_off(HEADER_LEN)),
+                    |res_request| res_request.map(PeerWireProtocolMessage::Request)
+                ) |
+                (message_len, Some(PIECE_MESSAGE_ID)) => map!(
+                    call!(PieceMessage::parse_bytes, bytes.split_off(HEADER_LEN), message_len - 1),
+                    |res_piece| res_piece.map(PeerWireProtocolMessage::Piece)
+                ) |
+                (CANCEL_MESSAGE_LEN, Some(CANCEL_MESSAGE_ID)) => map!(
+                    call!(CancelMessage::parse_bytes, bytes.split_off(HEADER_LEN)),
+                    |res_cancel| res_cancel.map(PeerWireProtocolMessage::Cancel)
+                )
             )
-        )) | map!(call!(BitsExtensionMessage::parse_bytes, bytes.clone()), |res_bits_ext| res_bits_ext
-            .map(PeerWireProtocolMessage::BitsExtension))
-            | map!(value!(ext_protocol.parse_bytes(bytes)), |res_prot_ext| res_prot_ext
-                .map(PeerWireProtocolMessage::ProtExtension))
+        ) | map!(
+            call!(BitsExtensionMessage::parse_bytes, bytes.clone()),
+            |res_bits_ext| res_bits_ext.map(PeerWireProtocolMessage::BitsExtension)
+        ) | map!(value!(ext_protocol.parse_bytes(bytes)), |res_prot_ext| {
+            res_prot_ext.map(PeerWireProtocolMessage::ProtExtension)
+        })
     )
 }

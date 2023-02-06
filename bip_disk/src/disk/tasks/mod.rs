@@ -3,7 +3,9 @@ use crate::disk::tasks::context::DiskManagerContext;
 use crate::disk::tasks::helpers::piece_accessor::PieceAccessor;
 use crate::disk::tasks::helpers::piece_checker::{PieceChecker, PieceCheckerState, PieceState};
 use crate::disk::{IDiskMessage, ODiskMessage};
-use crate::error::{BlockError, BlockErrorKind, BlockResult, TorrentError, TorrentErrorKind, TorrentResult};
+use crate::error::{
+    BlockError, BlockErrorKind, BlockResult, TorrentError, TorrentErrorKind, TorrentResult,
+};
 use crate::memory::block::{Block, BlockMut};
 
 use bip_metainfo::Metainfo;
@@ -30,7 +32,7 @@ where
                     Ok(_) => ODiskMessage::TorrentAdded(info_hash),
                     Err(err) => ODiskMessage::TorrentError(info_hash, err),
                 }
-            },
+            }
             IDiskMessage::RemoveTorrent(hash) => match execute_remove_torrent(hash, &context) {
                 Ok(_) => ODiskMessage::TorrentRemoved(hash),
                 Err(err) => ODiskMessage::TorrentError(hash, err),
@@ -43,10 +45,12 @@ where
                 Ok(_) => ODiskMessage::BlockLoaded(block),
                 Err(err) => ODiskMessage::LoadBlockError(block, err),
             },
-            IDiskMessage::ProcessBlock(mut block) => match execute_process_block(&mut block, &context, &mut blocking_sender) {
-                Ok(_) => ODiskMessage::BlockProcessed(block),
-                Err(err) => ODiskMessage::ProcessBlockError(block, err),
-            },
+            IDiskMessage::ProcessBlock(mut block) => {
+                match execute_process_block(&mut block, &context, &mut blocking_sender) {
+                    Ok(_) => ODiskMessage::BlockProcessed(block),
+                    Err(err) => ODiskMessage::ProcessBlockError(block, err),
+                }
+            }
         };
 
         blocking_sender
@@ -61,20 +65,27 @@ where
     .forget()
 }
 
-fn execute_add_torrent<F>(file: Metainfo, context: &DiskManagerContext<F>, blocking_sender: &mut Wait<Sender<ODiskMessage>>) -> TorrentResult<()>
+fn execute_add_torrent<F>(
+    file: Metainfo,
+    context: &DiskManagerContext<F>,
+    blocking_sender: &mut Wait<Sender<ODiskMessage>>,
+) -> TorrentResult<()>
 where
     F: FileSystem,
 {
     let info_hash = file.info().info_hash();
     let mut init_state = PieceChecker::init_state(context.filesystem(), file.info())?;
 
-    // In case we are resuming a download, we need to send the diff for the newly added torrent
+    // In case we are resuming a download, we need to send the diff for the newly
+    // added torrent
     send_piece_diff(&mut init_state, info_hash, blocking_sender, true);
 
     if context.insert_torrent(file, init_state) {
         Ok(())
     } else {
-        Err(TorrentError::from_kind(TorrentErrorKind::ExistingInfoHash { hash: info_hash }))
+        Err(TorrentError::from_kind(
+            TorrentErrorKind::ExistingInfoHash { hash: info_hash },
+        ))
     }
 }
 
@@ -85,7 +96,9 @@ where
     if context.remove_torrent(hash) {
         Ok(())
     } else {
-        Err(TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound { hash }))
+        Err(TorrentError::from_kind(
+            TorrentErrorKind::InfoHashNotFound { hash },
+        ))
     }
 }
 
@@ -109,7 +122,9 @@ where
     if found_hash {
         Ok(sync_result?)
     } else {
-        Err(TorrentError::from_kind(TorrentErrorKind::InfoHashNotFound { hash }))
+        Err(TorrentError::from_kind(
+            TorrentErrorKind::InfoHashNotFound { hash },
+        ))
     }
 }
 
@@ -131,11 +146,17 @@ where
     if found_hash {
         Ok(access_result?)
     } else {
-        Err(BlockError::from_kind(BlockErrorKind::InfoHashNotFound { hash: info_hash }))
+        Err(BlockError::from_kind(BlockErrorKind::InfoHashNotFound {
+            hash: info_hash,
+        }))
     }
 }
 
-fn execute_process_block<F>(block: &mut Block, context: &DiskManagerContext<F>, blocking_sender: &mut Wait<Sender<ODiskMessage>>) -> BlockResult<()>
+fn execute_process_block<F>(
+    block: &mut Block,
+    context: &DiskManagerContext<F>,
+    blocking_sender: &mut Wait<Sender<ODiskMessage>>,
+) -> BlockResult<()>
 where
     F: FileSystem,
 {
@@ -144,7 +165,10 @@ where
 
     let mut block_result = Ok(());
     let found_hash = context.update_torrent(info_hash, |metainfo_file, mut checker_state| {
-        info!("Processsing Block, Acquired Torrent Lock For {:?}", metainfo_file.info().info_hash());
+        info!(
+            "Processsing Block, Acquired Torrent Lock For {:?}",
+            metainfo_file.info().info_hash()
+        );
 
         let piece_accessor = PieceAccessor::new(context.filesystem(), metainfo_file.info());
 
@@ -152,22 +176,42 @@ where
         block_result = piece_accessor.write_piece(&block, &metadata).and_then(|_| {
             checker_state.add_pending_block(metadata);
 
-            PieceChecker::with_state(context.filesystem(), metainfo_file.info(), &mut checker_state).calculate_diff()
+            PieceChecker::with_state(
+                context.filesystem(),
+                metainfo_file.info(),
+                &mut checker_state,
+            )
+            .calculate_diff()
         });
 
-        send_piece_diff(checker_state, metainfo_file.info().info_hash(), blocking_sender, false);
+        send_piece_diff(
+            checker_state,
+            metainfo_file.info().info_hash(),
+            blocking_sender,
+            false,
+        );
 
-        info!("Processsing Block, Released Torrent Lock For {:?}", metainfo_file.info().info_hash());
+        info!(
+            "Processsing Block, Released Torrent Lock For {:?}",
+            metainfo_file.info().info_hash()
+        );
     });
 
     if found_hash {
         Ok(block_result?)
     } else {
-        Err(BlockError::from_kind(BlockErrorKind::InfoHashNotFound { hash: info_hash }))
+        Err(BlockError::from_kind(BlockErrorKind::InfoHashNotFound {
+            hash: info_hash,
+        }))
     }
 }
 
-fn send_piece_diff(checker_state: &mut PieceCheckerState, hash: InfoHash, blocking_sender: &mut Wait<Sender<ODiskMessage>>, ignore_bad: bool) {
+fn send_piece_diff(
+    checker_state: &mut PieceCheckerState,
+    hash: InfoHash,
+    blocking_sender: &mut Wait<Sender<ODiskMessage>>,
+    ignore_bad: bool,
+) {
     checker_state.run_with_diff(|piece_state| {
         let opt_out_msg = match (piece_state, ignore_bad) {
             (&PieceState::Good(index), _) => Some(ODiskMessage::FoundGoodPiece(hash, index)),
@@ -176,8 +220,12 @@ fn send_piece_diff(checker_state: &mut PieceCheckerState, hash: InfoHash, blocki
         };
 
         if let Some(out_msg) = opt_out_msg {
-            blocking_sender.send(out_msg).expect("bip_disk: Failed To Send Piece State Message");
-            blocking_sender.flush().expect("bip_disk: Failed To Flush Piece State Message");
+            blocking_sender
+                .send(out_msg)
+                .expect("bip_disk: Failed To Send Piece State Message");
+            blocking_sender
+                .flush()
+                .expect("bip_disk: Failed To Flush Piece State Message");
         }
     })
 }

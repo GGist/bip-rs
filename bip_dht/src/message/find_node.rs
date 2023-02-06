@@ -25,9 +25,14 @@ impl<'a> FindNodeRequest<'a> {
 
     /// Create a FindNodeRequest from parts.
     ///
-    /// The target_key argument is provided for cases where, due to forward compatibility,
-    /// the target key we are interested in could fall under the target key or another key.
-    pub fn from_parts(rqst_root: &dyn Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8], target_key: &str) -> DhtResult<FindNodeRequest<'a>> {
+    /// The target_key argument is provided for cases where, due to forward
+    /// compatibility, the target key we are interested in could fall under
+    /// the target key or another key.
+    pub fn from_parts(
+        rqst_root: &dyn Dictionary<'a, Bencode<'a>>,
+        trans_id: &'a [u8],
+        target_key: &str,
+    ) -> DhtResult<FindNodeRequest<'a>> {
         let validate = RequestValidate::new(trans_id);
 
         let node_id_bytes = validate.lookup_and_convert_bytes(rqst_root, message::NODE_ID_KEY)?;
@@ -74,7 +79,11 @@ pub struct FindNodeResponse<'a> {
 }
 
 impl<'a> FindNodeResponse<'a> {
-    pub fn new(trans_id: &'a [u8], node_id: NodeId, nodes: &'a [u8]) -> DhtResult<FindNodeResponse<'a>> {
+    pub fn new(
+        trans_id: &'a [u8],
+        node_id: NodeId,
+        nodes: &'a [u8],
+    ) -> DhtResult<FindNodeResponse<'a>> {
         let validate = ResponseValidate::new(trans_id);
         let compact_nodes = validate.validate_nodes(nodes)?;
 
@@ -85,7 +94,10 @@ impl<'a> FindNodeResponse<'a> {
         })
     }
 
-    pub fn from_parts(rsp_root: &dyn Dictionary<'a, Bencode<'a>>, trans_id: &'a [u8]) -> DhtResult<FindNodeResponse<'a>> {
+    pub fn from_parts(
+        rsp_root: &dyn Dictionary<'a, Bencode<'a>>,
+        trans_id: &'a [u8],
+    ) -> DhtResult<FindNodeResponse<'a>> {
         let validate = ResponseValidate::new(trans_id);
 
         let node_id_bytes = validate.lookup_and_convert_bytes(rsp_root, message::NODE_ID_KEY)?;

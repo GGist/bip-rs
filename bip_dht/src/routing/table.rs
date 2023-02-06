@@ -27,10 +27,7 @@ impl RoutingTable {
     pub fn new(node_id: NodeId) -> RoutingTable {
         let buckets = vec![Bucket::new()];
 
-        RoutingTable {
-            buckets,
-            node_id,
-        }
+        RoutingTable { buckets, node_id }
     }
 
     /// Return the node id of the RoutingTable.
@@ -40,9 +37,9 @@ impl RoutingTable {
 
     /// Iterator over the closest good nodes to the given node id.
     ///
-    /// The closeness of nodes has a maximum granularity of a bucket. For most use
-    /// cases this is fine since we will usually be performing lookups and aggregating
-    /// a number of results equal to the size of a bucket.
+    /// The closeness of nodes has a maximum granularity of a bucket. For most
+    /// use cases this is fine since we will usually be performing lookups
+    /// and aggregating a number of results equal to the size of a bucket.
     pub fn closest_nodes<'a>(&'a self, node_id: NodeId) -> ClosestNodes<'a> {
         ClosestNodes::new(&self.buckets, self.node_id, node_id)
     }
@@ -62,12 +59,10 @@ impl RoutingTable {
             Some(c)
         } else {
             // Grab the assorted bucket (if it exists)
-            self.buckets().find(|c| {
-                match c {
-                    &BucketContents::Empty => false,
-                    &BucketContents::Sorted(_) => false,
-                    &BucketContents::Assorted(_) => true,
-                }
+            self.buckets().find(|c| match c {
+                &BucketContents::Empty => false,
+                &BucketContents::Sorted(_) => false,
+                &BucketContents::Assorted(_) => true,
             })
         };
 
@@ -154,15 +149,16 @@ pub fn random_node_id() -> NodeId {
     ShaHash::from(random_sha_hash)
 }
 
-/// Number of leading bits that are identical between the local and remote node ids.
+/// Number of leading bits that are identical between the local and remote node
+/// ids.
 pub fn leading_bit_count(local_node: NodeId, remote_node: NodeId) -> usize {
     let diff_id = local_node ^ remote_node;
 
     diff_id.bits().take_while(|&x| x == XorRep::Same).count()
 }
 
-/// Take the number of leading bits that are the same between our node and the remote
-/// node and calculate a bucket index for that node id.
+/// Take the number of leading bits that are the same between our node and the
+/// remote node and calculate a bucket index for that node id.
 fn bucket_placement(num_same_bits: usize, num_buckets: usize) -> usize {
     // The index that the node should be placed in *eventually*, meaning
     // when we create enough buckets for that bucket to appear.
@@ -175,17 +171,19 @@ fn bucket_placement(num_same_bits: usize, num_buckets: usize) -> usize {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Copy, Clone)]
 pub enum BucketContents<'a> {
-    /// Empty bucket is a placeholder for a bucket that has not yet been created.
+    /// Empty bucket is a placeholder for a bucket that has not yet been
+    /// created.
     Empty,
     /// Sorted bucket is where nodes with the same leading bits reside.
     Sorted(&'a Bucket),
     /// Assorted bucket is where nodes with differing bits reside.
     ///
-    /// These nodes are dynamically placed in their sorted bucket when is is created.
+    /// These nodes are dynamically placed in their sorted bucket when is is
+    /// created.
     Assorted(&'a Bucket),
 }
 
@@ -222,10 +220,7 @@ pub struct Buckets<'a> {
 
 impl<'a> Buckets<'a> {
     fn new(buckets: &'a [Bucket]) -> Buckets<'a> {
-        Buckets {
-            buckets,
-            index: 0,
-        }
+        Buckets { buckets, index: 0 }
     }
 }
 
@@ -243,7 +238,9 @@ impl<'a> Iterator for Buckets<'a> {
             return if self.buckets.len() == MAX_BUCKETS || self.buckets.is_empty() {
                 None
             } else {
-                Some(BucketContents::Assorted(&self.buckets[self.buckets.len() - 1]))
+                Some(BucketContents::Assorted(
+                    &self.buckets[self.buckets.len() - 1],
+                ))
             };
         }
 
@@ -259,15 +256,16 @@ impl<'a> Iterator for Buckets<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 // Iterator filter for only good nodes.
 type GoodNodes<'a> = Filter<Iter<'a, Node>, fn(&&Node) -> bool>;
 
-// So what we are going to do here is iterate over every bucket in a hypothetically filled
-// routing table (buckets slice). If the bucket we are interested in has not been created
-// yet (not in the slice), go through the last bucket (assorted nodes) and check if any nodes
-// would have been placed in that bucket. If we find one, return it and mark it in our assorted
+// So what we are going to do here is iterate over every bucket in a
+// hypothetically filled routing table (buckets slice). If the bucket we are
+// interested in has not been created yet (not in the slice), go through the
+// last bucket (assorted nodes) and check if any nodes would have been placed in
+// that bucket. If we find one, return it and mark it in our assorted
 // nodes array.
 pub struct ClosestNodes<'a> {
     buckets: &'a [Bucket],
@@ -341,16 +339,18 @@ impl<'a> Iterator for ClosestNodes<'a> {
 }
 
 /// Optionally returns the precomputed bucket positions for all assorted nodes.
-fn precompute_assorted_nodes<'a>(buckets: &'a [Bucket],
-                                 self_node_id: NodeId)
-                                 -> Option<[(usize, &'a Node, bool); bucket::MAX_BUCKET_SIZE]> {
+fn precompute_assorted_nodes<'a>(
+    buckets: &'a [Bucket],
+    self_node_id: NodeId,
+) -> Option<[(usize, &'a Node, bool); bucket::MAX_BUCKET_SIZE]> {
     if buckets.len() == MAX_BUCKETS {
         return None;
     }
     let assorted_bucket = &buckets[buckets.len() - 1];
     let mut assorted_iter = assorted_bucket.iter().peekable();
 
-    // So the bucket is not empty and now we have a reference to initialize our stack allocated array.
+    // So the bucket is not empty and now we have a reference to initialize our
+    // stack allocated array.
     if let Some(&init_reference) = assorted_iter.peek() {
         // Set all tuples to true in case our bucket is not full.
         let mut assorted_nodes = [(0, init_reference, true); bucket::MAX_BUCKET_SIZE];
@@ -367,37 +367,41 @@ fn precompute_assorted_nodes<'a>(buckets: &'a [Bucket],
     }
 }
 
-/// Optionally returns the filter iterator for the bucket at the specified index.
+/// Optionally returns the filter iterator for the bucket at the specified
+/// index.
 fn bucket_iterator<'a>(buckets: &'a [Bucket], index: usize) -> Option<GoodNodes<'a>> {
     if buckets.len() == MAX_BUCKETS {
-            buckets
-        } else {
-            &buckets[..(buckets.len() - 1)]
-        }
-        .get(index)
-        .map(|bucket| good_node_filter(bucket.iter()))
+        buckets
+    } else {
+        &buckets[..(buckets.len() - 1)]
+    }
+    .get(index)
+    .map(|bucket| good_node_filter(bucket.iter()))
 }
 
-/// Converts the given iterator into a filter iterator to return only good nodes.
+/// Converts the given iterator into a filter iterator to return only good
+/// nodes.
 fn good_node_filter<'a>(iter: Iter<'a, Node>) -> GoodNodes<'a> {
     iter.filter(is_good_node)
 }
 
-/// Shakes fist at iterator making me take a double reference (could avoid it by mapping, but oh well)
+/// Shakes fist at iterator making me take a double reference (could avoid it by
+/// mapping, but oh well)
 fn is_good_node(node: &&Node) -> bool {
     let status = node.status();
 
     status == NodeStatus::Good || status == NodeStatus::Questionable
 }
 
-/// Computes the next bucket index that should be visited given the number of buckets, the starting index
-/// and the current index.
+/// Computes the next bucket index that should be visited given the number of
+/// buckets, the starting index and the current index.
 ///
 /// Returns None if all of the buckets have been visited.
 fn next_bucket_index(num_buckets: usize, start_index: usize, curr_index: usize) -> Option<usize> {
-    // Since we prefer going right first, that means if we are on the right side then we want to go
-    // to the same offset on the left, however, if we are on the left we want to go 1 past the offset
-    // to the right. All assuming we can actually do this without going out of bounds.
+    // Since we prefer going right first, that means if we are on the right side
+    // then we want to go to the same offset on the left, however, if we are on
+    // the left we want to go 1 past the offset to the right. All assuming we
+    // can actually do this without going out of bounds.
     if curr_index == start_index {
         let right_index = start_index.checked_add(1);
         let left_index = start_index.checked_sub(1);
@@ -446,16 +450,16 @@ fn index_is_in_bounds(length: usize, checked_index: Option<usize>) -> bool {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[cfg(test)]
 mod tests {
     use bip_util::bt::{self, NodeId};
     use bip_util::test as bip_test;
 
-    use crate::routing::table::{self, RoutingTable, BucketContents};
     use crate::routing::bucket;
     use crate::routing::node::Node;
+    use crate::routing::table::{self, BucketContents, RoutingTable};
 
     // TODO: Move into bip_util crate
     fn flip_id_bit_at_index(node_id: NodeId, index: usize) -> NodeId {
@@ -477,8 +481,9 @@ mod tests {
         // Modify the id so it is placed in the last bucket
         node_id[bt::NODE_ID_LEN - 1] = 0;
 
-        // Trigger a bucket overflow and since the ids are placed in the last bucket, all of
-        // the buckets will be recursively created and inserted into the list of all buckets.
+        // Trigger a bucket overflow and since the ids are placed in the last bucket,
+        // all of the buckets will be recursively created and inserted into the
+        // list of all buckets.
         let block_addrs = bip_test::dummy_block_socket_addrs((bucket::MAX_BUCKET_SIZE + 1) as u16);
         for index in 0..=bucket::MAX_BUCKET_SIZE {
             let node = Node::as_good(node_id.into(), block_addrs[index]);
@@ -493,9 +498,12 @@ mod tests {
         let mut table = RoutingTable::new(table_id.into());
 
         // First buckets should be empty
-        assert_eq!(table.buckets().take(table::MAX_BUCKETS).count(),
-                   table::MAX_BUCKETS);
-        assert!(table.buckets()
+        assert_eq!(
+            table.buckets().take(table::MAX_BUCKETS).count(),
+            table::MAX_BUCKETS
+        );
+        assert!(table
+            .buckets()
             .take(table::MAX_BUCKETS)
             .all(|contents| contents.is_empty()));
 
@@ -537,9 +545,12 @@ mod tests {
         }
 
         // Middle buckets should be empty
-        assert_eq!(table.buckets().skip(1).take(table::MAX_BUCKETS - 1).count(),
-                   table::MAX_BUCKETS - 1);
-        assert!(table.buckets()
+        assert_eq!(
+            table.buckets().skip(1).take(table::MAX_BUCKETS - 1).count(),
+            table::MAX_BUCKETS - 1
+        );
+        assert!(table
+            .buckets()
             .skip(1)
             .take(table::MAX_BUCKETS - 1)
             .all(|contents| contents.is_empty()));
@@ -571,8 +582,10 @@ mod tests {
         }
 
         // First buckets should be sorted (although they are all empty)
-        assert_eq!(table.buckets().take(table::MAX_BUCKETS - 1).count(),
-                   table::MAX_BUCKETS - 1);
+        assert_eq!(
+            table.buckets().take(table::MAX_BUCKETS - 1).count(),
+            table::MAX_BUCKETS - 1
+        );
         for bucket in table.buckets().take(table::MAX_BUCKETS - 1) {
             match bucket {
                 BucketContents::Sorted(b) => assert_eq!(b.pingable_nodes().count(), 0),
@@ -581,8 +594,10 @@ mod tests {
         }
 
         // Last bucket should be sorted
-        assert_eq!(table.buckets().skip(table::MAX_BUCKETS - 1).take(1).count(),
-                   1);
+        assert_eq!(
+            table.buckets().skip(table::MAX_BUCKETS - 1).take(1).count(),
+            1
+        );
         for bucket in table.buckets().skip(table::MAX_BUCKETS - 1).take(1) {
             match bucket {
                 BucketContents::Sorted(b) => {

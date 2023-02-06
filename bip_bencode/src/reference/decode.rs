@@ -6,34 +6,52 @@ use crate::error::{BencodeParseError, BencodeParseErrorKind, BencodeParseResult}
 use crate::reference::bencode_ref::{BencodeRef, InnerBencodeRef};
 use crate::reference::decode_opt::BDecodeOpt;
 
-pub fn decode<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(BencodeRef<'a>, usize)> {
+pub fn decode<'a>(
+    bytes: &'a [u8],
+    pos: usize,
+    opts: BDecodeOpt,
+    depth: usize,
+) -> BencodeParseResult<(BencodeRef<'a>, usize)> {
     if depth >= opts.max_recursion() {
-        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidRecursionExceeded {
-            pos,
-            max: depth,
-        }));
+        return Err(BencodeParseError::from_kind(
+            BencodeParseErrorKind::InvalidRecursionExceeded { pos, max: depth },
+        ));
     }
     let curr_byte = peek_byte(bytes, pos)?;
 
     match curr_byte {
         crate::INT_START => {
             let (bencode, next_pos) = decode_int(bytes, pos + 1, crate::BEN_END)?;
-            Ok((InnerBencodeRef::Int(bencode, &bytes[pos..next_pos]).into(), next_pos))
-        },
+            Ok((
+                InnerBencodeRef::Int(bencode, &bytes[pos..next_pos]).into(),
+                next_pos,
+            ))
+        }
         crate::LIST_START => {
             let (bencode, next_pos) = decode_list(bytes, pos + 1, opts, depth)?;
-            Ok((InnerBencodeRef::List(bencode, &bytes[pos..next_pos]).into(), next_pos))
-        },
+            Ok((
+                InnerBencodeRef::List(bencode, &bytes[pos..next_pos]).into(),
+                next_pos,
+            ))
+        }
         crate::DICT_START => {
             let (bencode, next_pos) = decode_dict(bytes, pos + 1, opts, depth)?;
-            Ok((InnerBencodeRef::Dict(bencode, &bytes[pos..next_pos]).into(), next_pos))
-        },
+            Ok((
+                InnerBencodeRef::Dict(bencode, &bytes[pos..next_pos]).into(),
+                next_pos,
+            ))
+        }
         crate::BYTE_LEN_LOW..=crate::BYTE_LEN_HIGH => {
             let (bencode, next_pos) = decode_bytes(bytes, pos)?;
             // Include the length digit, don't increment position
-            Ok((InnerBencodeRef::Bytes(bencode, &bytes[pos..next_pos]).into(), next_pos))
-        },
-        _ => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidByte { pos })),
+            Ok((
+                InnerBencodeRef::Bytes(bencode, &bytes[pos..next_pos]).into(),
+                next_pos,
+            ))
+        }
+        _ => Err(BencodeParseError::from_kind(
+            BencodeParseErrorKind::InvalidByte { pos },
+        )),
     }
 }
 
@@ -42,25 +60,37 @@ fn decode_int<'a>(bytes: &'a [u8], pos: usize, delim: u8) -> BencodeParseResult<
 
     let relative_end_pos = match begin_decode.iter().position(|n| *n == delim) {
         Some(end_pos) => end_pos,
-        None => return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntNoDelimiter { pos })),
+        None => {
+            return Err(BencodeParseError::from_kind(
+                BencodeParseErrorKind::InvalidIntNoDelimiter { pos },
+            ))
+        }
     };
     let int_byte_slice = &begin_decode[..relative_end_pos];
 
     if int_byte_slice.len() > 1 {
         // Negative zero is not allowed (this would not be caught when converting)
         if int_byte_slice[0] == b'-' && int_byte_slice[1] == b'0' {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntNegativeZero { pos }));
+            return Err(BencodeParseError::from_kind(
+                BencodeParseErrorKind::InvalidIntNegativeZero { pos },
+            ));
         }
 
         // Zero padding is illegal, and unspecified for key lengths (we disallow both)
         if int_byte_slice[0] == b'0' {
-            return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntZeroPadding { pos }));
+            return Err(BencodeParseError::from_kind(
+                BencodeParseErrorKind::InvalidIntZeroPadding { pos },
+            ));
         }
     }
 
     let int_str = match str::from_utf8(int_byte_slice) {
         Ok(n) => n,
-        Err(_) => return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError { pos })),
+        Err(_) => {
+            return Err(BencodeParseError::from_kind(
+                BencodeParseErrorKind::InvalidIntParseError { pos },
+            ))
+        }
     };
 
     // Position of end of integer type, next byte is the start of the next value
@@ -68,7 +98,9 @@ fn decode_int<'a>(bytes: &'a [u8], pos: usize, delim: u8) -> BencodeParseResult<
     let next_pos = absolute_end_pos + 1;
     match i64::from_str_radix(int_str, 10) {
         Ok(n) => Ok((n, next_pos)),
-        Err(_) => Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidIntParseError { pos })),
+        Err(_) => Err(BencodeParseError::from_kind(
+            BencodeParseErrorKind::InvalidIntParseError { pos },
+        )),
     }
 }
 
@@ -76,23 +108,32 @@ fn decode_bytes<'a>(bytes: &'a [u8], pos: usize) -> BencodeParseResult<(&'a [u8]
     let (num_bytes, start_pos) = decode_int(bytes, pos, crate::BYTE_LEN_END)?;
 
     if num_bytes < 0 {
-        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthNegative { pos }));
+        return Err(BencodeParseError::from_kind(
+            BencodeParseErrorKind::InvalidLengthNegative { pos },
+        ));
     }
 
-    // Should be safe to cast to usize (TODO: Check if cast would overflow to provide
-    // a more helpful error message, otherwise, parsing will probably fail with an
-    // unrelated message).
+    // Should be safe to cast to usize (TODO: Check if cast would overflow to
+    // provide a more helpful error message, otherwise, parsing will probably
+    // fail with an unrelated message).
     let num_bytes = num_bytes as usize;
 
     if num_bytes > bytes[start_pos..].len() {
-        return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidLengthOverflow { pos }));
+        return Err(BencodeParseError::from_kind(
+            BencodeParseErrorKind::InvalidLengthOverflow { pos },
+        ));
     }
 
     let next_pos = start_pos + num_bytes;
     Ok((&bytes[start_pos..next_pos], next_pos))
 }
 
-fn decode_list<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(Vec<BencodeRef<'a>>, usize)> {
+fn decode_list<'a>(
+    bytes: &'a [u8],
+    pos: usize,
+    opts: BDecodeOpt,
+    depth: usize,
+) -> BencodeParseResult<(Vec<BencodeRef<'a>>, usize)> {
     let mut bencode_list = Vec::new();
 
     let mut curr_pos = pos;
@@ -111,7 +152,12 @@ fn decode_list<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) 
     Ok((bencode_list, next_pos))
 }
 
-fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) -> BencodeParseResult<(BTreeMap<&'a [u8], BencodeRef<'a>>, usize)> {
+fn decode_dict<'a>(
+    bytes: &'a [u8],
+    pos: usize,
+    opts: BDecodeOpt,
+    depth: usize,
+) -> BencodeParseResult<(BTreeMap<&'a [u8], BencodeRef<'a>>, usize)> {
     let mut bencode_dict = BTreeMap::new();
 
     let mut curr_pos = pos;
@@ -123,11 +169,13 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) 
         // Spec says that the keys must be in alphabetical order
         match (bencode_dict.keys().last(), opts.check_key_sort()) {
             (Some(last_key), true) if key_bytes < *last_key => {
-                return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyOrdering {
-                    pos: curr_pos,
-                    key: key_bytes.to_vec(),
-                }))
-            },
+                return Err(BencodeParseError::from_kind(
+                    BencodeParseErrorKind::InvalidKeyOrdering {
+                        pos: curr_pos,
+                        key: key_bytes.to_vec(),
+                    },
+                ))
+            }
             _ => (),
         };
         curr_pos = next_pos;
@@ -136,11 +184,13 @@ fn decode_dict<'a>(bytes: &'a [u8], pos: usize, opts: BDecodeOpt, depth: usize) 
         match bencode_dict.entry(key_bytes) {
             Entry::Vacant(n) => n.insert(value),
             Entry::Occupied(_) => {
-                return Err(BencodeParseError::from_kind(BencodeParseErrorKind::InvalidKeyDuplicates {
-                    pos: curr_pos,
-                    key: key_bytes.to_vec(),
-                }))
-            },
+                return Err(BencodeParseError::from_kind(
+                    BencodeParseErrorKind::InvalidKeyDuplicates {
+                        pos: curr_pos,
+                        key: key_bytes.to_vec(),
+                    },
+                ))
+            }
         };
 
         curr_pos = next_pos;
@@ -198,8 +248,14 @@ mod tests {
 
         let ben_dict = bencode.dict().unwrap();
         assert_eq!(ben_dict.lookup(b"").unwrap().str().unwrap(), "zero_len_key");
-        assert_eq!(ben_dict.lookup(b"location").unwrap().str().unwrap(), "udp://test.com:80");
-        assert_eq!(ben_dict.lookup(b"number").unwrap().int().unwrap(), 500_500_i64);
+        assert_eq!(
+            ben_dict.lookup(b"location").unwrap().str().unwrap(),
+            "udp://test.com:80"
+        );
+        assert_eq!(
+            ben_dict.lookup(b"number").unwrap().int().unwrap(),
+            500_500_i64
+        );
 
         let nested_dict = ben_dict.lookup(b"nested dict").unwrap().dict().unwrap();
         let nested_list = nested_dict.lookup(b"list").unwrap().list().unwrap();
@@ -224,10 +280,16 @@ mod tests {
     fn positive_decode_dict() {
         let bencode = BencodeRef::decode(DICTIONARY, BDecodeOpt::default()).unwrap();
         let dict = bencode.dict().unwrap();
-        assert_eq!(dict.lookup(b"test_key").unwrap().str().unwrap(), "test_value");
+        assert_eq!(
+            dict.lookup(b"test_key").unwrap().str().unwrap(),
+            "test_value"
+        );
 
         let nested_dict = dict.lookup(b"test_dict").unwrap().dict().unwrap();
-        assert_eq!(nested_dict.lookup(b"nested_key").unwrap().str().unwrap(), "nested_value");
+        assert_eq!(
+            nested_dict.lookup(b"nested_key").unwrap().str().unwrap(),
+            "nested_value"
+        );
 
         let nested_list = nested_dict.lookup(b"nested_list").unwrap().list().unwrap();
         assert_eq!(nested_list[0].int().unwrap(), 500i64);
@@ -249,7 +311,10 @@ mod tests {
         assert_eq!(nested_list[0].str().unwrap(), "nested_bytes");
 
         let nested_dict = list[5].dict().unwrap();
-        assert_eq!(nested_dict.lookup(b"test_key").unwrap().str().unwrap(), "test_value");
+        assert_eq!(
+            nested_dict.lookup(b"test_key").unwrap().str().unwrap(),
+            "test_value"
+        );
     }
 
     #[test]
@@ -277,7 +342,9 @@ mod tests {
 
     #[test]
     fn positive_decode_int_negative() {
-        let int_value = super::decode_int(INT_NEGATIVE, 1, crate::BEN_END).unwrap().0;
+        let int_value = super::decode_int(INT_NEGATIVE, 1, crate::BEN_END)
+            .unwrap()
+            .0;
         assert_eq!(int_value, -500i64);
     }
 

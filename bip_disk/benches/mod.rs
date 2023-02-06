@@ -34,7 +34,7 @@
 //     /// Returns both the torrent file, as well as the (random) data of the file.
 //     fn generate_single_file_torrent(piece_len: usize, file_len: usize) -> (Metainfo, Vec<u8>) {
 //         let mut rng = rand::weak_rng();
-        
+
 //         let file_bytes: Vec<u8> = rng.gen_iter().take(file_len).collect();
 
 //         let metainfo_bytes = {
@@ -52,7 +52,7 @@
 //     }
 
 //     /// Adds the given metainfo file to the given sender, and waits for the added notification.
-//     fn add_metainfo_file<S, R>(metainfo: Metainfo, block_send: &mut sink::Wait<S>, block_recv: &mut stream::Wait<R>)    
+//     fn add_metainfo_file<S, R>(metainfo: Metainfo, block_send: &mut sink::Wait<S>, block_recv: &mut stream::Wait<R>)
 //         where S: Sink<SinkItem=IDiskMessage, SinkError=()>, R: Stream<Item=ODiskMessage, Error=()> {
 //         block_send.send(IDiskMessage::AddTorrent(metainfo)).unwrap();
 
@@ -68,7 +68,7 @@
 //     /// Pushes the given bytes as piece blocks to the given sender, and blocks until all notifications
 //     /// of the blocks being processed have been received (does not check piece messages).
 //     fn process_blocks<S, R>(piece_length: usize, block_length: usize, hash: InfoHash, bytes: &[u8],
-//                             block_send: &mut sink::Wait<S>, block_recv: &mut stream::Wait<R>) 
+//                             block_send: &mut sink::Wait<S>, block_recv: &mut stream::Wait<R>)
 //         where S: Sink<SinkItem=IDiskMessage, SinkError=()>, R: Stream<Item=ODiskMessage, Error=()> {
 //         let mut blocks_sent = 0;
 

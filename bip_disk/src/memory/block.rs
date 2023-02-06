@@ -9,20 +9,38 @@ use bytes::{Bytes, BytesMut};
 /// `BlockMetadata` which tracks metadata associated with a `Block` of memory.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Debug)]
 pub struct BlockMetadata {
-    info_hash:    InfoHash,
-    piece_index:  u64,
+    info_hash: InfoHash,
+    piece_index: u64,
     block_offset: u64,
-    block_length: usize
+    block_length: usize,
 }
 
 impl BlockMetadata {
-    pub fn new(info_hash: InfoHash, piece_index: u64, block_offset: u64, block_length: usize) -> BlockMetadata {
-        BlockMetadata{ info_hash, piece_index,
-                       block_offset, block_length }
+    pub fn new(
+        info_hash: InfoHash,
+        piece_index: u64,
+        block_offset: u64,
+        block_length: usize,
+    ) -> BlockMetadata {
+        BlockMetadata {
+            info_hash,
+            piece_index,
+            block_offset,
+            block_length,
+        }
     }
 
-    pub fn with_default_hash(piece_index: u64, block_offset: u64, block_length: usize) -> BlockMetadata {
-        BlockMetadata::new([0u8; bt::INFO_HASH_LEN].into(), piece_index, block_offset, block_length)
+    pub fn with_default_hash(
+        piece_index: u64,
+        block_offset: u64,
+        block_length: usize,
+    ) -> BlockMetadata {
+        BlockMetadata::new(
+            [0u8; bt::INFO_HASH_LEN].into(),
+            piece_index,
+            block_offset,
+            block_length,
+        )
     }
 
     pub fn info_hash(&self) -> InfoHash {
@@ -53,14 +71,17 @@ impl Default for BlockMetadata {
 /// `Block` of immutable memory.
 #[derive(Debug)]
 pub struct Block {
-    metadata:   BlockMetadata,
-    block_data: Bytes
+    metadata: BlockMetadata,
+    block_data: Bytes,
 }
 
 impl Block {
     /// Create a new `Block`.
     pub fn new(metadata: BlockMetadata, block_data: Bytes) -> Block {
-        Block{ metadata, block_data }
+        Block {
+            metadata,
+            block_data,
+        }
     }
 
     /// Access the metadata for the block.
@@ -92,14 +113,17 @@ impl Deref for Block {
 /// `BlockMut` of mutable memory.
 #[derive(Debug)]
 pub struct BlockMut {
-    metadata:   BlockMetadata,
-    block_data: BytesMut
+    metadata: BlockMetadata,
+    block_data: BytesMut,
 }
 
 impl BlockMut {
     /// Create a new `BlockMut`.
     pub fn new(metadata: BlockMetadata, block_data: BytesMut) -> BlockMut {
-        BlockMut{ metadata, block_data }
+        BlockMut {
+            metadata,
+            block_data,
+        }
     }
 
     /// Access the metadata for the block.

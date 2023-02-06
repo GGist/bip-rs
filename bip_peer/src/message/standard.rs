@@ -25,7 +25,11 @@ impl HaveMessage {
     where
         W: Write,
     {
-        message::write_length_id_pair(&mut writer, message::HAVE_MESSAGE_LEN, Some(message::HAVE_MESSAGE_ID))?;
+        message::write_length_id_pair(
+            &mut writer,
+            message::HAVE_MESSAGE_LEN,
+            Some(message::HAVE_MESSAGE_ID),
+        )?;
 
         writer.write_u32::<BigEndian>(self.piece_index)
     }
@@ -39,7 +43,7 @@ fn parse_have(bytes: &[u8]) -> IResult<&[u8], io::Result<HaveMessage>> {
     map!(bytes, be_u32, |index| Ok(HaveMessage::new(index)))
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Message for notifying a peer of all of the pieces you have.
 ///
@@ -54,7 +58,11 @@ impl BitFieldMessage {
         BitFieldMessage { bytes }
     }
 
-    pub fn parse_bytes(_input: (), mut bytes: Bytes, len: u32) -> IResult<(), io::Result<BitFieldMessage>> {
+    pub fn parse_bytes(
+        _input: (),
+        mut bytes: Bytes,
+        len: u32,
+    ) -> IResult<(), io::Result<BitFieldMessage>> {
         let cast_len = message::u32_to_usize(len);
 
         if bytes.len() >= cast_len {
@@ -74,7 +82,11 @@ impl BitFieldMessage {
         W: Write,
     {
         let actual_length = (1 + self.bytes.len()) as u32;
-        message::write_length_id_pair(&mut writer, actual_length, Some(message::BITFIELD_MESSAGE_ID))?;
+        message::write_length_id_pair(
+            &mut writer,
+            actual_length,
+            Some(message::BITFIELD_MESSAGE_ID),
+        )?;
 
         writer.write_all(&self.bytes)
     }
@@ -122,7 +134,7 @@ impl Iterator for BitFieldIter {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Message for requesting a block from a peer.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -149,7 +161,11 @@ impl RequestMessage {
     where
         W: Write,
     {
-        message::write_length_id_pair(&mut writer, message::REQUEST_MESSAGE_LEN, Some(message::REQUEST_MESSAGE_ID))?;
+        message::write_length_id_pair(
+            &mut writer,
+            message::REQUEST_MESSAGE_LEN,
+            Some(message::REQUEST_MESSAGE_ID),
+        )?;
 
         writer.write_u32::<BigEndian>(self.piece_index)?;
         writer.write_u32::<BigEndian>(self.block_offset)?;
@@ -170,12 +186,16 @@ impl RequestMessage {
 }
 
 fn parse_request(bytes: &[u8]) -> IResult<&[u8], io::Result<RequestMessage>> {
-    map!(bytes, tuple!(be_u32, be_u32, be_u32), |(index, offset, length)| Ok(
+    map!(bytes, tuple!(be_u32, be_u32, be_u32), |(
+        index,
+        offset,
+        length,
+    )| Ok(
         RequestMessage::new(index, offset, message::u32_to_usize(length))
     ))
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Message for sending a block to a peer.
 ///
@@ -198,7 +218,11 @@ impl PieceMessage {
         }
     }
 
-    pub fn parse_bytes(_input: (), bytes: Bytes, len: u32) -> IResult<(), io::Result<PieceMessage>> {
+    pub fn parse_bytes(
+        _input: (),
+        bytes: Bytes,
+        len: u32,
+    ) -> IResult<(), io::Result<PieceMessage>> {
         throwaway_input!(parse_piece(&bytes, len))
     }
 
@@ -243,7 +267,7 @@ fn parse_piece(bytes: &Bytes, len: u32) -> IResult<&[u8], io::Result<PieceMessag
     )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Message for cancelling a `RequestMessage` sent to a peer.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -270,7 +294,11 @@ impl CancelMessage {
     where
         W: Write,
     {
-        message::write_length_id_pair(&mut writer, message::CANCEL_MESSAGE_LEN, Some(message::CANCEL_MESSAGE_ID))?;
+        message::write_length_id_pair(
+            &mut writer,
+            message::CANCEL_MESSAGE_LEN,
+            Some(message::CANCEL_MESSAGE_ID),
+        )?;
 
         writer.write_u32::<BigEndian>(self.piece_index)?;
         writer.write_u32::<BigEndian>(self.block_offset)?;
@@ -291,7 +319,11 @@ impl CancelMessage {
 }
 
 fn parse_cancel(bytes: &[u8]) -> IResult<&[u8], io::Result<CancelMessage>> {
-    map!(bytes, tuple!(be_u32, be_u32, be_u32), |(index, offset, length)| Ok(
+    map!(bytes, tuple!(be_u32, be_u32, be_u32), |(
+        index,
+        offset,
+        length,
+    )| Ok(
         CancelMessage::new(index, offset, message::u32_to_usize(length))
     ))
 }

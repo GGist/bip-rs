@@ -2,10 +2,10 @@ extern crate base32;
 extern crate bip_util;
 extern crate url;
 
+use crate::url::Url;
 use bip_util::bt::InfoHash;
 use bip_util::sha::ShaHash;
 use std::default::Default;
-use crate::url::Url;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Topic {
@@ -30,9 +30,11 @@ impl Topic {
             }
         } else if s.starts_with("urn:btih:") && s.len() == 9 + 32 {
             // BitTorrent Info Hash, base-32
-            base32::decode(base32::Alphabet::RFC4648 { padding: true }, &s[9..]).and_then(|hash| match ShaHash::from_hash(&hash[..]) {
-                Ok(sha_hash) => Some(Topic::BitTorrentInfoHash(sha_hash)),
-                Err(_) => None,
+            base32::decode(base32::Alphabet::RFC4648 { padding: true }, &s[9..]).and_then(|hash| {
+                match ShaHash::from_hash(&hash[..]) {
+                    Ok(sha_hash) => Some(Topic::BitTorrentInfoHash(sha_hash)),
+                    Err(_) => None,
+                }
             })
         } else {
             None
@@ -49,9 +51,10 @@ impl Topic {
  * as (Acceptable Source) – Web link to the file online
  * xs (eXact Source) – P2P link.
  * kt (Keyword Topic) – Key words for search
- * mt (Manifest Topic) – link to the metafile that contains a list of magneto (MAGMA – MAGnet MAnifest)
+ * mt (Manifest Topic) – link to the metafile that contains a list of
+ *    magneto (MAGMA – MAGnet MAnifest)
  * tr (address TRacker) – Tracker URL for BitTorrent downloads
- **/
+ */
 #[derive(Clone, Debug)]
 pub struct MagnetLink {
     display_name: Option<String>,
@@ -94,7 +97,7 @@ impl MagnetLink {
         // Gather Magnet Link data from query string
         let mut result: Self = Default::default();
 
-        let pairs =  url.query_pairs();
+        let pairs = url.query_pairs();
 
         for (k, v) in pairs {
             match &k[..] {
@@ -143,19 +146,34 @@ mod tests {
 &xs=dchub://example.org";
         let link = crate::MagnetLink::parse(url).unwrap();
 
-        let expected_info_hash = [129, 225, 119, 226, 204, 0, 148, 59, 41, 252, 252, 99, 84, 87, 245, 117, 35, 114, 147, 176];
-        assert_eq!(link.get_info_hash(), Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap()));
+        let expected_info_hash = [
+            129, 225, 119, 226, 204, 0, 148, 59, 41, 252, 252, 99, 84, 87, 245, 117, 35, 114, 147,
+            176,
+        ];
+        assert_eq!(
+            link.get_info_hash(),
+            Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap())
+        );
 
         assert_eq!(link.exact_length, Some(10_826_029));
-        assert_eq!(link.display_name, Some("mediawiki-1.15.1.tar.gz".to_string()));
-        assert_eq!(link.address_tracker, vec!["udp://tracker.openbittorrent.com:80/announce"]);
+        assert_eq!(
+            link.display_name,
+            Some("mediawiki-1.15.1.tar.gz".to_string())
+        );
+        assert_eq!(
+            link.address_tracker,
+            vec!["udp://tracker.openbittorrent.com:80/announce"]
+        );
         assert_eq!(
             link.acceptable_source,
             vec!["http://download.wikimedia.org/mediawiki/1.15/mediawiki-1.15.1.tar.gz"]
         );
         assert_eq!(
             link.exact_source,
-            vec!["http://cache.example.org/XRX2PEFXOOEJFRVUCX6HMZMKS5TWG4K5", "dchub://example.org"]
+            vec![
+                "http://cache.example.org/XRX2PEFXOOEJFRVUCX6HMZMKS5TWG4K5",
+                "dchub://example.org"
+            ]
         );
     }
 
@@ -169,11 +187,18 @@ mod tests {
         let link = crate::MagnetLink::parse(url).unwrap();
 
         let expected_info_hash = [
-            0xd9, 0xbe, 0x69, 0x09, 0x32, 0x5d, 0x28, 0x91, 0x2f, 0x40, 0x0f, 0xcb, 0x32, 0x40, 0x05, 0xdd, 0x58, 0x61, 0xe4, 0x9f,
+            0xd9, 0xbe, 0x69, 0x09, 0x32, 0x5d, 0x28, 0x91, 0x2f, 0x40, 0x0f, 0xcb, 0x32, 0x40,
+            0x05, 0xdd, 0x58, 0x61, 0xe4, 0x9f,
         ];
-        assert_eq!(link.get_info_hash(), Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap()));
+        assert_eq!(
+            link.get_info_hash(),
+            Some(ShaHash::from_hash(&expected_info_hash[..]).unwrap())
+        );
 
-        assert_eq!(link.display_name, Some("Crunchbang GNU/Linux - AMD64 ISO".to_string()));
+        assert_eq!(
+            link.display_name,
+            Some("Crunchbang GNU/Linux - AMD64 ISO".to_string())
+        );
         assert_eq!(
             link.address_tracker,
             vec![

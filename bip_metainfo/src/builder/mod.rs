@@ -14,15 +14,17 @@ mod worker;
 // Transfer reliability is inversly related to the piece length.
 // Transfer reliability is directly related to the file size.
 
-// These statements hold even today, although the piece lengths that were historically
-// recommended may be out of date as we get faster and more reliable network speeds.
+// These statements hold even today, although the piece lengths that were
+// historically recommended may be out of date as we get faster and more
+// reliable network speeds.
 
-// So for balanced, file size, and transfer piece length optimizations, calculate the
-// minimum piece length we can do to reach the designated pieces size. Then, if that
-// piece length is less than the minimum piece length for that optimization, set it equal
-// to the minimum. Setting it equal to the minimum (in that case) will increase the piece
-// size which will shrink the pieces size which ensures we do not go outside of our max size.
-// This ensure we can generate good piece lengths for both large and small files.
+// So for balanced, file size, and transfer piece length optimizations,
+// calculate the minimum piece length we can do to reach the designated pieces
+// size. Then, if that piece length is less than the minimum piece length for
+// that optimization, set it equal to the minimum. Setting it equal to the
+// minimum (in that case) will increase the piece size which will shrink the
+// pieces size which ensures we do not go outside of our max size. This ensure
+// we can generate good piece lengths for both large and small files.
 
 // Maximum Piece Length Across The Board, Takes Priority Over Max Pieces Sizes
 // (Not Applied To Custom Lengths)
@@ -65,7 +67,10 @@ impl<'a> MetainfoBuilder<'a> {
     }
 
     /// Set announce-list content
-    pub fn set_trackers(mut self, opt_trackers: Option<&'a Vec<Vec<String>>>) -> MetainfoBuilder<'a> {
+    pub fn set_trackers(
+        mut self,
+        opt_trackers: Option<&'a Vec<Vec<String>>>,
+    ) -> MetainfoBuilder<'a> {
         {
             let dict_access = self.root.dict_mut().unwrap();
 
@@ -208,7 +213,8 @@ impl<'a> MetainfoBuilder<'a> {
         parse::parse_created_by(dict_access).map(String::from)
     }
 
-    /// Build the metainfo file from the given accessor and the number of worker threads.
+    /// Build the metainfo file from the given accessor and the number of worker
+    /// threads.
     ///
     /// Panics if threads is equal to zero.
     pub fn build<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
@@ -218,11 +224,18 @@ impl<'a> MetainfoBuilder<'a> {
     {
         let accessor = accessor.into_accessor()?;
 
-        build_with_accessor(threads, accessor, progress, Some(self.root), self.info.info, self.info.piece_length)
+        build_with_accessor(
+            threads,
+            accessor,
+            progress,
+            Some(self.root),
+            self.info.info,
+            self.info.piece_length,
+        )
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Builder for generating an info dictionary file from some accessor.
 pub struct InfoBuilder<'a> {
@@ -242,12 +255,15 @@ impl<'a> InfoBuilder<'a> {
 
     /// Set or unset the private flag for the torrent file.
     pub fn set_private_flag(mut self, opt_is_private: Option<bool>) -> InfoBuilder<'a> {
-        let opt_numeric_is_private = opt_is_private.map(|is_private| if is_private { 1 } else { 0 });
+        let opt_numeric_is_private =
+            opt_is_private.map(|is_private| if is_private { 1 } else { 0 });
 
         {
             let dict_access = self.info.dict_mut().unwrap();
             opt_numeric_is_private
-                .and_then(|numeric_is_private| dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(numeric_is_private)))
+                .and_then(|numeric_is_private| {
+                    dict_access.insert(parse::PRIVATE_KEY.into(), ben_int!(numeric_is_private))
+                })
                 .or_else(|| dict_access.remove(parse::PRIVATE_KEY));
         }
 
@@ -261,7 +277,8 @@ impl<'a> InfoBuilder<'a> {
         self
     }
 
-    /// Build the metainfo file from the given accessor and the number of worker threads.
+    /// Build the metainfo file from the given accessor and the number of worker
+    /// threads.
     ///
     /// Panics if threads is equal to zero.
     pub fn build<A, C>(self, threads: usize, accessor: A, progress: C) -> ParseResult<Vec<u8>>
@@ -271,11 +288,18 @@ impl<'a> InfoBuilder<'a> {
     {
         let accessor = accessor.into_accessor()?;
 
-        build_with_accessor(threads, accessor, progress, None, self.info, self.piece_length)
+        build_with_accessor(
+            threads,
+            accessor,
+            progress,
+            None,
+            self.info,
+            self.piece_length,
+        )
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 fn build_with_accessor<'a, A, C>(
     threads: usize,
@@ -296,7 +320,10 @@ where
     // Collect all of the file information into a list
     let mut files_info = Vec::new();
     accessor.access_metadata(|len, path| {
-        let path_list: Vec<String> = path.iter().map(|os_str| os_str.to_string_lossy().into_owned()).collect();
+        let path_list: Vec<String> = path
+            .iter()
+            .map(|os_str| os_str.to_string_lossy().into_owned())
+            .collect();
 
         files_info.push((len, path_list));
     })?;
@@ -305,11 +332,14 @@ where
     let total_files_len = files_info.iter().fold(0, |acc, nex| acc + nex.0);
     let piece_length = determine_piece_length(total_files_len, piece_length);
     let total_num_pieces = ((total_files_len as f64) / (piece_length as f64)).ceil() as u64;
-    let pieces_list = worker::start_hasher_workers(&accessor, piece_length, total_num_pieces, threads, progress)?;
+    let pieces_list =
+        worker::start_hasher_workers(&accessor, piece_length, total_num_pieces, threads, progress)?;
     let pieces = map_pieces_list(pieces_list.into_iter().map(|(_, piece)| piece));
 
     let mut single_file_name = String::new();
-    let access_directory = accessor.access_directory().map(|path| path.to_string_lossy());
+    let access_directory = accessor
+        .access_directory()
+        .map(|path| path.to_string_lossy());
 
     // Move these below access directory for borrow checker
     let opt_root = opt_root;
@@ -319,11 +349,15 @@ where
     {
         let info_access = info.dict_mut().unwrap();
 
-        info_access.insert(parse::PIECE_LENGTH_KEY.into(), ben_int!(piece_length as i64));
+        info_access.insert(
+            parse::PIECE_LENGTH_KEY.into(),
+            ben_int!(piece_length as i64),
+        );
         info_access.insert(parse::PIECES_KEY.into(), ben_bytes!(&pieces[..]));
 
-        // If the accessor specifies a directory OR there are mutliple files, we will build a multi file torrent
-        // If the directory is not present but there are multiple files, the direcotry field will be set to empty
+        // If the accessor specifies a directory OR there are mutliple files, we will
+        // build a multi file torrent. If the directory is not present but there
+        // are multiple files, the directory field will be set to empty
         match (&access_directory, files_info.len() > 1) {
             (&Some(ref directory), _) => {
                 let mut bencode_files = BencodeMut::new_list();
@@ -352,7 +386,7 @@ where
 
                 info_access.insert(parse::NAME_KEY.into(), ben_bytes!(directory.as_ref()));
                 info_access.insert(parse::FILES_KEY.into(), bencode_files);
-            },
+            }
             (&None, true) => {
                 let mut bencode_files = BencodeMut::new_list();
 
@@ -380,7 +414,7 @@ where
 
                 info_access.insert(parse::NAME_KEY.into(), ben_bytes!(""));
                 info_access.insert(parse::FILES_KEY.into(), bencode_files);
-            },
+            }
             (&None, false) => {
                 // Single File
                 for name_component in files_info[0].1.iter() {
@@ -389,12 +423,14 @@ where
 
                 info_access.insert(parse::LENGTH_KEY.into(), ben_int!(files_info[0].0 as i64));
                 info_access.insert(parse::NAME_KEY.into(), ben_bytes!(&single_file_name[..]));
-            },
+            }
         }
     }
 
     if let Some(mut root) = opt_root {
-        root.dict_mut().unwrap().insert(parse::INFO_KEY.into(), info);
+        root.dict_mut()
+            .unwrap()
+            .insert(parse::INFO_KEY.into(), info);
 
         Ok(root.encode())
     } else {
@@ -402,26 +438,48 @@ where
     }
 }
 
-/// Calculate the final piece length given the total file size and piece length strategy.
+/// Calculate the final piece length given the total file size and piece length
+/// strategy.
 ///
-/// Lower piece length will result in a bigger file but better transfer reliability and vice versa.
+/// Lower piece length will result in a bigger file but better transfer
+/// reliability and vice versa.
 fn determine_piece_length(total_file_size: u64, piece_length: PieceLength) -> usize {
     match piece_length {
         PieceLength::Custom(len) => len,
-        PieceLength::OptBalanced => calculate_piece_length(total_file_size, BALANCED_MAX_PIECES_SIZE, BALANCED_MIN_PIECE_LENGTH),
-        PieceLength::OptFileSize => calculate_piece_length(total_file_size, FILE_SIZE_MAX_PIECES_SIZE, FILE_SIZE_MIN_PIECE_LENGTH),
-        PieceLength::OptTransfer => calculate_piece_length(total_file_size, TRANSFER_MAX_PIECES_SIZE, TRANSFER_MIN_PIECE_LENGTH),
+        PieceLength::OptBalanced => calculate_piece_length(
+            total_file_size,
+            BALANCED_MAX_PIECES_SIZE,
+            BALANCED_MIN_PIECE_LENGTH,
+        ),
+        PieceLength::OptFileSize => calculate_piece_length(
+            total_file_size,
+            FILE_SIZE_MAX_PIECES_SIZE,
+            FILE_SIZE_MIN_PIECE_LENGTH,
+        ),
+        PieceLength::OptTransfer => calculate_piece_length(
+            total_file_size,
+            TRANSFER_MAX_PIECES_SIZE,
+            TRANSFER_MIN_PIECE_LENGTH,
+        ),
     }
 }
 
-/// Calculate the minimum power of 2 piece length for the given max pieces size and total file size.
-fn calculate_piece_length(total_file_size: u64, max_pieces_size: usize, min_piece_length: usize) -> usize {
+/// Calculate the minimum power of 2 piece length for the given max pieces size
+/// and total file size.
+fn calculate_piece_length(
+    total_file_size: u64,
+    max_pieces_size: usize,
+    min_piece_length: usize,
+) -> usize {
     let num_pieces = (max_pieces_size as f64) / (sha::SHA_HASH_LEN as f64);
     let piece_length = ((total_file_size as f64) / num_pieces + 0.5) as usize;
 
     let pot_piece_length = piece_length.next_power_of_two();
 
-    match (pot_piece_length > min_piece_length, pot_piece_length < ALL_OPT_MAX_PIECE_LENGTH) {
+    match (
+        pot_piece_length > min_piece_length,
+        pot_piece_length < ALL_OPT_MAX_PIECE_LENGTH,
+    ) {
         (true, true) => pot_piece_length,
         (false, _) => min_piece_length,
         (_, false) => ALL_OPT_MAX_PIECE_LENGTH,

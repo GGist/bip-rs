@@ -5,8 +5,8 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use bip_util::bt::{self, InfoHash, PeerId};
 use bip_util::convert;
-use byteorder::{WriteBytesExt, BigEndian};
-use nom::{IResult, be_i32, be_i64, be_u32, be_u16, be_u8};
+use byteorder::{BigEndian, WriteBytesExt};
+use nom::{be_i32, be_i64, be_u16, be_u32, be_u8, IResult};
 
 use crate::contact::CompactPeers;
 use crate::option::AnnounceOptions;
@@ -38,15 +38,16 @@ pub struct AnnounceRequest<'a> {
 
 impl<'a> AnnounceRequest<'a> {
     /// Create a new AnnounceRequest.
-    pub fn new(hash: InfoHash,
-               peer_id: PeerId,
-               state: ClientState,
-               ip: SourceIP,
-               key: u32,
-               num_want: DesiredPeers,
-               port: u16,
-               options: AnnounceOptions<'a>)
-               -> AnnounceRequest<'a> {
+    pub fn new(
+        hash: InfoHash,
+        peer_id: PeerId,
+        state: ClientState,
+        ip: SourceIP,
+        key: u32,
+        num_want: DesiredPeers,
+        port: u16,
+        options: AnnounceOptions<'a>,
+    ) -> AnnounceRequest<'a> {
         AnnounceRequest {
             info_hash: hash,
             peer_id,
@@ -71,7 +72,8 @@ impl<'a> AnnounceRequest<'a> {
 
     /// Write the AnnounceRequest to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_all(self.info_hash.as_ref())?;
         writer.write_all(self.peer_id.as_ref())?;
@@ -151,23 +153,29 @@ impl<'a> AnnounceRequest<'a> {
 }
 
 /// Parse an AnnounceRequest with the given SourceIP type constructor.
-fn parse_request<'a>(bytes: &'a [u8],
-                     ip_type: fn(bytes: &[u8]) -> IResult<&[u8], SourceIP>)
-                     -> IResult<&'a [u8], AnnounceRequest<'a>> {
-    do_parse!(bytes,
-        info_hash:  map!(take!(bt::INFO_HASH_LEN), |bytes| InfoHash::from_hash(bytes).unwrap()) >>
-        peer_id:    map!(take!(bt::PEER_ID_LEN), |bytes| PeerId::from_hash(bytes).unwrap()) >>
-        state:      call!(ClientState::from_bytes) >>
-        ip:         call!(ip_type) >>
-        key:        be_u32 >>
-        num_want:   call!(DesiredPeers::from_bytes) >>
-        port:       be_u16 >>
-        options:    call!(AnnounceOptions::from_bytes) >>
-        (AnnounceRequest::new(info_hash, peer_id, state, ip, key, num_want, port, options))
+fn parse_request<'a>(
+    bytes: &'a [u8],
+    ip_type: fn(bytes: &[u8]) -> IResult<&[u8], SourceIP>,
+) -> IResult<&'a [u8], AnnounceRequest<'a>> {
+    do_parse!(
+        bytes,
+        info_hash:
+            map!(take!(bt::INFO_HASH_LEN), |bytes| InfoHash::from_hash(bytes)
+                .unwrap())
+            >> peer_id:
+                map!(take!(bt::PEER_ID_LEN), |bytes| PeerId::from_hash(bytes)
+                    .unwrap())
+            >> state: call!(ClientState::from_bytes)
+            >> ip: call!(ip_type)
+            >> key: be_u32
+            >> num_want: call!(DesiredPeers::from_bytes)
+            >> port: be_u16
+            >> options: call!(AnnounceOptions::from_bytes)
+            >> (AnnounceRequest::new(info_hash, peer_id, state, ip, key, num_want, port, options))
     )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Announce response sent from the server to the client.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -180,11 +188,12 @@ pub struct AnnounceResponse<'a> {
 
 impl<'a> AnnounceResponse<'a> {
     /// Create a new AnnounceResponse
-    pub fn new(interval: i32,
-               leechers: i32,
-               seeders: i32,
-               peers: CompactPeers<'a>)
-               -> AnnounceResponse<'a> {
+    pub fn new(
+        interval: i32,
+        leechers: i32,
+        seeders: i32,
+        peers: CompactPeers<'a>,
+    ) -> AnnounceResponse<'a> {
         AnnounceResponse {
             interval,
             leechers,
@@ -205,7 +214,8 @@ impl<'a> AnnounceResponse<'a> {
 
     /// Write the AnnounceResponse to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_i32::<BigEndian>(self.interval)?;
         writer.write_i32::<BigEndian>(self.leechers)?;
@@ -250,19 +260,21 @@ impl<'a> AnnounceResponse<'a> {
 }
 
 /// Parse an AnnounceResponse with the given CompactPeers type constructor.
-fn parse_respone<'a>(bytes: &'a [u8],
-                     peers_type: fn(bytes: &'a [u8]) -> IResult<&'a [u8], CompactPeers<'a>>)
-                     -> IResult<&'a [u8], AnnounceResponse<'a>> {
-    do_parse!(bytes,
-        interval: be_i32 >>
-        leechers: be_i32 >>
-        seeders:  be_i32 >>
-        peers:    call!(peers_type) >>
-        (AnnounceResponse::new(interval, leechers, seeders, peers))
+fn parse_respone<'a>(
+    bytes: &'a [u8],
+    peers_type: fn(bytes: &'a [u8]) -> IResult<&'a [u8], CompactPeers<'a>>,
+) -> IResult<&'a [u8], AnnounceResponse<'a>> {
+    do_parse!(
+        bytes,
+        interval: be_i32
+            >> leechers: be_i32
+            >> seeders: be_i32
+            >> peers: call!(peers_type)
+            >> (AnnounceResponse::new(interval, leechers, seeders, peers))
     )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Announce state of a client reported to the server.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -275,11 +287,12 @@ pub struct ClientState {
 
 impl ClientState {
     /// Create a new ClientState.
-    pub fn new(bytes_downloaded: i64,
-               bytes_left: i64,
-               bytes_uploaded: i64,
-               event: AnnounceEvent)
-               -> ClientState {
+    pub fn new(
+        bytes_downloaded: i64,
+        bytes_left: i64,
+        bytes_uploaded: i64,
+        event: AnnounceEvent,
+    ) -> ClientState {
         ClientState {
             downloaded: bytes_downloaded,
             left: bytes_left,
@@ -295,7 +308,8 @@ impl ClientState {
 
     /// Write the ClientState to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_i64::<BigEndian>(self.downloaded)?;
         writer.write_i64::<BigEndian>(self.left)?;
@@ -328,16 +342,17 @@ impl ClientState {
 }
 
 fn parse_state(bytes: &[u8]) -> IResult<&[u8], ClientState> {
-    do_parse!(bytes,
-        downloaded: be_i64 >>
-        left:       be_i64 >>
-        uploaded:   be_i64 >>
-        event:      call!(AnnounceEvent::from_bytes) >>
-        (ClientState::new(downloaded, left, uploaded, event))
+    do_parse!(
+        bytes,
+        downloaded: be_i64
+            >> left: be_i64
+            >> uploaded: be_i64
+            >> event: call!(AnnounceEvent::from_bytes)
+            >> (ClientState::new(downloaded, left, uploaded, event))
     )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Announce event of a client reported to the server.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -360,7 +375,8 @@ impl AnnounceEvent {
 
     /// Write the AnnounceEvent to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_i32::<BigEndian>(self.as_id())?;
 
@@ -387,7 +403,7 @@ fn parse_event(bytes: &[u8]) -> IResult<&[u8], AnnounceEvent> {
     )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Client specified IP address to send the response to.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -415,7 +431,8 @@ impl SourceIP {
 
     /// Write the SourceIP to the given writer.
     pub fn write_bytes<W>(&self, writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         match self {
             &SourceIP::ImpliedV4 => self.write_bytes_slice(writer, &IMPLIED_IPV4_ID[..]),
@@ -446,7 +463,8 @@ impl SourceIP {
 
     /// Write the given byte slice to the given writer.
     fn write_bytes_slice<W>(&self, mut writer: W, bytes: &[u8]) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         writer.write_all(bytes)
     }
@@ -474,7 +492,7 @@ named!(parse_ipv6<&[u8], Ipv6Addr>,
     map!(count_fixed!(u8, be_u8, 16), |b| convert::bytes_be_to_ipv6(b))
 );
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Client desired number of peers to send in the response.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -493,7 +511,8 @@ impl DesiredPeers {
 
     /// Write the DesiredPeers to the given writer.
     pub fn write_bytes<W>(&self, mut writer: W) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         let write_value = match self {
             &DesiredPeers::Default => DEFAULT_NUM_WANT,
@@ -506,7 +525,8 @@ impl DesiredPeers {
 }
 
 fn parse_desired(bytes: &[u8]) -> IResult<&[u8], DesiredPeers> {
-    // Tuple trick used to subvert the unused pattern warning (nom tries to catch all)
+    // Tuple trick used to subvert the unused pattern warning (nom tries to catch
+    // all)
     switch!(bytes, tuple!(be_i32, value!(true)),
         (DEFAULT_NUM_WANT, true) => value!(DesiredPeers::Default) |
         (specified_peers, true)  => value!(DesiredPeers::Specified(specified_peers))
@@ -515,25 +535,30 @@ fn parse_desired(bytes: &[u8]) -> IResult<&[u8], DesiredPeers> {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
     use std::io::Write;
+    use std::net::Ipv4Addr;
 
     use bip_util::bt::{InfoHash, PeerId};
     use bip_util::convert;
-    use byteorder::{WriteBytesExt, BigEndian};
+    use byteorder::{BigEndian, WriteBytesExt};
     use nom::IResult;
 
+    use super::{
+        AnnounceEvent, AnnounceRequest, AnnounceResponse, ClientState, DesiredPeers, SourceIP,
+    };
     use crate::contact::{CompactPeers, CompactPeersV4, CompactPeersV6};
     use crate::option::AnnounceOptions;
-    use super::{SourceIP, AnnounceEvent, ClientState, AnnounceRequest, DesiredPeers,
-                AnnounceResponse};
 
     #[test]
     fn positive_write_request() {
         let mut received = Vec::new();
 
-        let info_hash = [3, 4, 2, 3, 4, 3, 1, 6, 7, 56, 3, 234, 2, 3, 4, 3, 5, 6, 7, 8];
-        let peer_id = [4, 2, 123, 23, 34, 5, 56, 2, 3, 4, 45, 6, 7, 8, 5, 6, 4, 56, 34, 42];
+        let info_hash = [
+            3, 4, 2, 3, 4, 3, 1, 6, 7, 56, 3, 234, 2, 3, 4, 3, 5, 6, 7, 8,
+        ];
+        let peer_id = [
+            4, 2, 123, 23, 34, 5, 56, 2, 3, 4, 45, 6, 7, 8, 5, 6, 4, 56, 34, 42,
+        ];
         let (downloaded, left, uploaded) = (123_908, 12_309_123, 123_123);
         let state = ClientState::new(downloaded, left, uploaded, AnnounceEvent::None);
         let ip = Ipv4Addr::new(127, 0, 0, 1);
@@ -541,14 +566,16 @@ mod tests {
         let num_want = 34;
         let port = 6969;
         let options = AnnounceOptions::new();
-        let request = AnnounceRequest::new(info_hash.into(),
-                                           peer_id.into(),
-                                           state,
-                                           SourceIP::ExplicitV4(ip),
-                                           key,
-                                           DesiredPeers::Specified(num_want),
-                                           port,
-                                           options.clone());
+        let request = AnnounceRequest::new(
+            info_hash.into(),
+            peer_id.into(),
+            state,
+            SourceIP::ExplicitV4(ip),
+            key,
+            DesiredPeers::Specified(num_want),
+            port,
+            options.clone(),
+        );
 
         request.write_bytes(&mut received).unwrap();
 
@@ -558,7 +585,9 @@ mod tests {
         expected.write_i64::<BigEndian>(downloaded).unwrap();
         expected.write_i64::<BigEndian>(left).unwrap();
         expected.write_i64::<BigEndian>(uploaded).unwrap();
-        expected.write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT)
+            .unwrap();
         expected.write_all(&convert::ipv4_to_bytes_be(ip)).unwrap();
         expected.write_u32::<BigEndian>(key).unwrap();
         expected.write_i32::<BigEndian>(num_want).unwrap();
@@ -603,7 +632,9 @@ mod tests {
         expected.write_i64::<BigEndian>(downloaded).unwrap();
         expected.write_i64::<BigEndian>(left).unwrap();
         expected.write_i64::<BigEndian>(uploaded).unwrap();
-        expected.write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT)
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -616,7 +647,9 @@ mod tests {
         none_event.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT)
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -629,7 +662,9 @@ mod tests {
         none_event.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT)
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -642,7 +677,9 @@ mod tests {
         none_event.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(super::ANNOUNCE_STARTED_EVENT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::ANNOUNCE_STARTED_EVENT)
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -655,7 +692,9 @@ mod tests {
         none_event.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(super::ANNOUNCE_STOPPED_EVENT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::ANNOUNCE_STOPPED_EVENT)
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -685,7 +724,6 @@ mod tests {
 
         assert_eq!(&received[..], &expected[..]);
     }
-
 
     #[test]
     fn positive_write_source_ipv4_explicit() {
@@ -721,7 +759,9 @@ mod tests {
         desired_peers.write_bytes(&mut received).unwrap();
 
         let mut expected = Vec::new();
-        expected.write_i32::<BigEndian>(super::DEFAULT_NUM_WANT).unwrap();
+        expected
+            .write_i32::<BigEndian>(super::DEFAULT_NUM_WANT)
+            .unwrap();
 
         assert_eq!(&received[..], &expected[..]);
     }
@@ -756,7 +796,9 @@ mod tests {
         bytes.write_i64::<BigEndian>(downloaded).unwrap();
         bytes.write_i64::<BigEndian>(left).unwrap();
         bytes.write_i64::<BigEndian>(uploaded).unwrap();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT)
+            .unwrap();
         bytes.write_all(&super::IMPLIED_IPV4_ID).unwrap();
         bytes.write_u32::<BigEndian>(key).unwrap();
         bytes.write_i32::<BigEndian>(num_want).unwrap();
@@ -791,7 +833,9 @@ mod tests {
         bytes.write_i64::<BigEndian>(downloaded).unwrap();
         bytes.write_i64::<BigEndian>(left).unwrap();
         bytes.write_i64::<BigEndian>(uploaded).unwrap();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT)
+            .unwrap();
         bytes.write_all(&super::IMPLIED_IPV4_ID).unwrap();
         bytes.write_i32::<BigEndian>(num_want).unwrap();
         bytes.write_u16::<BigEndian>(port).unwrap();
@@ -813,14 +857,18 @@ mod tests {
         let received_v4 = AnnounceResponse::from_bytes_v4(&bytes);
         let received_v6 = AnnounceResponse::from_bytes_v6(&bytes);
 
-        let expected_v4 = AnnounceResponse::new(interval,
-                                                leechers,
-                                                seeders,
-                                                CompactPeers::V4(CompactPeersV4::new()));
-        let expected_v6 = AnnounceResponse::new(interval,
-                                                leechers,
-                                                seeders,
-                                                CompactPeers::V6(CompactPeersV6::new()));
+        let expected_v4 = AnnounceResponse::new(
+            interval,
+            leechers,
+            seeders,
+            CompactPeers::V4(CompactPeersV4::new()),
+        );
+        let expected_v6 = AnnounceResponse::new(
+            interval,
+            leechers,
+            seeders,
+            CompactPeers::V6(CompactPeersV6::new()),
+        );
 
         assert_eq!(received_v4, IResult::Done(&b""[..], expected_v4));
         assert_eq!(received_v6, IResult::Done(&b""[..], expected_v6));
@@ -835,8 +883,16 @@ mod tests {
         peers_v4.insert("10.0.0.1:2323".parse().unwrap());
 
         let mut peers_v6 = CompactPeersV6::new();
-        peers_v6.insert("[ADBB:234A:55BD:FF34:3D3A:FFFF:234A:55BD]:3432".parse().unwrap());
-        peers_v6.insert("[ADBB:234A::FF34:3D3A:FFFF:234A:55BD]:2222".parse().unwrap());
+        peers_v6.insert(
+            "[ADBB:234A:55BD:FF34:3D3A:FFFF:234A:55BD]:3432"
+                .parse()
+                .unwrap(),
+        );
+        peers_v6.insert(
+            "[ADBB:234A::FF34:3D3A:FFFF:234A:55BD]:2222"
+                .parse()
+                .unwrap(),
+        );
 
         let mut bytes = Vec::new();
         bytes.write_i32::<BigEndian>(interval).unwrap();
@@ -869,7 +925,9 @@ mod tests {
         bytes.write_i64::<BigEndian>(downloaded).unwrap();
         bytes.write_i64::<BigEndian>(left).unwrap();
         bytes.write_i64::<BigEndian>(uploaded).unwrap();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT)
+            .unwrap();
 
         let received = ClientState::from_bytes(&bytes);
         let expected = ClientState::new(downloaded, left, uploaded, AnnounceEvent::None);
@@ -894,7 +952,9 @@ mod tests {
     #[test]
     fn positive_parse_none_event() {
         let mut bytes = Vec::new();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_NONE_EVENT)
+            .unwrap();
 
         let received = AnnounceEvent::from_bytes(&bytes);
         let expected = AnnounceEvent::None;
@@ -905,7 +965,9 @@ mod tests {
     #[test]
     fn positive_parse_completed_event() {
         let mut bytes = Vec::new();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_COMPLETED_EVENT)
+            .unwrap();
 
         let received = AnnounceEvent::from_bytes(&bytes);
         let expected = AnnounceEvent::Completed;
@@ -916,7 +978,9 @@ mod tests {
     #[test]
     fn positive_parse_started_event() {
         let mut bytes = Vec::new();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_STARTED_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_STARTED_EVENT)
+            .unwrap();
 
         let received = AnnounceEvent::from_bytes(&bytes);
         let expected = AnnounceEvent::Started;
@@ -936,7 +1000,9 @@ mod tests {
     #[test]
     fn positive_parse_stopped_event() {
         let mut bytes = Vec::new();
-        bytes.write_i32::<BigEndian>(super::ANNOUNCE_STOPPED_EVENT).unwrap();
+        bytes
+            .write_i32::<BigEndian>(super::ANNOUNCE_STOPPED_EVENT)
+            .unwrap();
 
         let received = AnnounceEvent::from_bytes(&bytes);
         let expected = AnnounceEvent::Stopped;
@@ -986,7 +1052,6 @@ mod tests {
 
         assert_eq!(received, IResult::Done(&b""[..], expected));
     }
-
 
     #[test]
     fn negative_parse_incomplete_v4_source() {

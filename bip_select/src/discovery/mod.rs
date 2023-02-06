@@ -3,8 +3,8 @@
 use crate::ControlMessage;
 use bip_handshake::InfoHash;
 use bip_metainfo::Metainfo;
-use bip_peer::PeerInfo;
 use bip_peer::messages::UtMetadataMessage;
+use bip_peer::PeerInfo;
 use bip_utracker::announce::ClientState;
 use std::net::SocketAddr;
 
@@ -25,7 +25,8 @@ pub enum IDiscoveryMessage {
     ReceivedUtMetadataMessage(PeerInfo, UtMetadataMessage),
 }
 
-/// Enumeration of discovery messages that can be received from a discovery module.
+/// Enumeration of discovery messages that can be received from a discovery
+/// module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ODiscoveryMessage {
     /// Send a dht announce for the `InfoHash`.

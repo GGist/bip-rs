@@ -63,7 +63,12 @@ where
             let write_result = self.sock.write_buf(&mut Cursor::new(&self.write_buffer));
 
             match try_nb!(write_result) {
-                Async::Ready(0) => return Err(io::Error::new(io::ErrorKind::WriteZero, "Failed To Write Bytes")),
+                Async::Ready(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "Failed To Write Bytes",
+                    ))
+                }
                 Async::Ready(written) => {
                     self.write_buffer.advance(written);
                 }
@@ -90,7 +95,9 @@ where
         loop {
             match self.state {
                 HandshakeState::Waiting => {
-                    let read_result = self.sock.read_buf(&mut Cursor::new(&mut self.read_buffer[..]));
+                    let read_result = self
+                        .sock
+                        .read_buf(&mut Cursor::new(&mut self.read_buffer[..]));
 
                     match try_nb!(read_result) {
                         Async::Ready(0) => return Ok(Async::Ready(None)),
@@ -100,10 +107,14 @@ where
                             self.state = HandshakeState::Length(length);
 
                             self.read_pos = 1;
-                            self.read_buffer = vec![0u8; message::write_len_with_protocol_len(length)];
+                            self.read_buffer =
+                                vec![0u8; message::write_len_with_protocol_len(length)];
                             self.read_buffer[0] = length;
                         }
-                        Async::Ready(read) => panic!("bip_handshake: Expected To Read Single Byte, Read {:?}", read),
+                        Async::Ready(read) => panic!(
+                            "bip_handshake: Expected To Read Single Byte, Read {:?}",
+                            read
+                        ),
                         Async::NotReady => return Ok(Async::NotReady),
                     }
                 }
@@ -117,8 +128,15 @@ where
 
                                 return Ok(Async::Ready(Some(message)));
                             }
-                            Err(nom::Err::Incomplete(_)) => panic!("bip_handshake: HandshakeMessage Failed With Incomplete Bytes"),
-                            Err(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "HandshakeMessage Failed To Parse")),
+                            Err(nom::Err::Incomplete(_)) => panic!(
+                                "bip_handshake: HandshakeMessage Failed With Incomplete Bytes"
+                            ),
+                            Err(_) => {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "HandshakeMessage Failed To Parse",
+                                ))
+                            }
                         }
                     } else {
                         let read_result = {
@@ -170,9 +188,17 @@ mod tests {
 
     #[test]
     fn positive_write_handshake_message() {
-        let message = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
+        let message = HandshakeMessage::from_parts(
+            Protocol::BitTorrent,
+            any_extensions(),
+            any_info_hash(),
+            any_peer_id(),
+        );
 
-        let write_frame = FramedHandshake::new(Cursor::new(Vec::new())).send(message.clone()).wait().unwrap();
+        let write_frame = FramedHandshake::new(Cursor::new(Vec::new()))
+            .send(message.clone())
+            .wait()
+            .unwrap();
         let recv_buffer = write_frame.into_inner().into_inner();
 
         let mut exp_buffer = Vec::new();
@@ -183,8 +209,18 @@ mod tests {
 
     #[test]
     fn positive_write_multiple_handshake_messages() {
-        let message_one = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
-        let message_two = HandshakeMessage::from_parts(Protocol::Custom(vec![5, 6, 7]), any_extensions(), any_info_hash(), any_peer_id());
+        let message_one = HandshakeMessage::from_parts(
+            Protocol::BitTorrent,
+            any_extensions(),
+            any_info_hash(),
+            any_peer_id(),
+        );
+        let message_two = HandshakeMessage::from_parts(
+            Protocol::Custom(vec![5, 6, 7]),
+            any_extensions(),
+            any_info_hash(),
+            any_peer_id(),
+        );
 
         let write_frame = FramedHandshake::new(Cursor::new(Vec::new()))
             .send(message_one.clone())
@@ -204,7 +240,12 @@ mod tests {
 
     #[test]
     fn positive_read_handshake_message() {
-        let exp_message = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
+        let exp_message = HandshakeMessage::from_parts(
+            Protocol::BitTorrent,
+            any_extensions(),
+            any_info_hash(),
+            any_peer_id(),
+        );
 
         let mut buffer = Vec::new();
         exp_message.write_bytes(&mut buffer).unwrap();
@@ -218,7 +259,12 @@ mod tests {
 
     #[test]
     fn positive_read_byte_after_handshake() {
-        let exp_message = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
+        let exp_message = HandshakeMessage::from_parts(
+            Protocol::BitTorrent,
+            any_extensions(),
+            any_info_hash(),
+            any_peer_id(),
+        );
 
         let mut buffer = Vec::new();
         exp_message.write_bytes(&mut buffer).unwrap();
@@ -227,7 +273,12 @@ mod tests {
         // to be able to read them afterwards)
         buffer.write_all(&[55]).unwrap();
 
-        let read_frame = FramedHandshake::new(&buffer[..]).into_future().wait().ok().unwrap().1;
+        let read_frame = FramedHandshake::new(&buffer[..])
+            .into_future()
+            .wait()
+            .ok()
+            .unwrap()
+            .1;
         let buffer_ref = read_frame.into_inner();
 
         assert_eq!(&[55], buffer_ref);
@@ -235,7 +286,12 @@ mod tests {
 
     #[test]
     fn positive_read_bytes_after_handshake() {
-        let exp_message = HandshakeMessage::from_parts(Protocol::BitTorrent, any_extensions(), any_info_hash(), any_peer_id());
+        let exp_message = HandshakeMessage::from_parts(
+            Protocol::BitTorrent,
+            any_extensions(),
+            any_info_hash(),
+            any_peer_id(),
+        );
 
         let mut buffer = Vec::new();
         exp_message.write_bytes(&mut buffer).unwrap();
@@ -244,7 +300,12 @@ mod tests {
         // to be able to read them afterwards)
         buffer.write_all(&[55, 54, 21]).unwrap();
 
-        let read_frame = FramedHandshake::new(&buffer[..]).into_future().wait().ok().unwrap().1;
+        let read_frame = FramedHandshake::new(&buffer[..])
+            .into_future()
+            .wait()
+            .ok()
+            .unwrap()
+            .1;
         let buffer_ref = read_frame.into_inner();
 
         assert_eq!(&[55, 54, 21], buffer_ref);

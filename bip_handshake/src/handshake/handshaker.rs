@@ -79,7 +79,8 @@ impl HandshakerBuilder {
 
     /// Peer id that will be advertised when handshaking with other peers.
     ///
-    /// Defaults to a random SHA-1 hash; official clients should use an encoding scheme.
+    /// Defaults to a random SHA-1 hash; official clients should use an encoding
+    /// scheme.
     ///
     /// See http://www.bittorrent.org/beps/bep_0020.html.
     pub fn with_peer_id(&mut self, peer_id: PeerId) -> &mut HandshakerBuilder {
@@ -88,23 +89,27 @@ impl HandshakerBuilder {
         self
     }
 
-    /// Extensions supported by our client, advertised to the peer when handshaking.
+    /// Extensions supported by our client, advertised to the peer when
+    /// handshaking.
     pub fn with_extensions(&mut self, ext: Extensions) -> &mut HandshakerBuilder {
         self.ext = ext;
 
         self
     }
 
-    /// Configuration that will be used to alter the internal behavior of handshaking.
+    /// Configuration that will be used to alter the internal behavior of
+    /// handshaking.
     ///
-    /// This will typically not need to be set unless you know what you are doing.
+    /// This will typically not need to be set unless you know what you are
+    /// doing.
     pub fn with_config(&mut self, config: HandshakerConfig) -> &mut HandshakerBuilder {
         self.config = config;
 
         self
     }
 
-    /// Build a `Handshaker` over the given `Transport` with a `Remote` instance.
+    /// Build a `Handshaker` over the given `Transport` with a `Remote`
+    /// instance.
     pub fn build<T>(&self, transport: T, handle: Handle) -> io::Result<Handshaker<T::Socket>>
     where
         T: Transport + 'static,
@@ -124,8 +129,9 @@ pub struct Handshaker<S> {
 impl<S> Handshaker<S> {
     /// Splits the `Handshaker` into its parts.
     ///
-    /// This is an enhanced version of `Stream::split` in that the returned `Sink` implements
-    /// `DiscoveryInfo` so it can be cloned and passed in to different peer discovery services.
+    /// This is an enhanced version of `Stream::split` in that the returned
+    /// `Sink` implements `DiscoveryInfo` so it can be cloned and passed in
+    /// to different peer discovery services.
     pub fn into_parts(self) -> (HandshakerSink, HandshakerStream<S>) {
         (self.sink, self.stream)
     }
@@ -145,7 +151,11 @@ impl<S> Handshaker<S>
 where
     S: AsyncRead + AsyncWrite + 'static,
 {
-    fn with_builder<T>(builder: &HandshakerBuilder, transport: T, handle: Handle) -> io::Result<Handshaker<T::Socket>>
+    fn with_builder<T>(
+        builder: &HandshakerBuilder,
+        transport: T,
+        handle: Handle,
+    ) -> io::Result<Handshaker<T::Socket>>
     where
         T: Transport<Socket = S> + 'static,
     {
@@ -164,9 +174,11 @@ where
         let (sock_send, sock_recv) = mpsc::channel(config.done_buffer_size());
 
         let filters = Filters::new();
-        let (handshake_timer, initiate_timer) = configured_handshake_timers(config.handshake_timeout(), config.connect_timeout());
+        let (handshake_timer, initiate_timer) =
+            configured_handshake_timers(config.handshake_timeout(), config.connect_timeout());
 
-        // Hook up our pipeline of handlers which will take some connection info, process it, and forward it
+        // Hook up our pipeline of handlers which will take some connection info,
+        // process it, and forward it
         handler::loop_handler(
             addr_recv,
             initiator::initiator_handler,
@@ -174,7 +186,13 @@ where
             (transport, filters.clone(), handle.clone(), initiate_timer),
             &handle,
         );
-        handler::loop_handler(listener, ListenerHandler::new, hand_send, filters.clone(), &handle);
+        handler::loop_handler(
+            listener,
+            ListenerHandler::new,
+            hand_send,
+            filters.clone(),
+            &handle,
+        );
         handler::loop_handler(
             hand_recv.map(Result::Ok).buffer_unordered(100),
             handshaker::execute_handshake,
@@ -191,7 +209,10 @@ where
 }
 
 /// Configure a timer wheel and create a `HandshakeTimer`.
-fn configured_handshake_timers(duration_one: Duration, duration_two: Duration) -> (HandshakeTimer, HandshakeTimer) {
+fn configured_handshake_timers(
+    duration_one: Duration,
+    duration_two: Duration,
+) -> (HandshakeTimer, HandshakeTimer) {
     let timer = tokio_timer::wheel()
         .num_slots(64)
         .max_timeout(cmp::max(duration_one, duration_two))
@@ -207,7 +228,10 @@ impl<S> Sink for Handshaker<S> {
     type SinkItem = InitiateMessage;
     type SinkError = SendError<InitiateMessage>;
 
-    fn start_send(&mut self, item: InitiateMessage) -> StartSend<InitiateMessage, SendError<InitiateMessage>> {
+    fn start_send(
+        &mut self,
+        item: InitiateMessage,
+    ) -> StartSend<InitiateMessage, SendError<InitiateMessage>> {
         self.sink.start_send(item)
     }
 
@@ -257,8 +281,18 @@ pub struct HandshakerSink {
 }
 
 impl HandshakerSink {
-    fn new(send: Sender<InitiateMessage>, port: u16, pid: PeerId, filters: Filters) -> HandshakerSink {
-        HandshakerSink { send, port, pid, filters }
+    fn new(
+        send: Sender<InitiateMessage>,
+        port: u16,
+        pid: PeerId,
+        filters: Filters,
+    ) -> HandshakerSink {
+        HandshakerSink {
+            send,
+            port,
+            pid,
+            filters,
+        }
     }
 }
 
@@ -276,7 +310,10 @@ impl Sink for HandshakerSink {
     type SinkItem = InitiateMessage;
     type SinkError = SendError<InitiateMessage>;
 
-    fn start_send(&mut self, item: InitiateMessage) -> StartSend<InitiateMessage, SendError<InitiateMessage>> {
+    fn start_send(
+        &mut self,
+        item: InitiateMessage,
+    ) -> StartSend<InitiateMessage, SendError<InitiateMessage>> {
         self.send.start_send(item)
     }
 

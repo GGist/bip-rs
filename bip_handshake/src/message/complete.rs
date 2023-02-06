@@ -1,24 +1,38 @@
 use std::net::SocketAddr;
 
+use crate::message::extensions::Extensions;
 use crate::message::protocol::Protocol;
-use crate::message::extensions::{Extensions};
 
 use bip_util::bt::{InfoHash, PeerId};
 
 /// Message containing completed handshaking information.
 pub struct CompleteMessage<S> {
     prot: Protocol,
-    ext:  Extensions,
+    ext: Extensions,
     hash: InfoHash,
-    pid:  PeerId,
+    pid: PeerId,
     addr: SocketAddr,
-    sock: S
+    sock: S,
 }
 
 impl<S> CompleteMessage<S> {
     /// Create a new `CompleteMessage` over the given socket S.
-    pub fn new(prot: Protocol, ext: Extensions, hash: InfoHash, pid: PeerId, addr: SocketAddr, sock: S) -> CompleteMessage<S> {
-        CompleteMessage{ prot, ext, hash, pid, addr, sock }
+    pub fn new(
+        prot: Protocol,
+        ext: Extensions,
+        hash: InfoHash,
+        pid: PeerId,
+        addr: SocketAddr,
+        sock: S,
+    ) -> CompleteMessage<S> {
+        CompleteMessage {
+            prot,
+            ext,
+            hash,
+            pid,
+            addr,
+            sock,
+        }
     }
 
     /// Protocol that this peer is operating over.
@@ -53,6 +67,8 @@ impl<S> CompleteMessage<S> {
 
     /// Break the `CompleteMessage` into its parts.
     pub fn into_parts(self) -> (Protocol, Extensions, InfoHash, PeerId, SocketAddr, S) {
-        (self.prot, self.ext, self.hash, self.pid, self.addr, self.sock)
+        (
+            self.prot, self.ext, self.hash, self.pid, self.addr, self.sock,
+        )
     }
 }

@@ -1,13 +1,13 @@
-use crate::ControlMessage;
-use bip_peer::PeerInfo;
-use bip_peer::messages::ExtendedMessage;
-use bip_peer::messages::builders::ExtendedMessageBuilder;
 use crate::error::UberError;
+use crate::ControlMessage;
+use bip_peer::messages::builders::ExtendedMessageBuilder;
+use bip_peer::messages::ExtendedMessage;
+use bip_peer::PeerInfo;
+use futures::task;
+use futures::task::Task;
 use futures::Async;
 use futures::Poll;
 use futures::Stream;
-use futures::task;
-use futures::task::Task;
 use std::collections::{HashMap, VecDeque};
 
 /// Enumeration of extended messages that can be sent to the extended module.
@@ -17,22 +17,26 @@ pub enum IExtendedMessage {
     RecievedExtendedMessage(PeerInfo, ExtendedMessage),
 }
 
-/// Enumeration of extended messages that can be received from the extended module.
+/// Enumeration of extended messages that can be received from the extended
+/// module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OExtendedMessage {
     SendExtendedMessage(PeerInfo, ExtendedMessage),
 }
 
-/// Trait for a module to take part in constructing the extended message for a peer.
+/// Trait for a module to take part in constructing the extended message for a
+/// peer.
 pub trait ExtendedListener {
     /// Extend the given extended message builder for the given peer.
     fn extend(&self, _info: &PeerInfo, _builder: ExtendedMessageBuilder) -> ExtendedMessageBuilder {
         _builder
     }
 
-    /// One or both sides of a peer connection had their extended information updated.
+    /// One or both sides of a peer connection had their extended information
+    /// updated.
     ///
-    /// This can be called multiple times for any given peer as extension information updates.
+    /// This can be called multiple times for any given peer as extension
+    /// information updates.
     fn on_update(&mut self, _info: &PeerInfo, _extended: &ExtendedPeerInfo) {}
 }
 
@@ -44,10 +48,7 @@ pub struct ExtendedPeerInfo {
 
 impl ExtendedPeerInfo {
     pub fn new(ours: Option<ExtendedMessage>, theirs: Option<ExtendedMessage>) -> ExtendedPeerInfo {
-        ExtendedPeerInfo {
-            ours,
-            theirs,
-        }
+        ExtendedPeerInfo { ours, theirs }
     }
 
     pub fn update_ours(&mut self, message: ExtendedMessage) {
@@ -109,10 +110,10 @@ impl ExtendedModule {
                 self.peers.insert(info, ext_peer_info);
                 self.out_queue
                     .push_back(OExtendedMessage::SendExtendedMessage(info, ext_message));
-            },
+            }
             IExtendedMessage::Control(ControlMessage::PeerDisconnected(info)) => {
                 self.peers.remove(&info);
-            },
+            }
             IExtendedMessage::RecievedExtendedMessage(info, ext_message) => {
                 let ext_peer_info = self.peers.get_mut(&info).unwrap();
                 ext_peer_info.update_theirs(ext_message);
@@ -120,10 +121,8 @@ impl ExtendedModule {
                 for d_module in d_modules {
                     d_module.on_update(&info, &ext_peer_info);
                 }
-            },
-            _ => {
-                
-            },
+            }
+            _ => {}
         }
 
         self.check_stream_unblock();

@@ -41,39 +41,50 @@ impl MainlineDht {
         let nodes: Vec<SocketAddr> = builder.nodes.into_iter().collect();
         let routers: Vec<Router> = builder.routers.into_iter().collect();
 
-        if send.send(OneshotTask::StartBootstrap(routers, nodes)).is_err() {
+        if send
+            .send(OneshotTask::StartBootstrap(routers, nodes))
+            .is_err()
+        {
             warn!("bip_dt: MainlineDht failed to send a start bootstrap message...");
         }
 
         Ok(MainlineDht { send })
     }
 
-    /// Perform a search for the given InfoHash with an optional announce on the closest nodes.
+    /// Perform a search for the given InfoHash with an optional announce on the
+    /// closest nodes.
     ///
     ///
-    /// Announcing will place your contact information in the DHT so others performing lookups
-    /// for the InfoHash will be able to find your contact information and initiate a handshake.
+    /// Announcing will place your contact information in the DHT so others
+    /// performing lookups for the InfoHash will be able to find your
+    /// contact information and initiate a handshake.
     ///
-    /// If the initial bootstrap has not finished, the search will be queued and executed once
-    /// the bootstrap has completed.
+    /// If the initial bootstrap has not finished, the search will be queued and
+    /// executed once the bootstrap has completed.
     pub fn search(&self, hash: InfoHash, announce: bool) {
-        if self.send.send(OneshotTask::StartLookup(hash, announce)).is_err() {
+        if self
+            .send
+            .send(OneshotTask::StartLookup(hash, announce))
+            .is_err()
+        {
             warn!("bip_dht: MainlineDht failed to send a start lookup message...");
         }
     }
 
     /// An event Receiver which will receive events occuring within the DHT.
     ///
-    /// It is important to at least monitor the DHT for shutdown events as any calls
-    /// after that event occurs will not be processed but no indication will be given.
+    /// It is important to at least monitor the DHT for shutdown events as any
+    /// calls after that event occurs will not be processed but no
+    /// indication will be given.
     pub fn events(&self) -> Receiver<DhtEvent> {
         let (send, recv) = mpsc::channel();
 
         if self.send.send(OneshotTask::RegisterSender(send)).is_err() {
             warn!("bip_dht: MainlineDht failed to send a register sender message...");
-            // TODO: Should we push a Shutdown event through the sender here? We would need
-            // to know the cause or create a new cause for this specific scenario since the
-            // client could have been lazy and wasnt monitoring this until after it shutdown!
+            // TODO: Should we push a Shutdown event through the sender here? We
+            // would need to know the cause or create a new cause
+            // for this specific scenario since the client could
+            // have been lazy and wasnt monitoring this until after it shutdown!
         }
 
         recv
@@ -82,7 +93,11 @@ impl MainlineDht {
 
 impl Drop for MainlineDht {
     fn drop(&mut self) {
-        if self.send.send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated)).is_err() {
+        if self
+            .send
+            .send(OneshotTask::Shutdown(ShutdownCause::ClientInitiated))
+            .is_err()
+        {
             warn!(
                 "bip_dht: MainlineDht failed to send a shutdown message (may have already been \
                    shutdown)..."
@@ -91,7 +106,7 @@ impl Drop for MainlineDht {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Stores information for initializing a DHT.
 #[derive(Clone, Debug)]
@@ -125,8 +140,8 @@ impl DhtBuilder {
         dht.add_node(node_addr)
     }
 
-    /// Creates a DhtBuilder with an initial router which will let us gather nodes
-    /// if our routing table is ever empty.
+    /// Creates a DhtBuilder with an initial router which will let us gather
+    /// nodes if our routing table is ever empty.
     ///
     /// Difference between a node and a router is that a router is never put in
     /// our routing table.
@@ -143,7 +158,8 @@ impl DhtBuilder {
         self
     }
 
-    /// Add a router which will let us gather nodes if our routing table is ever empty.
+    /// Add a router which will let us gather nodes if our routing table is ever
+    /// empty.
     ///
     /// See DhtBuilder::with_router for difference between a router and a node.
     pub fn add_router(mut self, router: Router) -> DhtBuilder {
@@ -163,8 +179,8 @@ impl DhtBuilder {
         self
     }
 
-    /// Provide the DHT with our external address. If this is not supplied we will
-    /// have to deduce this information from remote nodes.
+    /// Provide the DHT with our external address. If this is not supplied we
+    /// will have to deduce this information from remote nodes.
     ///
     /// Purpose of the external address is to generate a NodeId that conforms to
     /// BEP 42 so that nodes can safely store information on our node.

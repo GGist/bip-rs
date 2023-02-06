@@ -1,14 +1,14 @@
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use bip_handshake::{DiscoveryInfo, InitiateMessage};
-use bip_util::bt::{InfoHash};
-use bip_util::trans::{TransactionIds, LocallyShuffledIds};
+use bip_util::bt::InfoHash;
+use bip_util::trans::{LocallyShuffledIds, TransactionIds};
 use futures::future::Either;
 use futures::sink::Sink;
-use umio::external::{Sender};
+use umio::external::Sender;
 
 use crate::announce::{AnnounceResponse, ClientState};
 use crate::client::dispatcher::DispatchMessage;
@@ -18,7 +18,8 @@ use crate::scrape::ScrapeResponse;
 mod dispatcher;
 pub mod error;
 
-/// Capacity of outstanding requests (assuming each request uses at most 1 timer at any time)
+/// Capacity of outstanding requests (assuming each request uses at most 1 timer
+/// at any time)
 const DEFAULT_CAPACITY: usize = 4096;
 
 /// Request made by the TrackerClient.
@@ -38,10 +39,7 @@ pub struct ClientMetadata {
 impl ClientMetadata {
     /// Create a new ClientMetadata container.
     pub fn new(token: ClientToken, result: ClientResult<ClientResponse>) -> ClientMetadata {
-        ClientMetadata {
-            token,
-            result,
-        }
+        ClientMetadata { token, result }
     }
 
     /// Access the request token corresponding to this metadata.
@@ -90,7 +88,7 @@ impl ClientResponse {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Tracker client that executes requests asynchronously.
 ///
@@ -105,8 +103,9 @@ pub struct TrackerClient {
 impl TrackerClient {
     /// Create a new TrackerClient.
     pub fn new<H>(bind: SocketAddr, handshaker: H) -> io::Result<TrackerClient>
-    where H: Sink + DiscoveryInfo + Send + 'static,
-          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
+    where
+        H: Sink + DiscoveryInfo + Send + 'static,
+        H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>,
     {
         TrackerClient::with_capacity(bind, handshaker, DEFAULT_CAPACITY)
     }
@@ -114,12 +113,14 @@ impl TrackerClient {
     /// Create a new TrackerClient with the given message capacity.
     ///
     /// Panics if capacity == usize::max_value().
-    pub fn with_capacity<H>(bind: SocketAddr,
-                            handshaker: H,
-                            capacity: usize)
-                            -> io::Result<TrackerClient>
-    where H: Sink + DiscoveryInfo + Send + 'static,
-          H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>
+    pub fn with_capacity<H>(
+        bind: SocketAddr,
+        handshaker: H,
+        capacity: usize,
+    ) -> io::Result<TrackerClient>
+    where
+        H: Sink + DiscoveryInfo + Send + 'static,
+        H::SinkItem: From<Either<InitiateMessage, ClientMetadata>>,
     {
         // Need channel capacity to be 1 more in case channel is saturated and client
         // is dropped so shutdown message can get through in the worst case
@@ -130,19 +131,19 @@ impl TrackerClient {
         // Limit the capacity of messages (channel capacity - 1)
         let limiter = RequestLimiter::new(capacity);
 
-        dispatcher::create_dispatcher(bind, handshaker, chan_capacity, limiter.clone())
-            .map(|chan| {
-                TrackerClient {
-                    send: chan,
-                    limiter,
-                    generator: TokenGenerator::new(),
-                }
-            })
+        dispatcher::create_dispatcher(bind, handshaker, chan_capacity, limiter.clone()).map(
+            |chan| TrackerClient {
+                send: chan,
+                limiter,
+                generator: TokenGenerator::new(),
+            },
+        )
     }
 
     /// Execute an asynchronous request to the given tracker.
     ///
-    /// If the maximum number of requests are currently in progress, return None.
+    /// If the maximum number of requests are currently in progress, return
+    /// None.
     pub fn request(&mut self, addr: SocketAddr, request: ClientRequest) -> Option<ClientToken> {
         if self.limiter.can_initiate() {
             let token = self.generator.generate();
@@ -165,7 +166,7 @@ impl Drop for TrackerClient {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Associates a ClientRequest with a ClientResponse.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -173,13 +174,15 @@ pub struct ClientToken(u32);
 
 /// Generates tokens which double as transaction ids.
 struct TokenGenerator {
-    generator: LocallyShuffledIds<u32>
+    generator: LocallyShuffledIds<u32>,
 }
 
 impl TokenGenerator {
     /// Create a new TokenGenerator.
     pub fn new() -> TokenGenerator {
-        TokenGenerator{ generator: LocallyShuffledIds::<u32>::new() }
+        TokenGenerator {
+            generator: LocallyShuffledIds::<u32>::new(),
+        }
     }
 
     /// Generate a new ClientToken.
@@ -188,7 +191,7 @@ impl TokenGenerator {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Limits requests based on the current number of outstanding requests.
 #[derive(Clone)]

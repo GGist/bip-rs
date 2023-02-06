@@ -4,14 +4,23 @@ use std::sync::Arc;
 use crate::send::TrySender;
 
 /// Create two SplitSenders over a single Sender with corresponding capacities.
-pub fn split_sender<S, T>(send: S, cap_one: usize, cap_two: usize) -> (SplitSender<S>, SplitSender<S>)
-    where S: TrySender<T> + Clone,
-          T: Send
+pub fn split_sender<S, T>(
+    send: S,
+    cap_one: usize,
+    cap_two: usize,
+) -> (SplitSender<S>, SplitSender<S>)
+where
+    S: TrySender<T> + Clone,
+    T: Send,
 {
-    (SplitSender::new(send.clone(), cap_one), SplitSender::new(send, cap_two))
+    (
+        SplitSender::new(send.clone(), cap_one),
+        SplitSender::new(send, cap_two),
+    )
 }
 
-/// SplitSender allows dividing the capacity of a single channel into multiple channels.
+/// SplitSender allows dividing the capacity of a single channel into multiple
+/// channels.
 pub struct SplitSender<S> {
     send: S,
     count: Arc<AtomicUsize>,
@@ -19,7 +28,8 @@ pub struct SplitSender<S> {
 }
 
 impl<S> Clone for SplitSender<S>
-    where S: Clone
+where
+    S: Clone,
 {
     fn clone(&self) -> SplitSender<S> {
         SplitSender {
@@ -44,7 +54,9 @@ impl<S> SplitSender<S> {
 
     /// Create a new SplitSenderAck that can be used to ack sent messages.
     pub fn sender_ack(&self) -> SplitSenderAck {
-        SplitSenderAck { count: self.count.clone() }
+        SplitSenderAck {
+            count: self.count.clone(),
+        }
     }
 
     fn try_count_increment(&self) -> bool {
@@ -62,8 +74,9 @@ impl<S> SplitSender<S> {
 }
 
 impl<S, T> TrySender<T> for SplitSender<S>
-    where S: TrySender<T>,
-          T: Send
+where
+    S: TrySender<T>,
+    T: Send,
 {
     fn try_send(&self, data: T) -> Option<T> {
         let should_send = self.try_count_increment();
@@ -76,9 +89,10 @@ impl<S, T> TrySender<T> for SplitSender<S>
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
-/// `SplitSenderAck` allows a client to ack messages received from a `SplitSender`.
+/// `SplitSenderAck` allows a client to ack messages received from a
+/// `SplitSender`.
 pub struct SplitSenderAck {
     count: Arc<AtomicUsize>,
 }
@@ -94,8 +108,8 @@ impl SplitSenderAck {
 mod tests {
     use std::sync::mpsc;
 
-    use crate::send::TrySender;
     use super::SplitSender;
+    use crate::send::TrySender;
 
     #[test]
     fn positive_send_zero_capacity() {

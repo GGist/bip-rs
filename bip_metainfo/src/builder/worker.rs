@@ -26,7 +26,8 @@ enum WorkerMessage {
     Finish,
 }
 
-/// Starts a number of hasher workers which will generate the hash pieces for the files we send to it.
+/// Starts a number of hasher workers which will generate the hash pieces for
+/// the files we send to it.
 pub fn start_hasher_workers<A, C>(
     accessor: A,
     piece_length: usize,
@@ -65,12 +66,20 @@ where
     });
 
     // Create the master worker to coordinate between the workers
-    start_hash_master(accessor, num_workers, master_recv, work_queue, piece_buffers, prog_send)
+    start_hash_master(
+        accessor,
+        num_workers,
+        master_recv,
+        work_queue,
+        piece_buffers,
+        prog_send,
+    )
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
-/// Start a master hasher which will take care of chunking sequential/overlapping pieces from the data given to it and giving
+/// Start a master hasher which will take care of chunking
+/// sequential/overlapping pieces from the data given to it and giving
 /// updates to the hasher workers.
 fn start_hash_master<A>(
     accessor: A,
@@ -86,7 +95,8 @@ where
     let mut pieces = Vec::new();
     let mut piece_index = 0;
 
-    // Our closure may be called multiple times, save partial pieces buffers between calls
+    // Our closure may be called multiple times, save partial pieces buffers between
+    // calls
     let mut opt_piece_buffer = None;
     accessor.access_pieces(|piece_access| {
         match piece_access {
@@ -99,7 +109,8 @@ where
 
                 let mut end_of_region = false;
                 while !end_of_region {
-                    end_of_region = curr_piece_buffer.write_bytes(|buffer| piece_region.read(buffer))? == 0;
+                    end_of_region =
+                        curr_piece_buffer.write_bytes(|buffer| piece_region.read(buffer))? == 0;
 
                     if curr_piece_buffer.is_whole() {
                         work.push(WorkerMessage::HashPiece(piece_index, curr_piece_buffer));
@@ -114,12 +125,12 @@ where
                 }
 
                 opt_piece_buffer = Some(curr_piece_buffer);
-            },
+            }
             PieceAccess::PreComputed(hash) => {
                 pieces.push((piece_index, hash));
 
                 piece_index += 1;
-            },
+            }
         }
 
         Ok(())
@@ -158,7 +169,7 @@ where
     Ok(pieces)
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 fn start_progress_updater<C>(recv: Receiver<usize>, num_pieces: u64, mut progress: C)
 where
@@ -171,10 +182,14 @@ where
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Starts a hasher worker which will hash all of the buffers it receives.
-fn start_hash_worker(send: Sender<MasterMessage>, work: Arc<SegQueue<WorkerMessage>>, buffers: Arc<PieceBuffers>) {
+fn start_hash_worker(
+    send: Sender<MasterMessage>,
+    work: Arc<SegQueue<WorkerMessage>>,
+    buffers: Arc<PieceBuffers>,
+) {
     let mut work_to_do = true;
 
     let backoff = Backoff::new();
@@ -192,13 +207,13 @@ fn start_hash_worker(send: Sender<MasterMessage>, work: Arc<SegQueue<WorkerMessa
         match work_item {
             WorkerMessage::Finish => {
                 work_to_do = false;
-            },
+            }
             WorkerMessage::HashPiece(index, buffer) => {
                 let hash = ShaHash::from_bytes(buffer.as_slice());
 
                 send.send(MasterMessage::AcceptPiece(index, hash)).unwrap();
                 buffers.checkin(buffer);
-            },
+            }
         }
     }
 
@@ -244,7 +259,10 @@ mod tests {
 
             rng.fill_bytes(&mut buffer);
 
-            let (begin, end) = (self.contiguous_buffer.len(), self.contiguous_buffer.len() + buffer.len());
+            let (begin, end) = (
+                self.contiguous_buffer.len(),
+                self.contiguous_buffer.len() + buffer.len(),
+            );
 
             self.contiguous_buffer.extend_from_slice(&buffer);
             self.buffer_ranges.push(begin..end);
@@ -287,10 +305,17 @@ mod tests {
     fn validate_entries_pieces(accessor: MockAccessor, piece_length: usize, num_threads: usize) {
         let (prog_send, prog_recv) = mpsc::channel();
 
-        let total_num_pieces = ((accessor.as_slice().len() as f64) / (piece_length as f64)).ceil() as u64;
-        let received_pieces = worker::start_hasher_workers(&accessor, piece_length, total_num_pieces, num_threads, move |update| {
-            prog_send.send(update).unwrap();
-        })
+        let total_num_pieces =
+            ((accessor.as_slice().len() as f64) / (piece_length as f64)).ceil() as u64;
+        let received_pieces = worker::start_hasher_workers(
+            &accessor,
+            piece_length,
+            total_num_pieces,
+            num_threads,
+            move |update| {
+                prog_send.send(update).unwrap();
+            },
+        )
         .unwrap();
 
         let computed_pieces = accessor

@@ -1,5 +1,5 @@
-use std::ops::Add;
 use std::num::Wrapping;
+use std::ops::Add;
 
 use num::{One, Zero};
 
@@ -7,11 +7,13 @@ use crate::trans::TransactionIds;
 
 /// Generates sequentially unique ids and wraps when overflow occurs.
 pub struct SequentialIds<T> {
-    next_id: T
+    next_id: T,
 }
 
 impl<T> SequentialIds<T>
-    where T: Zero {
+where
+    T: Zero,
+{
     /// Create a new SequentialIds struct.
     pub fn new() -> SequentialIds<T> {
         SequentialIds::start_at(T::zero())
@@ -19,17 +21,19 @@ impl<T> SequentialIds<T>
 
     /// Create a new SequentialIds struct at the starting value.
     pub fn start_at(start: T) -> SequentialIds<T> {
-        SequentialIds{ next_id: start }
+        SequentialIds { next_id: start }
     }
 }
 
 impl<T> TransactionIds<T> for SequentialIds<T>
-    where T: One + Clone,
-          Wrapping<T>: Add<Wrapping<T>, Output = Wrapping<T>> {
+where
+    T: One + Clone,
+    Wrapping<T>: Add<Wrapping<T>, Output = Wrapping<T>>,
+{
     fn generate(&mut self) -> T {
         let curr_id = self.next_id.clone();
         self.next_id = (Wrapping(self.next_id.clone()) + Wrapping(T::one())).0;
-        
+
         curr_id
     }
 }

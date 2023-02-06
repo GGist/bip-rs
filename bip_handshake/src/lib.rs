@@ -12,7 +12,9 @@ pub use crate::message::initiate::InitiateMessage;
 pub use crate::message::protocol::Protocol;
 
 pub use crate::handshake::config::HandshakerConfig;
-pub use crate::handshake::handshaker::{Handshaker, HandshakerBuilder, HandshakerSink, HandshakerStream};
+pub use crate::handshake::handshaker::{
+    Handshaker, HandshakerBuilder, HandshakerSink, HandshakerStream,
+};
 
 pub use crate::filter::{FilterDecision, HandshakeFilter, HandshakeFilters};
 

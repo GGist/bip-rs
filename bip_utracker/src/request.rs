@@ -9,8 +9,8 @@ use crate::announce::AnnounceRequest;
 use crate::scrape::ScrapeRequest;
 
 // For all practical applications, this value should be hardcoded as a valid
-// connection id for connection requests when operating in server mode and processing
-// incoming requests.
+// connection id for connection requests when operating in server mode and
+// processing incoming requests.
 /// Global connection id for connect requests.
 pub const CONNECT_ID_PROTOCOL_ID: u64 = 0x0417_2710_1980;
 
@@ -68,7 +68,7 @@ impl<'a> TrackerRequest<'a> {
             &RequestType::Connect => {
                 writer.write_u32::<BigEndian>(crate::CONNECT_ACTION_ID)?;
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
-            },
+            }
             &RequestType::Announce(ref req) => {
                 let action_id = if req.source_ip().is_ipv4() {
                     crate::ANNOUNCE_IPV4_ACTION_ID
@@ -79,13 +79,13 @@ impl<'a> TrackerRequest<'a> {
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
 
                 req.write_bytes(writer)?;
-            },
+            }
             &RequestType::Scrape(ref req) => {
                 writer.write_u32::<BigEndian>(crate::SCRAPE_ACTION_ID)?;
                 writer.write_u32::<BigEndian>(self.transaction_id())?;
 
                 req.write_bytes(writer)?;
-            },
+            }
         };
 
         Ok(())
@@ -93,8 +93,9 @@ impl<'a> TrackerRequest<'a> {
 
     /// Connection ID supplied with a request to validate the senders address.
     ///
-    /// For Connect requests, this will always be equal to 0x41727101980. Therefore,
-    /// you should not hand out that specific ID to peers that make a connect request.
+    /// For Connect requests, this will always be equal to 0x41727101980.
+    /// Therefore, you should not hand out that specific ID to peers that
+    /// make a connect request.
     pub fn connection_id(&self) -> u64 {
         self.connection_id
     }

@@ -1,4 +1,5 @@
-// TODO: Remove when the routing table updates node's state on request/responses.
+// TODO: Remove when the routing table updates node's state on
+// request/responses.
 #![allow(unused)]
 
 use std::cell::Cell;
@@ -10,13 +11,15 @@ use bip_util::bt::NodeId;
 use bip_util::test;
 use chrono::{DateTime, Duration, UTC};
 
-// TODO: Should remove as_* functions and replace them with from_requested, from_responded, etc to hide the logic
-// of the nodes initial status.
+// TODO: Should remove as_* functions and replace them with from_requested,
+// from_responded, etc to hide the logic of the nodes initial status.
 
-// TODO: Should address the subsecond lookup paper where questionable nodes should not automatically be replaced with
-// good nodes, instead, questionable nodes should be pinged twice and then become available to be replaced. This reduces
-// GOOD node churn since after 15 minutes, a long lasting node could potentially be replaced by a short lived good node.
-// This strategy is actually what is vaguely specified in the standard?
+// TODO: Should address the subsecond lookup paper where questionable nodes
+// should not automatically be replaced with good nodes, instead, questionable
+// nodes should be pinged twice and then become available to be replaced. This
+// reduces GOOD node churn since after 15 minutes, a long lasting node could
+// potentially be replaced by a short lived good node. This strategy is actually
+// what is vaguely specified in the standard?
 
 // TODO: Should we be storing a SocketAddr instead of a SocketAddrV4?
 
@@ -46,7 +49,8 @@ pub struct Node {
 }
 
 impl Node {
-    /// Create a new node that has recently responded to us but never requested from us.
+    /// Create a new node that has recently responded to us but never requested
+    /// from us.
     pub fn as_good(id: NodeId, addr: SocketAddr) -> Node {
         Node {
             id,
@@ -57,7 +61,8 @@ impl Node {
         }
     }
 
-    /// Create a questionable node that has responded to us before but never requested from us.
+    /// Create a questionable node that has responded to us before but never
+    /// requested from us.
     pub fn as_questionable(id: NodeId, addr: SocketAddr) -> Node {
         let last_response_offset = Duration::minutes(MAX_LAST_SEEN_MINS);
         // TODO: Dont use test helpers in actual code!!!
@@ -129,7 +134,7 @@ impl Node {
                     for (src, dst) in v4.ip().octets().iter().zip(encoded_iter.by_ref()) {
                         *dst = *src;
                     }
-                },
+                }
                 _ => panic!("bip_dht: Cannot encode a SocketAddrV6..."),
             }
         }
@@ -200,15 +205,18 @@ impl Debug for Node {
     }
 }
 
-// TODO: Verify the two scenarios follow the specification as some cases seem questionable (pun intended), ie, a node
-// responds to us once, and then requests from us but never responds to us for the duration of the session. This means they
-// could stay marked as a good node even though they could ignore our requests and just sending us periodic requests
-// to keep their node marked as good in our routing table...
+// TODO: Verify the two scenarios follow the specification as some cases seem
+// questionable (pun intended), ie, a node responds to us once, and then
+// requests from us but never responds to us for the duration of the session.
+// This means they could stay marked as a good node even though they could
+// ignore our requests and just sending us periodic requests to keep their node
+// marked as good in our routing table...
 
-/// First scenario where a node is good is if it has responded to one of our requests recently.
+/// First scenario where a node is good is if it has responded to one of our
+/// requests recently.
 ///
-/// Returns the status of the node where a Questionable status means the node has responded
-/// to us before, but not recently.
+/// Returns the status of the node where a Questionable status means the node
+/// has responded to us before, but not recently.
 fn recently_responded(node: &Node, curr_time: DateTime<UTC>) -> NodeStatus {
     // Check if node has ever responded to us
     let since_response = match node.last_response.get() {
@@ -225,11 +233,11 @@ fn recently_responded(node: &Node, curr_time: DateTime<UTC>) -> NodeStatus {
     }
 }
 
-/// Second scenario where a node has ever responded to one of our requests and is good if it
-/// has sent us a request recently.
+/// Second scenario where a node has ever responded to one of our requests and
+/// is good if it has sent us a request recently.
 ///
-/// Returns the final status of the node given that the first scenario found the node to be
-/// Questionable.
+/// Returns the final status of the node given that the first scenario found the
+/// node to be Questionable.
 fn recently_requested(node: &Node, curr_time: DateTime<UTC>) -> NodeStatus {
     let max_last_request = Duration::minutes(MAX_LAST_SEEN_MINS);
 
@@ -263,7 +271,9 @@ mod tests {
 
     #[test]
     fn positive_encode_node() {
-        let node_id = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+        let node_id = [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        ];
         let ip_addr = [127, 0, 0, 1];
         let port = 6881;
 
@@ -275,7 +285,12 @@ mod tests {
         let encoded_node = node.encode();
 
         let port_bytes = [(port >> 8) as u8, port as u8];
-        for (expected, actual) in node_id.iter().chain(ip_addr.iter()).chain(port_bytes.iter()).zip(encoded_node.iter()) {
+        for (expected, actual) in node_id
+            .iter()
+            .chain(ip_addr.iter())
+            .chain(port_bytes.iter())
+            .zip(encoded_node.iter())
+        {
             assert_eq!(expected, actual);
         }
     }
@@ -289,7 +304,8 @@ mod tests {
 
     #[test]
     fn positive_as_questionable() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
+        let node =
+            Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         assert_eq!(node.status(), NodeStatus::Questionable);
     }
@@ -303,7 +319,8 @@ mod tests {
 
     #[test]
     fn positive_response_renewal() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
+        let node =
+            Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         node.remote_response();
 
@@ -312,7 +329,8 @@ mod tests {
 
     #[test]
     fn positive_request_renewal() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
+        let node =
+            Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         node.remote_request();
 
@@ -333,7 +351,8 @@ mod tests {
 
     #[test]
     fn positive_node_idle_reqeusts() {
-        let node = Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
+        let node =
+            Node::as_questionable(bip_test::dummy_node_id(), bip_test::dummy_socket_addr_v4());
 
         for _ in 0..super::MAX_REFRESH_REQUESTS {
             node.local_request();

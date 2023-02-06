@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, Ipv4Addr, SocketAddrV4, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4};
 
 /// Abstraction of some ip address.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]

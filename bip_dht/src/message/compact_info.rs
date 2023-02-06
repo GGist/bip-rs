@@ -1,14 +1,15 @@
 use std::net::{Ipv4Addr, SocketAddrV4};
 
 use bip_bencode::Bencode;
-use bip_util::error::{LengthError, LengthResult, LengthErrorKind};
 use bip_util::bt::{self, NodeId};
+use bip_util::error::{LengthError, LengthErrorKind, LengthResult};
 use bip_util::sha::ShaHash;
 
-// TODO: Update this module to accept data sources as both a slice of bytes and probably
-// a wrapper around a closest nodes iterator. Eventually when the interfaces are updated
-// to a writer interface instead of a reader interface, we wont expose nodes as a series
-// of bytes but instead offer to write the nodes into a provided buffer.
+// TODO: Update this module to accept data sources as both a slice of bytes and
+// probably a wrapper around a closest nodes iterator. Eventually when the
+// interfaces are updated to a writer interface instead of a reader interface,
+// we wont expose nodes as a series of bytes but instead offer to write the
+// nodes into a provided buffer.
 
 const BYTES_PER_COMPACT_IP: usize = 6;
 const BYTES_PER_COMPACT_NODE_INFO: usize = 26;
@@ -21,8 +22,10 @@ pub struct CompactNodeInfo<'a> {
 impl<'a> CompactNodeInfo<'a> {
     pub fn new(nodes: &'a [u8]) -> LengthResult<CompactNodeInfo<'a>> {
         if nodes.len() % BYTES_PER_COMPACT_NODE_INFO != 0 {
-            Err(LengthError::new(LengthErrorKind::LengthMultipleExpected,
-                                 BYTES_PER_COMPACT_NODE_INFO))
+            Err(LengthError::new(
+                LengthErrorKind::LengthMultipleExpected,
+                BYTES_PER_COMPACT_NODE_INFO,
+            ))
         } else {
             Ok(CompactNodeInfo { nodes })
         }
@@ -68,7 +71,7 @@ impl<'a> Iterator for CompactNodeInfoIter<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct CompactValueInfo<'a> {
@@ -86,9 +89,11 @@ impl<'a> CompactValueInfo<'a> {
             let compact_value = node.bytes().unwrap();
 
             if compact_value.len() != BYTES_PER_COMPACT_IP {
-                return Err(LengthError::with_index(LengthErrorKind::LengthExpected,
-                                                   BYTES_PER_COMPACT_IP,
-                                                   index));
+                return Err(LengthError::with_index(
+                    LengthErrorKind::LengthExpected,
+                    BYTES_PER_COMPACT_IP,
+                    index,
+                ));
             }
         }
 
@@ -134,24 +139,27 @@ impl<'a> Iterator for CompactValueInfoIter<'a> {
     }
 }
 
-// ----------------------------------------------------------------------------//
+// ---------------------------------------------------------------------------//
 
 /// Panics if the size of compact_info is less than BYTES_PER_COMPACT_NODE_INFO.
 fn parts_from_compact_info(compact_info: &[u8]) -> (NodeId, SocketAddrV4) {
-    // Use unwarp here because we know these can never fail, but they arent statically guaranteed
+    // Use unwarp here because we know these can never fail, but they arent
+    // statically guaranteed
     let node_id = ShaHash::from_hash(&compact_info[0..bt::NODE_ID_LEN]).unwrap();
 
     let compact_ip_offset = bt::NODE_ID_LEN + BYTES_PER_COMPACT_IP;
-    let socket = socket_v4_from_bytes_be(&compact_info[bt::NODE_ID_LEN..compact_ip_offset])
-        .unwrap();
+    let socket =
+        socket_v4_from_bytes_be(&compact_info[bt::NODE_ID_LEN..compact_ip_offset]).unwrap();
 
     (node_id, socket)
 }
 
-
 fn socket_v4_from_bytes_be(bytes: &[u8]) -> LengthResult<SocketAddrV4> {
     if bytes.len() != BYTES_PER_COMPACT_IP {
-        Err(LengthError::new(LengthErrorKind::LengthExpected, BYTES_PER_COMPACT_IP))
+        Err(LengthError::new(
+            LengthErrorKind::LengthExpected,
+            BYTES_PER_COMPACT_IP,
+        ))
     } else {
         let (oc_one, oc_two, oc_three, oc_four) = (bytes[0], bytes[1], bytes[2], bytes[3]);
 
@@ -168,7 +176,7 @@ fn socket_v4_from_bytes_be(bytes: &[u8]) -> LengthResult<SocketAddrV4> {
 
 #[cfg(test)]
 mod tests {
-    use std::net::{SocketAddrV4, Ipv4Addr};
+    use std::net::{Ipv4Addr, SocketAddrV4};
 
     use bip_util::bt::NodeId;
     use bip_util::sha::ShaHash;
@@ -185,38 +193,52 @@ mod tests {
 
     #[test]
     fn positive_compact_nodes_one() {
-        let bytes = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 192, 168, 0, 1,
-                     170, 169];
+        let bytes = [
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 192, 168, 0, 1, 170, 169,
+        ];
         let compact_node = CompactNodeInfo::new(&bytes[..]).unwrap();
 
         let collected_info: Vec<(NodeId, SocketAddrV4)> = compact_node.into_iter().collect();
         assert_eq!(collected_info.len(), 1);
 
-        assert_eq!(collected_info[0].0,
-                   ShaHash::from_hash(&bytes[0..20]).unwrap());
-        assert_eq!(collected_info[0].1,
-                   SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 43689));
+        assert_eq!(
+            collected_info[0].0,
+            ShaHash::from_hash(&bytes[0..20]).unwrap()
+        );
+        assert_eq!(
+            collected_info[0].1,
+            SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 43689)
+        );
     }
 
     #[test]
     fn positive_compact_nodes_many() {
-        let bytes = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 192, 168, 0, 1,
-                     0, 240, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 192, 168,
-                     0, 2, 0, 240];
+        let bytes = [
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 192, 168, 0, 1, 0, 240, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 192, 168, 0, 2, 0, 240,
+        ];
         let compact_node = CompactNodeInfo::new(&bytes[..]).unwrap();
 
         let collected_info: Vec<(NodeId, SocketAddrV4)> = compact_node.into_iter().collect();
         assert_eq!(collected_info.len(), 2);
 
-        assert_eq!(collected_info[0].0,
-                   ShaHash::from_hash(&bytes[0..20]).unwrap());
-        assert_eq!(collected_info[0].1,
-                   SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 240));
+        assert_eq!(
+            collected_info[0].0,
+            ShaHash::from_hash(&bytes[0..20]).unwrap()
+        );
+        assert_eq!(
+            collected_info[0].1,
+            SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 1), 240)
+        );
 
-        assert_eq!(collected_info[1].0,
-                   ShaHash::from_hash(&bytes[0..20]).unwrap());
-        assert_eq!(collected_info[1].1,
-                   SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 2), 240));
+        assert_eq!(
+            collected_info[1].0,
+            ShaHash::from_hash(&bytes[0..20]).unwrap()
+        );
+        assert_eq!(
+            collected_info[1].1,
+            SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 2), 240)
+        );
     }
 
     #[test]
@@ -238,8 +260,10 @@ mod tests {
         let collected_info: Vec<SocketAddrV4> = compact_value.into_iter().collect();
         assert_eq!(collected_info.len(), 1);
 
-        assert_eq!(collected_info[0],
-                   SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 6881));
+        assert_eq!(
+            collected_info[0],
+            SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 6881)
+        );
     }
 
     #[test]
@@ -252,9 +276,13 @@ mod tests {
         let collected_info: Vec<SocketAddrV4> = compact_value.into_iter().collect();
         assert_eq!(collected_info.len(), 2);
 
-        assert_eq!(collected_info[0],
-                   SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 6881));
-        assert_eq!(collected_info[1],
-                   SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6889));
+        assert_eq!(
+            collected_info[0],
+            SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 6881)
+        );
+        assert_eq!(
+            collected_info[1],
+            SocketAddrV4::new(Ipv4Addr::new(10, 0, 0, 1), 6889)
+        );
     }
 }

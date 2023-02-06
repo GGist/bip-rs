@@ -1,9 +1,9 @@
 //! Utilities used by the Bittorrent Infrastructure Project.
 
+extern crate chrono;
 extern crate crypto;
 extern crate num;
 extern crate rand;
-extern crate chrono;
 
 /// Bittorrent specific types.
 pub mod bt;
@@ -24,8 +24,8 @@ pub mod send;
 pub mod sha;
 
 /// Testing fixtures for dependant crates.
-/// TODO: Some non test functions in other crates use this, mark that as cfg test
-/// when we migrate away from these functions in non test functions.
+/// TODO: Some non test functions in other crates use this, mark that as cfg
+/// test when we migrate away from these functions in non test functions.
 pub mod test;
 
 /// Generating transaction ids.

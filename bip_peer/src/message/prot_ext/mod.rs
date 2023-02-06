@@ -14,7 +14,9 @@ const EXTENSION_HEADER_LEN: usize = message::HEADER_LEN + 1;
 
 mod ut_metadata;
 
-pub use self::ut_metadata::{UtMetadataDataMessage, UtMetadataMessage, UtMetadataRejectMessage, UtMetadataRequestMessage};
+pub use self::ut_metadata::{
+    UtMetadataDataMessage, UtMetadataMessage, UtMetadataRejectMessage, UtMetadataRequestMessage,
+};
 
 /// Enumeration of `BEP 10` extension protocol compatible messages.
 pub enum PeerExtensionProtocolMessage<P>
@@ -35,14 +37,26 @@ where
         PeerWireProtocolMessage::<P>::bytes_needed(bytes)
     }
 
-    pub fn parse_bytes(bytes: Bytes, extended: &ExtendedMessage, custom_prot: &mut P) -> io::Result<PeerExtensionProtocolMessage<P>> {
+    pub fn parse_bytes(
+        bytes: Bytes,
+        extended: &ExtendedMessage,
+        custom_prot: &mut P,
+    ) -> io::Result<PeerExtensionProtocolMessage<P>> {
         match parse_extensions(bytes, extended, custom_prot) {
             IResult::Done(_, result) => result,
-            _ => Err(io::Error::new(io::ErrorKind::Other, "Failed To Parse PeerExtensionProtocolMessage")),
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed To Parse PeerExtensionProtocolMessage",
+            )),
         }
     }
 
-    pub fn write_bytes<W>(&self, mut writer: W, extended: &ExtendedMessage, custom_prot: &mut P) -> io::Result<()>
+    pub fn write_bytes<W>(
+        &self,
+        mut writer: W,
+        extended: &ExtendedMessage,
+        custom_prot: &mut P,
+    ) -> io::Result<()>
     where
         W: Write,
     {
@@ -59,7 +73,11 @@ where
 
                 let total_len = (2 + msg.message_size()) as u32;
 
-                message::write_length_id_pair(&mut writer, total_len, Some(bits_ext::EXTENDED_MESSAGE_ID))?;
+                message::write_length_id_pair(
+                    &mut writer,
+                    total_len,
+                    Some(bits_ext::EXTENDED_MESSAGE_ID),
+                )?;
                 writer.write_u8(ext_id)?;
 
                 msg.write_bytes(writer)
@@ -86,14 +104,18 @@ where
 {
     let header_bytes = bytes.clone();
 
-    // Attempt to parse a built in message type, otherwise, see if it is an extension type.
+    // Attempt to parse a built in message type, otherwise, see if it is an
+    // extension type.
     alt!(
         (),
-        ignore_input!(switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, be_u8, be_u8)),
-            (message_len, bits_ext::EXTENDED_MESSAGE_ID, message_id) =>
-                call!(parse_extensions_with_id, bytes.split_off(EXTENSION_HEADER_LEN).split_to(message_len as usize - 2), extended, message_id)
-        )) | map!(value!(custom_prot.parse_bytes(bytes)), |res_cust_ext| res_cust_ext
-            .map(PeerExtensionProtocolMessage::Custom))
+        ignore_input!(
+            switch!(header_bytes.as_ref(), throwaway_input!(tuple!(be_u32, be_u8, be_u8)),
+                (message_len, bits_ext::EXTENDED_MESSAGE_ID, message_id) =>
+                    call!(parse_extensions_with_id, bytes.split_off(EXTENSION_HEADER_LEN).split_to(message_len as usize - 2), extended, message_id)
+            )
+        ) | map!(value!(custom_prot.parse_bytes(bytes)), |res_cust_ext| {
+            res_cust_ext.map(PeerExtensionProtocolMessage::Custom)
+        })
     )
 }
 
